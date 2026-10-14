@@ -1,0 +1,37 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "heating_day": { "default": "mdi:calendar-check", "state": { "off": "mdi:calendar-remove" } },
+      "ventilation_recommended": { "default": "mdi:window-closed-variant", "state": { "on": "mdi:window-open-variant" } }
+    },
+    "sensor": {
+      "status": { "default": "mdi:radiator" },
+      "heat_rate": { "default": "mdi:thermometer-chevron-up" },
+      "cool_rate": { "default": "mdi:thermometer-chevron-down" },
+      "overshoot": { "default": "mdi:chart-bell-curve" },
+      "dead_time": { "default": "mdi:timer-sand" },
+      "recovery_time": { "default": "mdi:timer-refresh-outline" },
+      "outdoor_influence": { "default": "mdi:home-thermometer-outline" },
+      "sun_influence": { "default": "mdi:weather-sunny" },
+      "learning_progress": { "default": "mdi:school-outline" },
+      "ventilation": { "default": "mdi:window-open-variant" },
+      "decision_phase": { "default": "mdi:account-switch-outline" },
+      "ai_last_check": { "default": "mdi:robot-outline" },
+      "ai_next_check": { "default": "mdi:robot-confused-outline" },
+      "ai_cost_month": { "default": "mdi:cash" }
+    },
+    "switch": {
+      "ai_enabled": { "default": "mdi:robot", "state": { "off": "mdi:robot-off" } }
+    },
+    "select": {
+      "heating_day_override": { "default": "mdi:hand-back-right-outline" }
+    }
+  },
+  "services": {
+    "export_parameters": { "service": "mdi:export" },
+    "import_parameters": { "service": "mdi:import" },
+    "reset_learned": { "service": "mdi:restore" },
+    "run_ai_check": { "service": "mdi:robot-outline" },
+    "decide_heating_day": { "service": "mdi:calendar-question" }
+  }
+}

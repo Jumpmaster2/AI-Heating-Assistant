@@ -1,0 +1,48 @@
+export_parameters:
+  fields:
+    entity_id:
+      required: false
+      selector:
+        entity:
+          integration: ai_heating_assistant
+          domain: climate
+          multiple: true
+
+import_parameters:
+  fields:
+    data:
+      required: true
+      selector:
+        object:
+    entity_id:
+      required: false
+      selector:
+        entity:
+          integration: ai_heating_assistant
+          domain: climate
+          multiple: true
+
+reset_learned:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          integration: ai_heating_assistant
+          domain: climate
+          multiple: true
+    include_parameters:
+      required: false
+      default: false
+      selector:
+        boolean:
+
+run_ai_check:
+
+decide_heating_day:
+  fields:
+    use_ai:
+      required: false
+      default: true
+      selector:
+        boolean:
