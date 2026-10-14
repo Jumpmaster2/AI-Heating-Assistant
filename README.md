@@ -6,7 +6,7 @@ Custom Integration für Home Assistant, die eine Fußbodenheizung mit einem Scha
 
 Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), Better Thermostat, Automationen für Sollwert, Wetter, Kälte und Urlaub sowie eine Lüftungsempfehlung auf Basis der Luftfeuchte.
 
-> Status: Version 0.4.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.5.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
