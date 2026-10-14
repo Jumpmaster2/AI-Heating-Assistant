@@ -174,7 +174,8 @@ def test_recovery_censored_uses_the_controller_wait() -> None:
     _feed(learner, 10_000, 51, lambda m: 20.0 if m < 3 else 20.1, valve=False, excluded=True)
     _feed(learner, 10_000 + 51 * 60, 1, lambda m: 20.1, valve=True)
     assert learner.recovery.count == 1
-    assert learner.recovery.value == pytest.approx(1800 + 0.5 * (3000 * 1.25 - 1800))
+    # the wait beyond the estimate (bias) is not learned into it: 1800 * 1.25
+    assert learner.recovery.value == pytest.approx(1800 + 0.5 * (1800 * 1.25 - 1800))
 
 
 def test_recovery_timeout_keeps_the_value() -> None:
@@ -261,3 +262,38 @@ def test_confidence_and_roundtrip() -> None:
     copy = AreaLearner.from_dict(learner.as_dict(), 1800, 1800)
     assert copy.dead_time.count == 1
     assert copy.confidence() > 0
+
+
+def test_recovery_noise_does_not_count_as_warming_up() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    learner.on_window_closed(0, temp_before=21.0, open_seconds=600)
+    # flat at 20.0 with one reading below: the plateau is not a rise above the minimum
+    _feed(learner, 0, 31, lambda m: 19.9 if m == 3 else 20.0, valve=False, excluded=True)
+    _feed(learner, 31 * 60, 1, lambda m: 20.0, valve=True)
+    assert learner.recovery.count == 0
+    assert learner.track_recovery is None
+
+
+def test_recovery_without_a_visible_drop_is_no_sample() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    learner.on_window_closed(0, temp_before=20.0, open_seconds=180)
+    assert learner.add_sample(Sample(0.0, 20.0, False, 5.0, 0.0, True)) == []
+    assert learner.recovery.count == 0 and learner.track_recovery is None
+
+
+def test_dead_time_minimum_follows_a_slow_fall() -> None:
+    learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
+    learner.on_switch(0, 20.0, turned_on=True, run_hours=0)
+    # 0.01 K steps: no reading repeats, the minimum still has to follow the fall
+    temp = lambda m: round(20.0 - min(m, 30) * 0.01 + max(0, m - 30) * 0.01, 2)  # noqa: E731
+    changed = _feed(learner, 0, 60, temp, valve=True)
+    assert "dead_time" in changed
+    assert 2100 <= learner.dead_time.value <= 2160  # rise at about minute 40
+
+
+def test_overshoot_tracker_timeout_is_no_sample() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    learner.on_switch(0, 20.0, turned_on=False, run_hours=2.0)
+    # the room keeps warming for hours (sun): never a heating peak
+    _feed(learner, 0, 4 * 60 + 2, lambda m: 20.0 + m * 0.006, valve=False)
+    assert learner.overshoot.count == 0 and learner.track_off is None

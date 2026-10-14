@@ -155,6 +155,16 @@ def _interpolate(points: list[Point], ts: float) -> float:
     return points[0][1]
 
 
+FORECAST_STALE_S = 2 * 3600.0  # forecast points older than this say nothing about now
+
+
+def expected_now(points: list[Point], now: float, trust: float = FORECAST_TRUST) -> float | None:
+    """PV power expected right now from the forecast points, or None without a usable one."""
+    if not points or now - points[-1][0] > FORECAST_STALE_S:
+        return None
+    return max(0.0, _interpolate(points, now) * trust)
+
+
 def planning_pv(
     now: float,
     pv_now: float,

@@ -42,12 +42,47 @@ MIN_RUN_H = 0.25  # h; shorter runs are rated as if they had lasted this long
 # estimate grow in that direction at all; a room that was not warming up says nothing.
 CENSORED_RECOVERY_FACTOR = 1.25
 EPS = 1e-6  # tolerance for comparing sensor values in 0.1 K steps (20.1 + 0.1 > 20.2)
+RECOVERY_MIN_S = 120.0  # a room "recovered" sooner never showed the airing: no sample
 
 SAMPLE_INTERVAL = 15 * 60  # s between model updates
 RATE_WINDOW = 60 * 60  # s window used to compute dT/dt
 EDGE = 5 * 60  # s averaged at both ends of the window (sensor quantisation)
 MAX_RUN_HOURS_FOR_OVERSHOOT = 3.0
 TRACK_TIMEOUT = 4 * 3600.0
+
+
+def _follow_rise(t: dict[str, float], temp: float, ts: float) -> bool:
+    """Track a minimum and the first step above it in ``t``; True once the rise is real.
+
+    The minimum only falls when a second reading confirms the lower level (one reading
+    below the plateau may be noise); the rise counts from the first reading one step
+    above the minimum and is real with a second step or once it lasted a while.
+    """
+    if "min" not in t:
+        t["min"] = temp
+    if temp < t["min"] - EPS:
+        dip = t.get("dip")
+        if dip is None:
+            t["dip"] = temp
+        else:
+            t["min"] = max(dip, temp)
+            t.pop("dip", None)
+            t.pop("rise", None)
+        return False
+    t.pop("dip", None)
+    if temp - t["min"] >= RISE_K - EPS:
+        t.setdefault("rise", ts)
+    else:
+        t.pop("rise", None)
+    return _rise_confirmed(t, temp, ts)
+
+
+def _rise_confirmed(t: dict[str, float], temp: float | None, ts: float) -> bool:
+    """A second sensor step above the minimum, or the first step lasting a while."""
+    rise = t.get("rise")
+    if temp is not None and temp - t["min"] >= RISE_CONFIRM_K - EPS:
+        return True
+    return rise is not None and ts - rise >= RISE_CONFIRM_S
 
 
 @dataclass(slots=True)
@@ -332,47 +367,30 @@ class AreaLearner:
             t = self.track_on
             if not s.valve or s.ts - t["start"] > TRACK_TIMEOUT:
                 self.track_on = None
-            elif temp < t["min"] - EPS:
-                # A lower reading becomes the new minimum only when a second sample
-                # confirms it; one reading below the plateau may be noise.
-                if abs(t.get("dip", temp + 1.0) - temp) < EPS:
-                    t["min"] = temp
-                    t.pop("dip", None)
-                    t.pop("rise", None)
-                else:
-                    t["dip"] = temp
-            else:
-                t.pop("dip", None)
-                if temp - t["min"] >= RISE_K - EPS:
-                    t.setdefault("rise", s.ts)
-                else:
-                    t.pop("rise", None)
-                if self._confirm_dead_time(t, s.ts, temp):
-                    self.track_on = None
-                    changed.append("dead_time")
+            elif _follow_rise(t, temp, s.ts) and self._confirm_dead_time(t, s.ts, temp):
+                self.track_on = None
+                changed.append("dead_time")
         if self.track_off is not None:
             t = self.track_off
             peak_passed = temp <= t["max"] - PEAK_PASSED_K + EPS
             if s.valve and not peak_passed:
                 self.track_off = None
-            elif peak_passed or s.ts - t["start"] > TRACK_TIMEOUT:
+            elif peak_passed:
                 self._add_overshoot(t)
                 self.track_off = None
                 changed.append("overshoot")
+            elif s.ts - t["start"] > TRACK_TIMEOUT:
+                self.track_off = None  # never fell again (sun, people): not a heating peak
             else:
                 t["max"] = max(t["max"], temp)
         return changed
 
     def _confirm_dead_time(self, t: dict[str, float], ts: float, temp: float | None = None) -> bool:
-        """Add the dead time once the rise is real: a second sensor step, or the first
-        step lasting a while. One step alone may be noise. The dead time ends at the
-        first step."""
-        rise = t.get("rise")
-        confirmed = (temp is not None and temp - t["min"] >= RISE_CONFIRM_K - EPS) or (
-            rise is not None and ts - rise >= RISE_CONFIRM_S
-        )
-        if not confirmed:
+        """Add the dead time once the rise is real (see ``_rise_confirmed``). The dead
+        time ends at the first step."""
+        if not _rise_confirmed(t, temp, ts):
             return False
+        rise = t.get("rise")
         self.dead_time.add(clamp((ts if rise is None else rise) - t["start"], *DEAD_TIME_BOUNDS))
         return True
 
@@ -389,10 +407,12 @@ class AreaLearner:
             return []
         t = self.track_recovery
         elapsed = s.ts - t["start"]
-        t["min"] = min(t.get("min", s.temp), s.temp)
+        rising = _follow_rise(t, s.temp, s.ts)
         if s.temp - t["t_before"] >= -0.1 - EPS:
-            self.recovery.add(clamp(elapsed, *RECOVERY_BOUNDS))
             self.track_recovery = None
+            if elapsed < RECOVERY_MIN_S:
+                return []  # the sensor never showed the airing: nothing was measured
+            self.recovery.add(clamp(elapsed, *RECOVERY_BOUNDS))
             return ["recovery"]
         if elapsed > TRACK_TIMEOUT:
             self.track_recovery = None  # the room never got back on its own: keep the value
@@ -400,12 +420,14 @@ class AreaLearner:
         wait = t.get("wait", self.recovery.value)
         if "rising" not in t and elapsed >= wait:
             # End of the controller's wait: was the room on its way back by itself?
-            t["rising"] = float(s.temp - t["min"] >= RISE_K - EPS)
+            t["rising"] = float(rising)
         if s.valve:
             # Censored by heating. Only a room that was still warming up when the wait
-            # ended says the true value is larger; everything else says nothing.
+            # ended says the true value is larger; everything else says nothing. A wait
+            # longer than the estimate (positive bias) must not be learned into it.
             self.track_recovery = None
-            censored = clamp(wait * CENSORED_RECOVERY_FACTOR, *RECOVERY_BOUNDS)
+            base = min(wait, self.recovery.value)
+            censored = clamp(base * CENSORED_RECOVERY_FACTOR, *RECOVERY_BOUNDS)
             if not t.get("rising") or censored <= self.recovery.value:
                 return []  # "larger than a short wait" says nothing about a larger estimate
             self.recovery.add(censored)

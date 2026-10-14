@@ -111,13 +111,14 @@ class AreaRuntime:
     carry_since: float | None = None
     events: list[str] = field(default_factory=list)
 
+    # Not stored and not restored: after a restart a stale peak must not start a carry
+    # (a carry already running keeps its real start time and expires on schedule).
+    TRANSIENT = ("events", "was_on", "last_peak")
+
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
-        data.pop("events")
-        # Not restored: after a restart a stale peak must not start a carry (a carry
-        # already running keeps its real start time and expires on schedule).
-        data.pop("was_on")
-        data.pop("last_peak")
+        for name in self.TRANSIENT:
+            data.pop(name)
         return data
 
     @classmethod
@@ -125,7 +126,7 @@ class AreaRuntime:
         runtime = cls()
         if data:
             for f in fields(cls):
-                if f.name != "events" and f.name in data:
+                if f.name not in cls.TRANSIENT and f.name in data:
                     setattr(runtime, f.name, data[f.name])
         return runtime
 
