@@ -1,5 +1,6 @@
 """Tests for heating day rule, evaluation, learning and phases."""
 
+import pytest
 from logic.heating_day import (
     AiDecision,
     AreaSnapshot,
@@ -18,6 +19,7 @@ from logic.heating_day import (
     rule_errors,
     rule_proposal,
     should_ask_ai,
+    track_virtual,
 )
 
 RULE = RuleSettings()
@@ -81,31 +83,28 @@ def test_final_decision_per_phase() -> None:
 
 
 def test_evaluate_need() -> None:
-    assert evaluate_need({"a": DayAreaStats(too_cold_min=20)}, EVAL) == Need.YES
+    seen = {"observed_min": 600}
+    assert evaluate_need({"a": DayAreaStats(too_cold_min=20, **seen)}, EVAL) == Need.YES
     # nothing heated and nothing was cold
-    assert evaluate_need({"a": DayAreaStats()}, EVAL) == Need.NO
-    assert evaluate_need({"a": DayAreaStats(too_cold_min=5)}, EVAL) == Need.UNCLEAR
+    assert evaluate_need({"a": DayAreaStats(**seen)}, EVAL) == Need.NO
+    assert evaluate_need({"a": DayAreaStats(too_cold_min=5, **seen)}, EVAL) == Need.UNCLEAR
     # heating ran: the virtual room without heating decides, not the relay minutes
-    assert (
-        evaluate_need(
-            {"a": DayAreaStats(relay_min=30, virtual_temp=19.5, virtual_cold_min=20)}, EVAL
-        )
-        == Need.YES
-    )
-    assert evaluate_need({"a": DayAreaStats(relay_min=30, virtual_temp=20.8)}, EVAL) == Need.NO
-    assert (
-        evaluate_need(
-            {"a": DayAreaStats(relay_min=30, virtual_temp=20.4, virtual_cold_min=5)}, EVAL
-        )
-        == Need.UNCLEAR
-    )
+    cold_virtual = DayAreaStats(relay_min=30, virtual_temp=19.5, virtual_cold_min=20, **seen)
+    assert evaluate_need({"a": cold_virtual}, EVAL) == Need.YES
+    warm_virtual = DayAreaStats(relay_min=30, virtual_temp=20.8, **seen)
+    assert evaluate_need({"a": warm_virtual}, EVAL) == Need.NO
+    some_virtual = DayAreaStats(relay_min=30, virtual_temp=20.4, virtual_cold_min=5, **seen)
+    assert evaluate_need({"a": some_virtual}, EVAL) == Need.UNCLEAR
     # heating ran but the virtual room is not known yet: unclear unless really cold
-    assert evaluate_need({"a": DayAreaStats(relay_min=30)}, EVAL) == Need.UNCLEAR
-    assert evaluate_need({"a": DayAreaStats(relay_min=30, too_cold_min=20)}, EVAL) == Need.YES
+    assert evaluate_need({"a": DayAreaStats(relay_min=30, **seen)}, EVAL) == Need.UNCLEAR
     assert (
-        evaluate_need({"a": DayAreaStats(relay_min=30), "b": DayAreaStats(too_cold_min=20)}, EVAL)
-        == Need.YES
+        evaluate_need({"a": DayAreaStats(relay_min=30, too_cold_min=20, **seen)}, EVAL) == Need.YES
     )
+    unknown, cold = DayAreaStats(relay_min=30, **seen), DayAreaStats(too_cold_min=20, **seen)
+    assert evaluate_need({"a": unknown, "b": cold}, EVAL) == Need.YES
+    # thermostats off or no temperature all day: nothing was seen
+    assert evaluate_need({"a": DayAreaStats(), "b": DayAreaStats()}, EVAL) == Need.UNCLEAR
+    assert evaluate_need({"a": DayAreaStats(), "b": DayAreaStats(**seen)}, EVAL) == Need.NO
     assert evaluate_need({"a": DayAreaStats(emergency=True)}, EVAL) == Need.YES
     assert evaluate_need({"a": DayAreaStats(manual_heat=True)}, EVAL) == Need.YES
     assert evaluate_need({}, EVAL) == Need.UNCLEAR
@@ -192,3 +191,44 @@ def test_day_stats_roundtrip() -> None:
     assert DayAreaStats.from_dict({"too_cold_min": 1}).virtual_temp is None
     record = DayRecord("2026-10-14", True, "ai", False, True, manual=True)
     assert DayRecord.from_dict(record.as_dict()) == record
+
+
+def test_learn_error_a_raises_puffer_when_virtual_unknown_but_room_cold() -> None:
+    rule = rule_proposal(17.0, _areas(22.0), 16.0, RULE)
+    stats = {"a0": DayAreaStats(too_cold_min=30, relay_min=60, observed_min=600)}
+    theta, puffers, _ = learn_rule(16.0, {"a0": 0.7}, rule, Need.YES, stats, EVAL)
+    assert theta == 17.0 and puffers["a0"] == 0.9
+
+
+def test_track_virtual_cools_with_the_model_and_counts_cold_minutes() -> None:
+    s = DayAreaStats()
+    kw = {"target": 21.0, "margin": 0.5, "ready": True, "counting": True, "airing": False}
+    track_virtual(s, 21.0, 1.0, lambda t: 0.6, **{**kw, "ready": False})
+    assert s.virtual_temp is None  # the model does not know enough yet
+    for _ in range(50):
+        track_virtual(s, 21.0, 1.0, lambda t: 0.6, **kw)  # 0.01 K per minute
+    assert s.virtual_temp == pytest.approx(20.5)
+    assert s.virtual_cold_min == 0
+    for _ in range(30):
+        track_virtual(s, 21.0, 1.0, lambda t: 0.6, **kw)
+    assert s.virtual_temp == pytest.approx(20.2)
+    assert s.virtual_cold_min == 30
+    assert s.cold_min == 0  # nothing heated: the real room counts
+    s.relay_min = 10
+    assert s.cold_min == 30
+
+
+def test_track_virtual_follows_the_real_room_down_except_while_airing() -> None:
+    s = DayAreaStats(virtual_temp=20.9)
+    kw = {"target": 21.0, "margin": 0.5, "ready": True, "counting": False}
+    track_virtual(s, 20.3, 1.0, lambda t: 0.0, airing=False, **kw)
+    assert s.virtual_temp == 20.3  # never warmer than the real room
+    track_virtual(s, 19.0, 1.0, lambda t: 0.0, airing=True, **kw)
+    assert s.virtual_temp == 20.3  # an airing dip is not inherited
+
+
+def test_track_virtual_stays_unknown_once_heating_ran() -> None:
+    s = DayAreaStats(relay_min=10)
+    kw = {"target": 21.0, "margin": 0.5, "ready": True, "counting": True, "airing": False}
+    track_virtual(s, 21.0, 1.0, lambda t: 0.5, **kw)
+    assert s.virtual_temp is None and s.cold_min is None

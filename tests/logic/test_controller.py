@@ -278,3 +278,46 @@ def test_preheat_start() -> None:
     start = preheat_start(100_000, 18.0, 21.0, 1.0, 3600, 1800)
     assert start == 100_000 - 3 * 3600 - 3600 - 1800
     assert preheat_start(100_000, 22.0, 21.0, 1.0, 0, 0) == 100_000
+
+
+def test_carry_does_not_block_force_on_and_is_not_restored_from_a_stale_peak() -> None:
+    rt = AreaRuntime()
+    on = LearnedValues(cool_rate_kph=0.1, dead_time_s=1800, overshoot_k=0.6)
+    step(_input(temp=20.4, switch_on=True, last_switch_change=0.0), PARAMS, SETTINGS, on, rt)
+    off = LearnedValues(cool_rate_kph=0.1, dead_time_s=1800, overshoot_k=0.0)
+    later = {"switch_on": False, "last_switch_change": 100_000.0}
+    # no temperature on the switch-off tick: the carry starts anyway, no exception
+    d = step(_input(now=100_601.0, temp=None, **later), PARAMS, SETTINGS, off, rt)
+    assert d.status == AreaStatus.SENSOR_ERROR and rt.carry_peak == 21.0
+    # 1 K below target wins over the carried peak
+    d = step(_input(now=100_700.0, temp=19.9, **later), PARAMS, SETTINGS, off, rt)
+    assert d.want_on
+    # a pending carry is restored after a restart, the peak of the last run is not
+    restored = AreaRuntime.from_dict(rt.as_dict())
+    assert restored.carry_peak == 21.0 and restored.last_peak is None and not restored.was_on
+    assert AreaRuntime.from_dict({"window_paused": False}).carry_peak is None
+
+
+def test_window_reopened_during_recovery_keeps_the_first_reference() -> None:
+    rt = AreaRuntime()
+    base = {"switch_on": False, "last_switch_change": 0.0}
+    step(_input(now=0.0, temp=21.0, window_open=True, **base), PARAMS, SETTINGS, LEARNED, rt)
+    step(_input(now=400.0, temp=20.5, window_open=True, **base), PARAMS, SETTINGS, LEARNED, rt)
+    assert rt.window_paused
+    d = step(_input(now=500.0, temp=20.3, window_open=False, **base), PARAMS, SETTINGS, LEARNED, rt)
+    assert d.status == AreaStatus.RECOVERY and rt.temp_before_open == 21.0
+    step(_input(now=600.0, temp=20.3, window_open=True, **base), PARAMS, SETTINGS, LEARNED, rt)
+    assert rt.temp_before_open == 21.0  # not the lowered temperature
+    d = step(_input(now=700.0, temp=20.4, window_open=False, **base), PARAMS, SETTINGS, LEARNED, rt)
+    assert d.status == AreaStatus.RECOVERY  # 20.4 is not "recovered" against 21.0
+
+
+def test_recovery_ends_exactly_one_margin_below_the_reference() -> None:
+    rt = AreaRuntime()
+    base = {"switch_on": False, "last_switch_change": 0.0}
+    step(_input(now=0.0, temp=21.0, window_open=True, **base), PARAMS, SETTINGS, LEARNED, rt)
+    step(_input(now=400.0, temp=20.5, window_open=True, **base), PARAMS, SETTINGS, LEARNED, rt)
+    step(_input(now=500.0, temp=20.5, window_open=False, **base), PARAMS, SETTINGS, LEARNED, rt)
+    # 20.9 >= 21.0 - 0.1 although 21.0 - 0.1 is 20.900000000000002 as a float
+    d = step(_input(now=560.0, temp=20.9, window_open=False, **base), PARAMS, SETTINGS, LEARNED, rt)
+    assert rt.recovery_until is None and d.status == AreaStatus.HEATING

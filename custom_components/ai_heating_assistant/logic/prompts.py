@@ -19,7 +19,8 @@ NIGHTLY_SYSTEM = (
     "at its target all day; avoid unnecessary heating, comfort has priority. "
     "The local rule (theta = forecast maximum below which heating is needed, puffer = margin above "
     "target an area needs now) and the evaluated history (error A = no heating although too cold, "
-    "error B = heating although unnecessary) are in the data. Learn from recent errors. "
+    "error B = heating although unnecessary; manual = the day ran under a manual override, "
+    "its final is not a decision of the system) are in the data. Learn from recent errors. "
     "Answer with: heating_day, confidence 0-100, reason (max 3 short sentences, no dashes), "
     "critical_area (area id or empty)."
 )

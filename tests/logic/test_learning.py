@@ -106,8 +106,10 @@ def test_dead_time_single_step_counts_once_it_lasts() -> None:
 def test_dead_time_and_overshoot_finished_at_switch_events() -> None:
     learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
     learner.on_switch(0, 20.0, turned_on=True, run_hours=0)
-    # rise of one step for 6 minutes, then the circuit switches off: still a sample
-    _feed(learner, 0, 36, lambda m: 20.0 if m < 30 else 20.1, valve=True)
+    # rise of one step for 3 minutes (not confirmed yet), then the circuit switches off
+    # 6 minutes after the step: the switch-off confirms it
+    _feed(learner, 0, 34, lambda m: 20.0 if m < 30 else 20.1, valve=True)
+    assert learner.dead_time.count == 0
     learner.on_switch(36 * 60, 20.1, turned_on=False, run_hours=0.6)
     assert learner.dead_time.count == 1
     # peak 20.5 passed by 0.15 K exactly when the controller switches on again
@@ -138,21 +140,104 @@ def test_recovery_learned_and_censored_by_heating() -> None:
     assert learner.recovery.count == 1
     assert learner.recovery.value == pytest.approx(1980)  # recovered after 36 min
 
-    # heating starts before the learned time: says nothing, no update
+    # heating starts before the wait is over: says nothing, no update
     learner.on_window_closed(10_000, temp_before=21.0, open_seconds=600)
     _feed(learner, 10_000, 5, lambda m: 20.0, valve=False, excluded=True)
     _feed(learner, 10_300, 1, lambda m: 20.0, valve=True)
     assert learner.recovery.count == 1
     assert learner.track_recovery is None
 
-    # heating starts after the learned time passed: the true value is larger
+    # wait over, the room was not warming up: it would not have recovered, no update
     learner.on_window_closed(20_000, temp_before=21.0, open_seconds=600)
-    waited = int(learner.recovery.value / 60) + 1
-    _feed(learner, 20_000, waited, lambda m: 20.0, valve=False, excluded=True)
-    _feed(learner, 20_000 + waited * 60, 1, lambda m: 20.0, valve=True)
+    _feed(learner, 20_000, 34, lambda m: 20.0, valve=False, excluded=True)
+    _feed(learner, 20_000 + 34 * 60, 1, lambda m: 20.0, valve=True)
+    assert learner.recovery.count == 1
+
+    # wait over, the room was warming up by itself: the true value is larger
+    learner.on_window_closed(30_000, temp_before=21.0, open_seconds=600)
+    _feed(learner, 30_000, 34, lambda m: 20.0 if m < 10 else 20.1, valve=False, excluded=True)
+    _feed(learner, 30_000 + 34 * 60, 1, lambda m: 20.1, valve=True)
     assert learner.recovery.count == 2
-    assert learner.recovery.value > 1980
+    assert learner.recovery.value == pytest.approx(1980 + (1980 * 1.25 - 1980) / 3)
     assert learner.track_recovery is None
+
+
+def test_recovery_censored_uses_the_controller_wait() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    # the controller waits only 10 min (negative bias): "longer than 10 min" says nothing
+    learner.on_window_closed(0, temp_before=21.0, open_seconds=600, wait_s=600)
+    _feed(learner, 0, 11, lambda m: 20.0 if m < 3 else 20.1, valve=False, excluded=True)
+    _feed(learner, 11 * 60, 1, lambda m: 20.1, valve=True)
+    assert learner.recovery.count == 0
+    # the controller waits 50 min and the room was warming up: the estimate grows
+    learner.on_window_closed(10_000, temp_before=21.0, open_seconds=600, wait_s=3000)
+    _feed(learner, 10_000, 51, lambda m: 20.0 if m < 3 else 20.1, valve=False, excluded=True)
+    _feed(learner, 10_000 + 51 * 60, 1, lambda m: 20.1, valve=True)
+    assert learner.recovery.count == 1
+    assert learner.recovery.value == pytest.approx(1800 + 0.5 * (3000 * 1.25 - 1800))
+
+
+def test_recovery_timeout_keeps_the_value() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    learner.on_window_closed(0, temp_before=21.0, open_seconds=600)
+    _feed(learner, 0, 4 * 60 + 2, lambda m: 20.0, valve=False, excluded=True)
+    assert learner.recovery.count == 0 and learner.track_recovery is None
+
+
+def test_dead_time_ignores_single_dip_below_the_plateau() -> None:
+    learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
+    learner.on_switch(0, 20.0, turned_on=True, run_hours=0)
+    # one reading below the plateau must not turn the plateau into a rise
+    changed = _feed(learner, 0, 40, lambda m: 19.9 if m == 5 else 20.0, valve=True)
+    assert "dead_time" not in changed
+    assert learner.track_on is not None and learner.track_on["min"] == 20.0
+    # two readings below confirm a lower level; the later rise counts from there
+    temp = lambda m: 19.9 if m < 10 else 20.0 if m < 15 else 20.1  # noqa: E731
+    changed = _feed(learner, 40 * 60, 30, temp, valve=True)
+    assert "dead_time" in changed
+    assert learner.dead_time.value == pytest.approx(1800 + 0.5 * (50 * 60 - 1800))
+
+
+def test_dead_time_sensor_step_at_float_boundary() -> None:
+    learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
+    learner.on_switch(0, 20.1, turned_on=True, run_hours=0)  # 20.1 + 0.1 > 20.2 as floats
+    changed = _feed(learner, 0, 40, lambda m: 20.1 if m < 30 else 20.2, valve=True)
+    assert "dead_time" in changed
+    assert learner.dead_time.value == pytest.approx(1800)  # step at 30 min = start value
+
+
+def test_pv_unknown_keeps_event_trackers_running_but_not_the_model() -> None:
+    def run(pv_unknown: bool) -> list[str]:
+        learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
+        learner.on_switch(0, 20.0, turned_on=True, run_hours=0)
+        changed: list[str] = []
+        for m in range(180):
+            temp = 20.0 if m < 30 else 20.2
+            sample = Sample(m * 60, temp, True, 5.0, 0.3, False, pv_unknown=pv_unknown)
+            changed += learner.add_sample(sample)
+        return changed
+
+    assert "model" in run(pv_unknown=False)
+    unknown = run(pv_unknown=True)
+    assert "dead_time" in unknown and "model" not in unknown
+
+
+def test_stale_overshoot_tracker_is_not_counted_at_switch_on() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    learner.on_switch(0, 20.4, turned_on=False, run_hours=1.0)
+    _feed(learner, 0, 10, lambda m: 20.4, valve=False, excluded=True)  # nothing seen for hours
+    learner.on_switch(8 * 3600, 20.2, turned_on=True, run_hours=0)
+    assert learner.overshoot.count == 0
+
+
+def test_overshoot_rate_comes_down_from_short_runs() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    learner.overshoot_rate = Ewma(2.0, count=10)
+    learner.on_switch(0, 20.6, turned_on=False, run_hours=10 / 60)
+    temp = lambda m: 20.6 if m < 5 else 20.7 if m < 20 else 20.4  # noqa: E731
+    _feed(learner, 0, 60, temp, valve=False)
+    assert learner.overshoot.count == 1
+    assert learner.overshoot_rate.value < 2.0
 
 
 def test_model_updated_from_samples() -> None:

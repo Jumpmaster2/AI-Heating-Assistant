@@ -9,6 +9,7 @@ decides when the local rule may take over.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -122,6 +123,7 @@ class DayAreaStats:
     too_cold_min: float = 0.0
     relay_min: float = 0.0
     window_min: float = 0.0
+    observed_min: float = 0.0  # minutes with thermostat on, a temperature and no airing
     emergency: bool = False
     manual_heat: bool = False
     # Counterfactual: temperature the area would have without any heating today
@@ -143,6 +145,17 @@ class DayAreaStats:
             return None
         return max(self.too_cold_min, self.virtual_cold_min)
 
+    @property
+    def known_cold_min(self) -> float:
+        """Like ``cold_min``, falling back to the real room when the virtual one is unknown."""
+        cold = self.cold_min
+        return self.too_cold_min if cold is None else cold
+
+    @property
+    def observed(self) -> bool:
+        """Did the area deliver any evidence today?"""
+        return self.observed_min > 0 or self.relay_min > 0 or self.emergency or self.manual_heat
+
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -150,7 +163,13 @@ class DayAreaStats:
     def from_dict(cls, data: dict[str, Any] | None) -> DayAreaStats:
         stats = cls()
         if data:
-            for key in ("too_cold_min", "relay_min", "window_min", "virtual_cold_min"):
+            for key in (
+                "too_cold_min",
+                "relay_min",
+                "window_min",
+                "observed_min",
+                "virtual_cold_min",
+            ):
                 setattr(stats, key, float(data.get(key, 0.0)))
             stats.emergency = bool(data.get("emergency", False))
             stats.manual_heat = bool(data.get("manual_heat", False))
@@ -261,25 +280,51 @@ def evaluate_need(stats: dict[str, DayAreaStats], settings: EvalSettings) -> Nee
     without heating) tells whether it would have become too cold. Without it the
     day stays unclear, unless the real room was cold anyway.
     """
-    if not stats:
-        return Need.UNCLEAR
-    cold = 0.0
-    unknown = False
-    for s in stats.values():
-        area_cold = s.cold_min
-        if area_cold is None:
-            unknown = True
-            area_cold = s.too_cold_min
-        cold = max(cold, area_cold)
-    if cold >= settings.too_cold_minutes or any(
-        s.emergency or s.manual_heat for s in stats.values()
-    ):
+    observed = [s for s in stats.values() if s.observed]
+    if not observed:
+        return Need.UNCLEAR  # thermostats off or no temperature all day: nothing seen
+    cold = max(s.known_cold_min for s in observed)
+    if cold >= settings.too_cold_minutes or any(s.emergency or s.manual_heat for s in observed):
         return Need.YES
-    if unknown:
+    if any(s.cold_min is None for s in observed):
         return Need.UNCLEAR
     if cold <= 0:
         return Need.NO
     return Need.UNCLEAR
+
+
+def track_virtual(
+    stats: DayAreaStats,
+    temp: float,
+    minutes: float,
+    cool_rate_kph: Callable[[float], float],
+    target: float,
+    margin: float,
+    *,
+    ready: bool,
+    counting: bool,
+    airing: bool,
+) -> None:
+    """Advance the virtual room of one area by one tick.
+
+    The virtual room starts at the real temperature on the first tick where the model
+    is ``ready`` and nothing has heated yet today; later than that it stays unknown.
+    It cools with ``cool_rate_kph`` (K/h for a given room temperature) and is never
+    warmer than the real room, except while airing, whose dip it must not inherit.
+    ``counting`` says whether cold minutes count on this tick (thermostat on, no airing).
+    """
+    if minutes <= 0:
+        return
+    if stats.virtual_temp is None:
+        if not ready or stats.relay_min > 0:
+            return
+        stats.virtual_temp = temp
+    virtual = stats.virtual_temp - cool_rate_kph(stats.virtual_temp) * minutes / 60
+    if not airing:
+        virtual = min(temp, virtual)
+    stats.virtual_temp = round(virtual, 3)
+    if counting and virtual < target - margin:
+        stats.virtual_cold_min += minutes
 
 
 def error_of(decision: bool | None, need: Need) -> str | None:
@@ -310,7 +355,7 @@ def learn_rule(
         new_theta = theta + settings.theta_up
         changes.append("theta")
         for area_id, s in stats.items():
-            if (s.cold_min or 0.0) >= settings.too_cold_minutes and area_id in new_puffers:
+            if s.known_cold_min >= settings.too_cold_minutes and area_id in new_puffers:
                 new_puffers[area_id] = new_puffers[area_id] + settings.puffer_up
                 changes.append(f"puffer:{area_id}")
     elif err == "B":

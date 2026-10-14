@@ -11,7 +11,11 @@ RECOVERED_MARGIN = 0.1  # K below the temperature before airing counts as recove
 FORCE_ON_BELOW = 1.0  # K below target: heat regardless of predictions
 SHORT_AIRING_S = 120.0  # shorter openings are ignored after closing
 PEAK_PASSED_K = 0.15  # K below the highest temperature since switch-off: overshoot has arrived
-PEAK_CARRY_MAX_S = 4 * 3600.0  # the overshoot expected at switch-off is forgotten after this
+# The overshoot expected at switch-off is forgotten after this at the latest. It ends
+# earlier once the temperature falls again; the peak comes several dead times after
+# the switch-off, so the limit is not tied to the dead time.
+PEAK_CARRY_MAX_S = 4 * 3600.0
+EPS = 1e-6  # tolerance for comparing sensor values in 0.1 K steps (21.0 - 0.1 > 20.9)
 
 
 class AreaStatus(StrEnum):
@@ -110,6 +114,10 @@ class AreaRuntime:
     def as_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data.pop("events")
+        # Not restored: after a restart a stale peak must not start a carry (a carry
+        # already running keeps its real start time and expires on schedule).
+        data.pop("was_on")
+        data.pop("last_peak")
         return data
 
     @classmethod
@@ -172,7 +180,10 @@ def _update_window(
     if data.window_open:
         if rt.window_open_since is None:
             rt.window_open_since = data.now
-            rt.temp_before_open = data.temp
+            if rt.recovery_until is None or rt.temp_before_open is None:
+                # Opened again while still recovering: the room has to get back to
+                # the temperature before the first airing, not to the lowered one.
+                rt.temp_before_open = data.temp
             rt.last_window_change = data.now
             rt.events.append("window_opened")
         if not rt.window_paused and data.now - rt.window_open_since >= params.window_delay_min * 60:
@@ -202,7 +213,7 @@ def _update_window(
     recovered = (
         data.temp is not None
         and rt.temp_before_open is not None
-        and data.temp >= rt.temp_before_open - RECOVERED_MARGIN
+        and data.temp - rt.temp_before_open >= -RECOVERED_MARGIN - EPS
     )
     if recovered or data.now >= rt.recovery_until:
         rt.recovery_until = None
@@ -233,7 +244,7 @@ def _update_carry(data: ControlInput, rt: AreaRuntime) -> None:
         return
     rt.carry_max = data.temp if rt.carry_max is None else max(rt.carry_max, data.temp)
     expired = rt.carry_since is None or data.now - rt.carry_since >= PEAK_CARRY_MAX_S
-    if expired or data.temp <= rt.carry_max - PEAK_PASSED_K:
+    if expired or data.temp - rt.carry_max <= -PEAK_PASSED_K + EPS:
         rt.carry_peak = None
 
 
@@ -272,6 +283,8 @@ def thermostat(
     basis = data.temp if data.switch_on or carry_peak is None else max(data.temp, carry_peak)
     predicted = basis - learned.cool_rate_kph * lead_h
     peak = data.temp + learned.overshoot_k * params.overshoot_factor
+    if not data.switch_on and carry_peak is not None:
+        peak = max(peak, carry_peak)  # the peak still expected from the last run
     on_threshold = data.target - params.hysteresis_on
     off_threshold = data.target + params.hysteresis_off
     if data.temp < data.target - FORCE_ON_BELOW:
