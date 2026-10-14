@@ -36,9 +36,12 @@ RISE_K = 0.1  # K above the minimum: a rise may have started (one sensor step)
 RISE_CONFIRM_K = 0.2  # K above the minimum: the rise is real, not sensor noise
 RISE_CONFIRM_S = 5 * 60  # s a single step has to last to count as a real rise
 PEAK_PASSED_K = 0.15  # K below the highest temperature after switch-off: overshoot is over
-# A recovery cut short by heating only says the true value is larger than the time
-# waited. Counting it a little longer lets the estimate grow in that direction at all.
+MIN_RUN_H = 0.25  # h; shorter runs are rated as if they had lasted this long
+# A recovery cut short by heating while the room was still warming up only says the
+# true value is larger than the time waited. Counting it a little longer lets the
+# estimate grow in that direction at all; a room that was not warming up says nothing.
 CENSORED_RECOVERY_FACTOR = 1.25
+EPS = 1e-6  # tolerance for comparing sensor values in 0.1 K steps (20.1 + 0.1 > 20.2)
 
 SAMPLE_INTERVAL = 15 * 60  # s between model updates
 RATE_WINDOW = 60 * 60  # s window used to compute dT/dt
@@ -179,6 +182,7 @@ class Sample:
     outdoor: float | None
     pv_kw: float
     excluded: bool  # window open, recovery or other disturbance
+    pv_unknown: bool = False  # pv_kw is an estimate: keep the sample out of the model
 
 
 @dataclass
@@ -262,22 +266,38 @@ class AreaLearner:
             return
         if turned_on:
             # The controller switches on once the peak has passed: that is a valid sample.
-            if self.track_off is not None and temp <= self.track_off["max"] - PEAK_PASSED_K:
-                self._add_overshoot(self.track_off)
+            t = self.track_off
+            if (
+                t is not None
+                and ts - t["start"] <= TRACK_TIMEOUT
+                and temp <= t["max"] - PEAK_PASSED_K + EPS
+            ):
+                self._add_overshoot(t)
             self.track_on = {"start": ts, "min": temp}
             self.track_off = None
         else:
             if self.track_on is not None:
-                self._confirm_dead_time(self.track_on, ts)
+                self._confirm_dead_time(self.track_on, ts, temp)
             self.track_off = {"start": ts, "t_off": temp, "max": temp, "run_h": run_hours}
             self.track_on = None
 
-    def on_window_closed(self, ts: float, temp_before: float | None, open_seconds: float) -> None:
-        """Start measuring the recovery after airing."""
+    def on_window_closed(
+        self,
+        ts: float,
+        temp_before: float | None,
+        open_seconds: float,
+        wait_s: float | None = None,
+    ) -> None:
+        """Start measuring the recovery after airing.
+
+        ``wait_s`` is how long the controller will hold the circuit off; without it
+        the learned value is assumed.
+        """
         if temp_before is None or open_seconds < 120:
             self.track_recovery = None
             return
-        self.track_recovery = {"start": ts, "t_before": temp_before}
+        wait = self.recovery.value if wait_s is None else max(0.0, wait_s)
+        self.track_recovery = {"start": ts, "t_before": temp_before, "wait": wait}
 
     def on_window_opened(self) -> None:
         """Opening a window disturbs all running measurements."""
@@ -293,7 +313,8 @@ class AreaLearner:
         self.samples.append(sample)
         if sample.temp is not None:
             # The recovery is measured while the controller still waits for it; those
-            # samples are excluded from everything else.
+            # samples are excluded from everything else. An estimated PV power only
+            # keeps the sample out of the model, the event trackers do not need it.
             changed += self._track_recovery(sample)
             if not sample.excluded:
                 changed += self._track(sample)
@@ -311,11 +332,18 @@ class AreaLearner:
             t = self.track_on
             if not s.valve or s.ts - t["start"] > TRACK_TIMEOUT:
                 self.track_on = None
-            else:
-                if temp < t["min"]:
+            elif temp < t["min"] - EPS:
+                # A lower reading becomes the new minimum only when a second sample
+                # confirms it; one reading below the plateau may be noise.
+                if abs(t.get("dip", temp + 1.0) - temp) < EPS:
                     t["min"] = temp
+                    t.pop("dip", None)
                     t.pop("rise", None)
-                if temp >= t["min"] + RISE_K:
+                else:
+                    t["dip"] = temp
+            else:
+                t.pop("dip", None)
+                if temp - t["min"] >= RISE_K - EPS:
                     t.setdefault("rise", s.ts)
                 else:
                     t.pop("rise", None)
@@ -324,7 +352,7 @@ class AreaLearner:
                     changed.append("dead_time")
         if self.track_off is not None:
             t = self.track_off
-            peak_passed = temp <= t["max"] - PEAK_PASSED_K
+            peak_passed = temp <= t["max"] - PEAK_PASSED_K + EPS
             if s.valve and not peak_passed:
                 self.track_off = None
             elif peak_passed or s.ts - t["start"] > TRACK_TIMEOUT:
@@ -340,7 +368,7 @@ class AreaLearner:
         step lasting a while. One step alone may be noise. The dead time ends at the
         first step."""
         rise = t.get("rise")
-        confirmed = (temp is not None and temp >= t["min"] + RISE_CONFIRM_K) or (
+        confirmed = (temp is not None and temp - t["min"] >= RISE_CONFIRM_K - EPS) or (
             rise is not None and ts - rise >= RISE_CONFIRM_S
         )
         if not confirmed:
@@ -351,30 +379,36 @@ class AreaLearner:
     def _add_overshoot(self, t: dict[str, float]) -> None:
         over = clamp(t["max"] - t["t_off"], *OVERSHOOT_BOUNDS)
         self.overshoot.add(over)
-        run_h = t.get("run_h", 0.0)
-        if run_h >= 0.25:
-            rate = over / min(run_h, MAX_RUN_HOURS_FOR_OVERSHOOT)
-            self.overshoot_rate.add(clamp(rate, *OVERSHOOT_RATE_BOUNDS))
+        # Short runs are rated as if they had lasted MIN_RUN_H: a rate learned too large
+        # shortens every run, and the rate must still be able to come down.
+        run_h = clamp(t.get("run_h", 0.0), MIN_RUN_H, MAX_RUN_HOURS_FOR_OVERSHOOT)
+        self.overshoot_rate.add(clamp(over / run_h, *OVERSHOOT_RATE_BOUNDS))
 
     def _track_recovery(self, s: Sample) -> list[str]:
         if self.track_recovery is None or s.temp is None:
             return []
         t = self.track_recovery
         elapsed = s.ts - t["start"]
-        if s.ts - t["start"] > TRACK_TIMEOUT:
-            self.track_recovery = None  # the room never got back on its own: keep the value
-            return []
-        if s.valve:
-            # Censored by heating. Waiting the learned time and still not recovered means
-            # the true value is larger; an earlier start says nothing about it.
-            self.track_recovery = None
-            if elapsed < self.recovery.value:
-                return []
-            self.recovery.add(clamp(elapsed * CENSORED_RECOVERY_FACTOR, *RECOVERY_BOUNDS))
-            return ["recovery"]
-        if s.temp >= t["t_before"] - 0.1:
+        t["min"] = min(t.get("min", s.temp), s.temp)
+        if s.temp - t["t_before"] >= -0.1 - EPS:
             self.recovery.add(clamp(elapsed, *RECOVERY_BOUNDS))
             self.track_recovery = None
+            return ["recovery"]
+        if elapsed > TRACK_TIMEOUT:
+            self.track_recovery = None  # the room never got back on its own: keep the value
+            return []
+        wait = t.get("wait", self.recovery.value)
+        if "rising" not in t and elapsed >= wait:
+            # End of the controller's wait: was the room on its way back by itself?
+            t["rising"] = float(s.temp - t["min"] >= RISE_K - EPS)
+        if s.valve:
+            # Censored by heating. Only a room that was still warming up when the wait
+            # ended says the true value is larger; everything else says nothing.
+            self.track_recovery = None
+            censored = clamp(wait * CENSORED_RECOVERY_FACTOR, *RECOVERY_BOUNDS)
+            if not t.get("rising") or censored <= self.recovery.value:
+                return []  # "larger than a short wait" says nothing about a larger estimate
+            self.recovery.add(censored)
             return ["recovery"]
         return []
 
@@ -384,7 +418,7 @@ class AreaLearner:
         window = [s for s in self.samples if s.ts >= start - 1]
         if len(window) < 20 or window[0].ts > start + EDGE:
             return False
-        if any(s.excluded or s.temp is None or s.outdoor is None for s in window):
+        if any(s.excluded or s.pv_unknown or s.temp is None or s.outdoor is None for s in window):
             return False
         head = [s.temp for s in window if s.ts <= window[0].ts + EDGE]
         tail = [s.temp for s in window if s.ts >= now - EDGE]

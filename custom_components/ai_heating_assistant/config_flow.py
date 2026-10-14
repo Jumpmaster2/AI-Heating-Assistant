@@ -347,6 +347,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
     """Initial setup: global sensors, vacation, AI."""
 
     VERSION = 1
+    MINOR_VERSION = 2  # 2: relay minute options removed, learning steps down doubled
 
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
