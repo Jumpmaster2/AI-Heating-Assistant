@@ -114,3 +114,28 @@ def test_warm_outside_limits_drying() -> None:
 
 def test_missing_values_unknown() -> None:
     assert recommend(_data(humidity=None), SETTINGS).state == VentilationState.UNKNOWN
+
+
+def test_cooling_in_heating_period_needs_margin_above_target() -> None:
+    # 22 °C, target 21, margin 1 K: exactly at the limit -> useful
+    at_limit = recommend(_data(humidity=45.0, season_active=True, target=21.0), SETTINGS)
+    assert at_limit.state == VentilationState.VENTILATION_USEFUL
+    # 22 °C, target 21.5: below target + margin -> no cooling advice
+    below = recommend(_data(humidity=45.0, season_active=True, target=21.5), SETTINGS)
+    assert below.state == VentilationState.OPTIMAL
+
+
+def test_cooling_margin_is_configurable_and_ignored_outside_season() -> None:
+    strict = VentilationSettings(cooling_margin=3.0)
+    assert recommend(_data(humidity=45.0, season_active=True, target=21.0), strict).state == (
+        VentilationState.OPTIMAL
+    )
+    # outside the heating period the target does not matter (summer cooling)
+    assert recommend(_data(humidity=45.0, season_active=False, target=25.0), strict).state == (
+        VentilationState.VENTILATION_USEFUL
+    )
+
+
+def test_drying_not_affected_by_cooling_margin() -> None:
+    result = recommend(_data(humidity=70.0, season_active=True, target=23.0), SETTINGS)
+    assert result.state == VentilationState.VENTILATE_NOW

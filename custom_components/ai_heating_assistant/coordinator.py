@@ -88,6 +88,7 @@ from .const import (
     CONF_VACATION_ENTITIES,
     CONF_VACATION_TEMP,
     CONF_VENT_BLOCK,
+    CONF_VENT_COOL_MARGIN,
     CONF_VENT_MAX_EXCESS,
     CONF_VENT_MIN_AH,
     CONF_VENT_MIN_COOLING,
@@ -823,12 +824,15 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 blocked=self._is_active(cfg.get(CONF_VENT_BLOCK)),
                 reference_is_indoor=indoor_ref,
                 is_night=is_night,
+                target=area.effective_target or area.target,
+                season_active=self.season_active,
             ),
             VentilationSettings(
                 rh_threshold=float(cfg.get(CONF_VENT_RH, 60.0)),
                 min_ah_advantage=float(self.opt(CONF_VENT_MIN_AH)),
                 max_reference_excess=float(self.opt(CONF_VENT_MAX_EXCESS)),
                 min_cooling_advantage=float(self.opt(CONF_VENT_MIN_COOLING)),
+                cooling_margin=float(self.opt(CONF_VENT_COOL_MARGIN)),
             ),
         )
 

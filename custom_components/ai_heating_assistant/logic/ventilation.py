@@ -5,6 +5,7 @@ The decision order follows a proven template based solution:
 2. window open although ventilating brings nothing -> close window
 3. relative humidity high and outside air is drier -> ventilate now
 4. room is warmer than the reference and nobody heats -> ventilating is useful
+   (within the heating period only if the room is clearly above its target)
 5. humidity high but outside air not drier -> do not ventilate
 6. otherwise everything is fine
 """
@@ -40,6 +41,7 @@ class VentilationSettings:
     min_ah_advantage: float = 0.8
     max_reference_excess: float = 4.0
     min_cooling_advantage: float = 1.0
+    cooling_margin: float = 1.0  # heating period: cool only this far above target
 
 
 @dataclass(slots=True)
@@ -56,6 +58,8 @@ class VentilationInput:
     # Cooling advantage counts only at night when the reference is another room.
     reference_is_indoor: bool = False
     is_night: bool = False
+    target: float | None = None
+    season_active: bool = False
 
 
 @dataclass(slots=True)
@@ -98,6 +102,11 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
         delta_t >= settings.min_cooling_advantage
         and not data.heating_active
         and (not data.reference_is_indoor or data.is_night)
+        and (
+            not data.season_active
+            or data.target is None
+            or data.temp >= data.target + settings.cooling_margin
+        )
     )
     benefit = drying_useful or cooling_useful
 

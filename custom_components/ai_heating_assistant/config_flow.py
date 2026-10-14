@@ -96,6 +96,7 @@ from .const import (
     CONF_VACATION_ENTITIES,
     CONF_VACATION_TEMP,
     CONF_VENT_BLOCK,
+    CONF_VENT_COOL_MARGIN,
     CONF_VENT_MAX_EXCESS,
     CONF_VENT_MIN_AH,
     CONF_VENT_MIN_COOLING,
@@ -193,6 +194,7 @@ def _ventilation_schema(v: dict[str, Any]) -> vol.Schema:
             _req(CONF_VENT_MIN_AH, v): _number(0.1, 5, 0.1, "g/m³"),
             _req(CONF_VENT_MAX_EXCESS, v): _number(0, 15, 0.5, "K"),
             _req(CONF_VENT_MIN_COOLING, v): _number(0, 10, 0.5, "K"),
+            _req(CONF_VENT_COOL_MARGIN, v): _number(0, 5, 0.1, "K"),
             _req(CONF_NIGHT_START, v): _number(0, 23, 1, "h"),
             _req(CONF_NIGHT_END, v): _number(0, 23, 1, "h"),
         }

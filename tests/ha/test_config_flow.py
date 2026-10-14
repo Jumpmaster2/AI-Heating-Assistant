@@ -194,3 +194,27 @@ async def test_reconfigure_api_key(hass: HomeAssistant, base_states) -> None:
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert entry.data["api_key"] == "new-key"
+
+
+async def test_options_ventilation_cooling_margin(hass: HomeAssistant, base_states) -> None:
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "ventilation"}
+    )
+    assert result["step_id"] == "ventilation"
+    values = {
+        "ventilation_min_ah_advantage": 0.8,
+        "ventilation_max_reference_excess": 4.0,
+        "ventilation_min_cooling_advantage": 1.0,
+        "ventilation_cooling_margin": 1.5,
+        "night_start_hour": 20,
+        "night_end_hour": 8,
+    }
+    result = await hass.config_entries.options.async_configure(result["flow_id"], values)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options["ventilation_cooling_margin"] == 1.5

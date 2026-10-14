@@ -46,6 +46,7 @@ CONF_EMERGENCY_QUIET = "emergency_window_quiet"
 CONF_VENT_MIN_AH = "ventilation_min_ah_advantage"
 CONF_VENT_MAX_EXCESS = "ventilation_max_reference_excess"
 CONF_VENT_MIN_COOLING = "ventilation_min_cooling_advantage"
+CONF_VENT_COOL_MARGIN = "ventilation_cooling_margin"
 CONF_NIGHT_START = "night_start_hour"
 CONF_NIGHT_END = "night_end_hour"
 
@@ -133,6 +134,7 @@ DEFAULTS: Final[dict[str, object]] = {
     CONF_VENT_MIN_AH: 0.8,
     CONF_VENT_MAX_EXCESS: 4.0,
     CONF_VENT_MIN_COOLING: 1.0,
+    CONF_VENT_COOL_MARGIN: 1.0,
     CONF_NIGHT_START: 20,
     CONF_NIGHT_END: 8,
     CONF_AI_MODEL: DEFAULT_MODEL,
