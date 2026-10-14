@@ -249,15 +249,46 @@ def _update_carry(data: ControlInput, rt: AreaRuntime) -> None:
         rt.carry_peak = None
 
 
-def _update_emergency(data: ControlInput, settings: AreaSettings, rt: AreaRuntime) -> None:
-    """Emergency rule on days without heating: long and clearly too cold, no airing."""
+def predict_temp(
+    data: ControlInput,
+    params: ControlParams,
+    learned: LearnedValues,
+    carry_peak: float | None = None,
+) -> float:
+    """Temperature expected after the lead time (dead time scaled by the lead factor).
+
+    ``carry_peak`` is the peak expected from the heat still in the floor after a
+    switch-off; while it is pending the prediction starts from it, not from the
+    current temperature.
+    """
+    assert data.temp is not None
+    lead_h = learned.dead_time_s * params.lead_factor / 3600.0
+    basis = data.temp if data.switch_on or carry_peak is None else max(data.temp, carry_peak)
+    return basis - learned.cool_rate_kph * lead_h
+
+
+def _update_emergency(
+    data: ControlInput,
+    params: ControlParams,
+    settings: AreaSettings,
+    learned: LearnedValues,
+    rt: AreaRuntime,
+) -> None:
+    """Emergency rule on days without heating: expected to stay clearly too cold, no airing.
+
+    The temperature expected after the lead time counts, not the current one: heating
+    shows only after the dead time, so judging the current temperature would leave the
+    room too cold for the persistence plus that dead time. Same prediction as the
+    thermostat, so the two agree.
+    """
     if not settings.emergency_enabled or data.temp is None or rt.emergency_active:
         return
     quiet = (
         rt.last_window_change is None
         or data.now - rt.last_window_change >= settings.emergency_window_quiet_s
     )
-    if data.temp < data.target - settings.emergency_delta and quiet and not data.window_open:
+    predicted = predict_temp(data, params, learned, rt.carry_peak)
+    if predicted < data.target - settings.emergency_delta and quiet and not data.window_open:
         if rt.below_emergency_since is None:
             rt.below_emergency_since = data.now
         elif data.now - rt.below_emergency_since >= settings.emergency_duration_s:
@@ -276,13 +307,10 @@ def thermostat(
     """Predictive on/off decision. Returns (want_on, predicted_temp, expected_peak).
 
     ``carry_peak`` is the peak expected from the heat still in the floor after a
-    switch-off; while it is pending the prediction starts from it, not from the
-    current temperature.
+    switch-off (see ``predict_temp``).
     """
     assert data.temp is not None
-    lead_h = learned.dead_time_s * params.lead_factor / 3600.0
-    basis = data.temp if data.switch_on or carry_peak is None else max(data.temp, carry_peak)
-    predicted = basis - learned.cool_rate_kph * lead_h
+    predicted = predict_temp(data, params, learned, carry_peak)
     peak = data.temp + learned.overshoot_k * params.overshoot_factor
     if not data.switch_on and carry_peak is not None:
         peak = max(peak, carry_peak)  # the peak still expected from the last run
@@ -336,7 +364,7 @@ def step(
         return ControlDecision(False, AreaStatus.RECOVERY, may_switch)
 
     if not data.heating_day:
-        _update_emergency(data, settings, rt)
+        _update_emergency(data, params, settings, learned, rt)
         if not rt.emergency_active:
             return ControlDecision(False, AreaStatus.NO_HEATING_DAY, may_switch)
 

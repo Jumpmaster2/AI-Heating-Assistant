@@ -1,5 +1,6 @@
 """Tests for the per area controller."""
 
+import pytest
 from logic.controller import (
     AreaRuntime,
     AreaSettings,
@@ -7,6 +8,7 @@ from logic.controller import (
     ControlInput,
     ControlParams,
     LearnedValues,
+    predict_temp,
     preheat_start,
     step,
     thermostat,
@@ -215,6 +217,7 @@ def test_frost_protection_overrides_everything() -> None:
 def test_no_heating_day_and_emergency() -> None:
     rt = AreaRuntime()
     settings = AreaSettings(emergency_duration_s=45 * 60)
+    # 19.8 now, 19.6 expected after the dead time: below 20.0, the timer runs
     d = step(_input(now=0, temp=19.8, heating_day=False), PARAMS, settings, LEARNED, rt)
     assert d.status == AreaStatus.NO_HEATING_DAY and not d.want_on
     d = step(_input(now=46 * 60, temp=19.8, heating_day=False), PARAMS, settings, LEARNED, rt)
@@ -323,3 +326,32 @@ def test_recovery_ends_exactly_one_margin_below_the_reference() -> None:
     # 20.9 >= 21.0 - 0.1 although 21.0 - 0.1 is 20.900000000000002 as a float
     d = step(_input(now=560.0, temp=20.9, window_open=False, **base), PARAMS, SETTINGS, LEARNED, rt)
     assert rt.recovery_until is None and d.status == AreaStatus.HEATING
+
+
+def test_predict_temp() -> None:
+    assert predict_temp(_input(temp=21.0), PARAMS, LEARNED) == pytest.approx(20.8)
+    assert predict_temp(_input(temp=21.0), PARAMS, LEARNED, carry_peak=21.5) == pytest.approx(21.3)
+    on = _input(temp=21.0, switch_on=True)
+    assert predict_temp(on, PARAMS, LEARNED, carry_peak=21.5) == pytest.approx(20.8)
+
+
+def test_emergency_uses_the_predicted_temperature() -> None:
+    """20.1 now is above target - 1 K, but 19.9 after the dead time: the timer runs."""
+    rt = AreaRuntime()
+    settings = AreaSettings(emergency_duration_s=45 * 60)
+    d = step(_input(now=0, temp=20.1, heating_day=False), PARAMS, settings, LEARNED, rt)
+    assert d.status == AreaStatus.NO_HEATING_DAY and rt.below_emergency_since == 0
+    d = step(_input(now=46 * 60, temp=20.1, heating_day=False), PARAMS, settings, LEARNED, rt)
+    assert d.status == AreaStatus.EMERGENCY and d.want_on
+    # a room that does not cool stays where it is: nothing to prevent
+    rt = AreaRuntime()
+    still = LearnedValues(cool_rate_kph=0.0, dead_time_s=3600)
+    for now in (0, 46 * 60):
+        d = step(_input(now=now, temp=20.1, heating_day=False), PARAMS, settings, still, rt)
+        assert d.status == AreaStatus.NO_HEATING_DAY and rt.below_emergency_since is None
+
+
+def test_emergency_prediction_starts_from_the_carried_peak() -> None:
+    rt = AreaRuntime(carry_peak=20.6, carry_max=20.1, carry_since=0.0)
+    d = step(_input(now=0, temp=20.1, heating_day=False), PARAMS, SETTINGS, LEARNED, rt)
+    assert d.status == AreaStatus.NO_HEATING_DAY and rt.below_emergency_since is None

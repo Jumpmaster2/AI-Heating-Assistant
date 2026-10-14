@@ -140,8 +140,8 @@
           "emergency_window_quiet": "Emergency: no window change for"
         },
         "data_description": {
-          "emergency_enabled": "On days without heating, an area may still heat if it is long and clearly below its target without airing.",
-          "emergency_delta": "How far below the target the area has to be.",
+          "emergency_enabled": "On days without heating, an area may still heat if the temperature expected after the dead time is long and clearly below its target, without airing.",
+          "emergency_delta": "How far below the target the temperature expected after the dead time has to be.",
           "emergency_duration": "How long the area has to be that cold.",
           "emergency_window_quiet": "Airing does not count: windows must not have changed for this time."
         }
@@ -373,6 +373,7 @@
             },
             "start_values": {
               "name": "Start values (learned later)",
+              "description": "A change here replaces the learned or adjusted value; learning of that value starts again.",
               "data": {
                 "window_delay": "Window delay (start value)",
                 "recovery_time": "Recovery time after airing (start value)",
@@ -447,6 +448,7 @@
             },
             "start_values": {
               "name": "Start values (learned later)",
+              "description": "A change here replaces the learned or adjusted value; learning of that value starts again.",
               "data": {
                 "window_delay": "Window delay (start value)",
                 "recovery_time": "Recovery time after airing (start value)",

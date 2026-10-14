@@ -13,7 +13,7 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from custom_components.ai_heating_assistant.const import DOMAIN, EVENT_LOGBOOK
+from custom_components.ai_heating_assistant.const import DOMAIN, EVENT_LOGBOOK, STORAGE_VERSION
 from custom_components.ai_heating_assistant.diagnostics import (
     async_get_config_entry_diagnostics,
 )
@@ -364,3 +364,41 @@ async def test_pv_forecast_sensor_sets_expected_sun(
     hass.states.async_set("sensor.pv_energy_next_hour", "unavailable")
     await _advance(hass, freezer, 1)
     assert hass.states.get("climate.living_room").attributes["expected_pv_kw"] == 0
+
+
+async def test_old_store_applies_unlearned_start_values(
+    hass: HomeAssistant, base_states, hass_storage: dict
+) -> None:
+    """A store of an older version has no record: the configuration wins where nothing was learned."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    sub = next(s for s in entry.subentries.values() if s.title == "Living room")
+    key = f"{DOMAIN}.{entry.entry_id}"
+    hass_storage[key] = {
+        "version": STORAGE_VERSION,
+        "minor_version": 1,
+        "key": key,
+        "data": {
+            "areas": {
+                sub.subentry_id: {
+                    "learner": {
+                        "dead_time": {"value": 5400, "count": 0},
+                        "recovery": {"value": 5400, "count": 1},
+                    }
+                }
+            }
+        },
+    }
+    events = async_capture_events(hass, EVENT_LOGBOOK)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    area = entry.runtime_data.areas[sub.subentry_id]
+    assert area.learner.dead_time.value == 30 * 60  # configured, nothing learned
+    assert area.learner.recovery.value == 5400  # learned once: kept
+    assert area.start == {
+        "dead_time": 1800.0,
+        "recovery": 1800.0,
+        "window_delay_min": 5.0,
+        "puffer": 0.7,
+    }
+    assert any("dead time" in e.data["message"] for e in events)
