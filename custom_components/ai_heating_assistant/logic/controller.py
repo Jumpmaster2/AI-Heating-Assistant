@@ -9,6 +9,7 @@ from typing import Any
 FROST_HYSTERESIS = 0.5  # K above the frost limit before frost protection ends
 RECOVERED_MARGIN = 0.1  # K below the temperature before airing counts as recovered
 FORCE_ON_BELOW = 1.0  # K below target: heat regardless of predictions
+SHORT_AIRING_S = 120.0  # shorter openings are ignored after closing
 
 
 class AreaStatus(StrEnum):
@@ -79,6 +80,7 @@ class LearnedValues:
     dead_time_s: float = 1800.0
     recovery_s: float = 1800.0
     overshoot_k: float = 0.0  # expected overshoot if switched off now
+    pv_plan_kw: float = 0.0  # PV power expected over the lead time (used in cool_rate_kph)
 
 
 @dataclass
@@ -89,6 +91,7 @@ class AreaRuntime:
     temp_before_open: float | None = None
     window_paused: bool = False
     recovery_until: float | None = None
+    short_recovery: bool = False  # recovery after airing shorter than the window delay
     last_window_change: float | None = None
     below_emergency_since: float | None = None
     emergency_active: bool = False
@@ -153,7 +156,11 @@ def _may_switch(data: ControlInput, settings: AreaSettings) -> bool:
 def _update_window(
     data: ControlInput, params: ControlParams, learned: LearnedValues, rt: AreaRuntime
 ) -> bool:
-    """Track window state. Returns True while recovering after airing."""
+    """Track window state. Returns True while recovering after airing.
+
+    Airing shorter than the window delay but at least ``SHORT_AIRING_S`` starts a
+    short recovery, scaled by the share of the window delay the window was open.
+    """
     if data.window_open:
         if rt.window_open_since is None:
             rt.window_open_since = data.now
@@ -163,14 +170,22 @@ def _update_window(
         if not rt.window_paused and data.now - rt.window_open_since >= params.window_delay_min * 60:
             rt.window_paused = True
             rt.recovery_until = None
+            rt.short_recovery = False
             rt.events.append("window_pause")
     elif rt.window_open_since is not None:
         rt.events.append("window_closed")
         rt.last_window_change = data.now
+        recovery = max(0.0, learned.recovery_s + params.recovery_bias_min * 60)
+        open_s = data.now - rt.window_open_since
         if rt.window_paused:
-            recovery = max(0.0, learned.recovery_s + params.recovery_bias_min * 60)
             rt.recovery_until = data.now + recovery
+            rt.short_recovery = False
             rt.events.append("recovery_start")
+        elif open_s >= SHORT_AIRING_S and params.window_delay_min > 0:
+            share = min(1.0, open_s / (params.window_delay_min * 60))
+            rt.recovery_until = data.now + recovery * share
+            rt.short_recovery = True
+            rt.events.append("short_recovery_start")
         rt.window_open_since = None
         rt.window_paused = False
 
@@ -183,7 +198,8 @@ def _update_window(
     )
     if recovered or data.now >= rt.recovery_until:
         rt.recovery_until = None
-        rt.events.append("recovery_end")
+        rt.events.append("short_recovery_end" if rt.short_recovery else "recovery_end")
+        rt.short_recovery = False
         return False
     return True
 
@@ -256,7 +272,10 @@ def step(
         return ControlDecision(False, AreaStatus.OUT_OF_SEASON, may_switch)
     if rt.window_paused:
         return ControlDecision(False, AreaStatus.WINDOW_OPEN, may_switch)
-    if recovering:
+    # Short airing: a window open shorter than the window delay, or the short recovery
+    # after it, must not switch the circuit on. A running circuit keeps its normal logic.
+    hold = data.window_open or (recovering and rt.short_recovery)
+    if recovering and not rt.short_recovery:
         return ControlDecision(False, AreaStatus.RECOVERY, may_switch)
 
     if not data.heating_day:
@@ -265,6 +284,9 @@ def step(
             return ControlDecision(False, AreaStatus.NO_HEATING_DAY, may_switch)
 
     want, predicted, peak = thermostat(data, params, learned)
+    if hold and want and not data.switch_on:
+        status = AreaStatus.WINDOW_OPEN if data.window_open else AreaStatus.RECOVERY
+        return ControlDecision(False, status, may_switch, predicted, peak)
     if not data.heating_day:
         status = AreaStatus.EMERGENCY
     elif data.preheat:

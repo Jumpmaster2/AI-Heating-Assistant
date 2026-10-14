@@ -65,6 +65,7 @@ from .const import (
     CONF_PUFFER,
     CONF_PUFFER_DOWN,
     CONF_PUFFER_UP,
+    CONF_PV_FORECAST,
     CONF_PV_POWER,
     CONF_RECOVERY,
     CONF_REF_HUMIDITY,
@@ -138,6 +139,16 @@ from .logic.controller import (
 from .logic.learning import DEAD_TIME_BOUNDS, P_START, RECOVERY_BOUNDS, AreaLearner, Sample
 from .logic.physics import clamp, in_season, parse_day_month
 from .logic.prompts import check_messages, nightly_messages, r
+from .logic.sun import (
+    Point,
+    SunScale,
+    clear_sky_index,
+    cloud_pct,
+    planning_pv,
+    sensor_point,
+    solar_elevation,
+    weather_points,
+)
 from .logic.ventilation import VentilationInput, VentilationResult, VentilationSettings, recommend
 from .messages import text
 
@@ -146,6 +157,7 @@ HISTORY_DAYS = 60
 EXTERNAL_SWITCH_GRACE = 120  # s within which a switch change counts as our own command
 CHECK_COLD_MARGIN = 0.3
 SAVE_EVERY_TICKS = 10
+WEATHER_PV_REFRESH_S = 1800  # s between hourly forecast requests for the expected sun
 INACTIVE_STATES = {"off", "idle", STATE_UNAVAILABLE, STATE_UNKNOWN, "none", ""}
 
 
@@ -233,6 +245,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.global_device_id: str | None = None
         self.outdoor_temp: float | None = None
         self.pv_kw: float = 0.0
+        self.sun_scale = SunScale()
+        self._pv_points: list[Point] = []
+        self._hourly: list[dict[str, Any]] = []
+        self._hourly_ts: float | None = None
         self.season_active = False
         self.vacation = False
         self._last_tick: float | None = None
@@ -346,6 +362,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.day_state = stored.get("day", {})
         self.ai_state = stored.get("ai", {})
         self.budget = Budget.from_dict(self.ai_state.get("budget"))
+        scale = (stored.get("sun") or {}).get("scale")
+        self.sun_scale = SunScale(float(scale) if isinstance(scale, int | float) else None)
         stored_areas: dict[str, Any] = stored.get("areas", {})
 
         for index, subentry in enumerate(
@@ -589,6 +607,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             },
             "day": self.day_state,
             "ai": self.ai_state,
+            "sun": {"scale": self.sun_scale.value},
         }
 
     def diagnostics(self) -> dict[str, Any]:
@@ -604,6 +623,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
         self.outdoor_temp = self._float(self.opt(CONF_OUTDOOR_TEMP))
         self.pv_kw = self._pv_kw()
+        await self._update_pv_forecast(ts)
         self.season_active = self._season()
         self.vacation = any(self._is_on(e) for e in self.opt(CONF_VACATION_ENTITIES) or [])
         return_ts = self._return_ts() if self.vacation else None
@@ -631,7 +651,31 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         until = dt_util.parse_datetime(str(current.get("valid_until", "")))
         return until is None or until <= now
 
-    def _learned_values(self, area: Area, run_hours: float) -> LearnedValues:
+    async def _update_pv_forecast(self, ts: float) -> None:
+        """Expected PV power of the next hours. Empty: only the current PV power is used."""
+        self._pv_points = []
+        if not self.opt(CONF_PV_POWER):
+            return
+        if forecast_id := self.opt(CONF_PV_FORECAST):
+            state = self._state(forecast_id)
+            unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
+            if (point := sensor_point(ts, self._float(forecast_id), unit)) is not None:
+                self._pv_points = [point]
+            return
+        weather = self._state(self.opt(CONF_WEATHER))
+        if weather is None:
+            return
+        lat, lon = self.hass.config.latitude, self.hass.config.longitude
+        cloud = cloud_pct({"condition": weather.state, **weather.attributes})
+        self.sun_scale.update(self.pv_kw, clear_sky_index(solar_elevation(ts, lat, lon)), cloud)
+        if self.sun_scale.value is None:
+            return
+        if self._hourly_ts is None or ts - self._hourly_ts >= WEATHER_PV_REFRESH_S:
+            self._hourly_ts = ts
+            self._hourly = await self._forecast("hourly")
+        self._pv_points = weather_points(self._hourly, self.sun_scale.value, lat, lon)
+
+    def _learned_values(self, area: Area, run_hours: float, ts: float) -> LearnedValues:
         learner = area.learner
         if learner is None:
             return LearnedValues()
@@ -641,12 +685,17 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             else 10.0
         )
         model = learner.model
+        # Cooling over the lead time uses the sun expected in that time, not only the
+        # current PV power. Heating rates (preheating) keep the current value.
+        lead_s = learner.dead_time.value * area.params.lead_factor
+        pv_plan = planning_pv(ts, self.pv_kw, self._pv_points, lead_s)
         return LearnedValues(
-            cool_rate_kph=model.cool_rate(diff, self.pv_kw, area.params.sun_factor),
+            cool_rate_kph=model.cool_rate(diff, pv_plan, area.params.sun_factor),
             heat_rate_kph=model.heat_rate(diff, self.pv_kw, area.params.sun_factor),
             dead_time_s=learner.dead_time.value,
             recovery_s=learner.recovery.value,
             overshoot_k=learner.expected_overshoot(run_hours),
+            pv_plan_kw=round(pv_plan, 2),
         )
 
     async def _tick_area(
@@ -679,7 +728,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         assert area.learner is not None
         rt = area.runtime
         run_hours = (ts - area.on_since) / 3600 if (area.switch_on and area.on_since) else 0.0
-        learned = self._learned_values(area, run_hours)
+        learned = self._learned_values(area, run_hours, ts)
         area.learned_values = learned
 
         # vacation and preheating for the return

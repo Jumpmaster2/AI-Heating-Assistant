@@ -111,6 +111,47 @@ def test_short_airing_does_not_pause() -> None:
     assert d.status not in (AreaStatus.WINDOW_OPEN, AreaStatus.RECOVERY)
 
 
+def test_open_window_blocks_switch_on_before_delay() -> None:
+    rt = AreaRuntime()
+    d = step(_input(now=0, temp=20.0, window_open=True), PARAMS, SETTINGS, LEARNED, rt)
+    assert not d.want_on and d.status == AreaStatus.WINDOW_OPEN
+    # a running circuit is not switched off before the window delay
+    d = step(
+        _input(now=60, temp=20.0, window_open=True, switch_on=True), PARAMS, SETTINGS, LEARNED, rt
+    )
+    assert d.want_on and d.status == AreaStatus.HEATING
+
+
+def test_short_airing_starts_short_recovery() -> None:
+    rt = AreaRuntime()
+    step(_input(now=0, temp=21.0, window_open=True), PARAMS, SETTINGS, LEARNED, rt)
+    # 3 of 5 minutes window delay -> 60 % of the 30 min recovery = 18 min
+    d = step(_input(now=180, temp=20.0, window_open=False), PARAMS, SETTINGS, LEARNED, rt)
+    assert "short_recovery_start" in rt.events and rt.short_recovery
+    assert rt.recovery_until == 180 + 0.6 * 1800
+    assert not d.want_on and d.status == AreaStatus.RECOVERY
+    # running circuits are not interrupted by a short recovery
+    d = step(_input(now=240, temp=20.0, switch_on=True), PARAMS, SETTINGS, LEARNED, rt)
+    assert d.want_on
+    d = step(_input(now=180 + 1081, temp=20.0), PARAMS, SETTINGS, LEARNED, rt)
+    assert d.want_on and d.status == AreaStatus.HEATING
+    assert "short_recovery_end" in rt.events and not rt.short_recovery
+
+
+def test_very_short_airing_is_ignored() -> None:
+    rt = AreaRuntime()
+    step(_input(now=0, temp=21.0, window_open=True), PARAMS, SETTINGS, LEARNED, rt)
+    d = step(_input(now=90, temp=20.0, window_open=False), PARAMS, SETTINGS, LEARNED, rt)
+    assert rt.recovery_until is None
+    assert d.want_on and d.status == AreaStatus.HEATING
+
+
+def test_frost_overrides_short_airing() -> None:
+    rt = AreaRuntime()
+    d = step(_input(now=0, temp=6.0, window_open=True), PARAMS, SETTINGS, LEARNED, rt)
+    assert d.want_on and d.status == AreaStatus.FROST_PROTECTION
+
+
 def test_recovery_times_out() -> None:
     rt = AreaRuntime()
     step(_input(now=0, temp=21.0, window_open=True), PARAMS, SETTINGS, LEARNED, rt)

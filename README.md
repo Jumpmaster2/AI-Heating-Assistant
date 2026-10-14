@@ -14,8 +14,10 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 * **Sollwert** über die normale Thermostatkarte. Er bleibt dauerhaft gespeichert, bis du ihn änderst. Keine Zeitpläne, keine Nachtabsenkung (bei Fußbodenheizung meist kontraproduktiv).
 * **Vorausschauend einschalten:** Der Kreis geht an, wenn die Temperatur nach der gelernten Totzeit (unter Berücksichtigung von Abkühlrate, Außentemperatur und Sonne) unter Sollwert minus Einschalthysterese fallen würde.
+* **Sonne vorausschauend:** Für die Abkühlung über die Vorlaufzeit zählt nicht nur die aktuelle PV-Leistung, sondern die in dieser Zeit erwartete. Ist absehbar, dass die Sonne den Raum ohnehin aufheizt, schaltet der Kreis morgens nicht erst ein; abends rechnet die Regelung nicht mehr mit Sonne, die gleich verschwindet. Quelle ist ein optionaler PV-Prognosesensor (z. B. Forecast.Solar) oder, ohne ihn, die stündliche Wettervorhersage (Bewölkung) zusammen mit dem Sonnenstand. Dafür lernt die Integration an fast wolkenlosen Tagen, wie viel PV-Leistung bei klarem Himmel zu erwarten ist. Die Prognose fließt nur zu 70 % ein, und 1 K unter Sollwert wird unabhängig von jeder Vorhersage geheizt. Ohne PV-Leistungssensor bleibt alles wie bisher.
 * **Vorausschauend abschalten:** Der Kreis geht aus, wenn die aktuelle Temperatur plus das erwartete Überschwingen den Sollwert plus Ausschalthysterese erreicht. Das Überschwingen der trägen Fußbodenheizung wird gelernt (abhängig von der Laufzeit).
 * **Fenster:** Ist ein Fenster länger als die Fensterverzögerung offen, pausiert die Heizanforderung. Nach dem Schließen wird die gelernte Erholungszeit abgewartet, weil Estrich und Wände den Raum oft selbst wieder aufheizen. Ist die Temperatur vor dem Lüften wieder erreicht, endet die Erholung sofort.
+* **Kurzlüften:** Solange ein Fenster offen ist, schaltet ein ausgeschalteter Kreis nicht ein, auch vor Ablauf der Fensterverzögerung. Ein laufender Kreis wird dabei nicht unterbrochen. War das Fenster mindestens 2 Minuten, aber kürzer als die Fensterverzögerung offen, folgt eine verkürzte Erholung: der Anteil der Fensterverzögerung, den das Fenster offen war, von der gelernten Erholungszeit (3 von 5 Minuten ergibt 60 %). Auch sie endet sofort, wenn die Temperatur vor dem Lüften wieder erreicht ist.
 * **Mindest-Ein- und -Ausschaltzeit** werden immer eingehalten.
 * **Frostschutz** gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.
 * **Heizperiode:** Außerhalb (z. B. 01.04. bis 30.09.) bleiben alle Kreise aus, es gibt keine KI-Abfragen.
@@ -68,8 +70,9 @@ Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von An
 |---|---|---|
 | Außentemperatursensor | | z. B. `sensor.outdoor_temperature` |
 | Außenfeuchtesensor | | optional, für die Lüftungsempfehlung |
-| Wetter-Entität | | optional, Vorhersage für den Nachtlauf |
+| Wetter-Entität | | optional, Vorhersage für den Nachtlauf und die Sonnenprognose |
 | PV-Leistungssensor | | optional, Sonnenindikator (W oder kW) |
+| PV-Prognosesensor | | optional, nur mit PV-Leistungssensor: Energie der nächsten Stunde (Wh oder kWh) oder Leistung in einer Stunde (W oder kW); ohne ihn wird die Wettervorhersage genutzt |
 | Heizperiode | 01.10. bis 31.03. | Format TT.MM. |
 | Frostschutz | 7 °C | gilt immer |
 | Urlaubs-Entitäten | | "an" = Urlaub |
@@ -118,7 +121,7 @@ Global (Gerät "AI Heating Assistant"):
 
 Je Heizbereich (eigenes Gerät):
 
-* **Thermostat** (climate)
+* **Thermostat** (climate), Attribute u. a. `predicted_temperature`, `expected_peak` und `expected_pv_kw` (über die Vorlaufzeit erwartete PV-Leistung)
 * Sensoren **Status**, **Aufheizrate**, **Abkühlrate**, **Überschwingen nach Abschalten**, **Totzeit**, **Erholungszeit nach Lüften**, **Einfluss Außentemperatur**, **Einfluss Sonne**, **Lernstand**
 * Sensor **Lüftungsempfehlung** und Binärsensor **Lüften empfohlen** (auch für Bereiche ohne Heizkreis)
 

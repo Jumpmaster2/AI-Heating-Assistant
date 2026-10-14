@@ -14,8 +14,10 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 * **Target temperature** via the normal thermostat card. It is stored permanently until you change it. No schedules, no night setback (usually counterproductive with underfloor heating).
 * **Predictive switch-on:** the circuit turns on when the temperature after the learned dead time (taking cooling rate, outdoor temperature and sun into account) would fall below target minus the switch-on hysteresis.
+* **Sun ahead:** the cooling over the lead time uses the PV power expected in that time, not only the current value. If the sun is going to heat the room anyway, the circuit does not switch on in the morning; in the evening the control no longer counts on sun that is about to disappear. The source is an optional PV forecast sensor (e.g. Forecast.Solar) or, without it, the hourly weather forecast (cloud coverage) together with the sun position. For the latter the integration learns on nearly cloudless days how much PV power to expect under a clear sky. Only 70 % of the forecast is used, and 1 K below target the area heats regardless of any forecast. Without a PV power sensor nothing changes.
 * **Predictive switch-off:** the circuit turns off when the current temperature plus the expected overshoot reaches target plus the switch-off hysteresis. The overshoot of the slow floor heating is learned (depending on the run time).
 * **Windows:** if a window is open longer than the window delay, the heating demand pauses. After closing, the learned recovery time is awaited, because screed and walls often reheat the room themselves. Recovery ends early once the temperature before airing is reached again.
+* **Short airing:** while a window is open, a circuit that is off does not switch on, even before the window delay is over. A running circuit is not interrupted. If the window was open for at least 2 minutes but shorter than the window delay, a shortened recovery follows: the share of the window delay the window was open, applied to the learned recovery time (3 of 5 minutes gives 60 %). It also ends early once the temperature before airing is reached again.
 * **Minimum on and off times** are always respected.
 * **Frost protection** always applies, also outside the heating period and with the thermostat switched off.
 * **Heating period:** outside (e.g. 01.04. to 30.09.) all circuits stay off and the AI is not called.
@@ -68,8 +70,9 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 |---|---|---|
 | Outdoor temperature sensor | | e.g. `sensor.outdoor_temperature` |
 | Outdoor humidity sensor | | optional, for the ventilation recommendation |
-| Weather entity | | optional, forecast for the nightly run |
+| Weather entity | | optional, forecast for the nightly run and the expected sun |
 | PV power sensor | | optional, sunshine indicator (W or kW) |
+| PV forecast sensor | | optional, only with the PV power sensor: energy of the next hour (Wh or kWh) or power in one hour (W or kW); without it the weather forecast is used |
 | Heating period | 01.10. to 31.03. | format DD.MM. |
 | Frost protection | 7 °C | always applies |
 | Vacation entities | | "on" = vacation |
@@ -118,7 +121,7 @@ Global (device "AI Heating Assistant"):
 
 Per heating area (own device):
 
-* **Thermostat** (climate)
+* **Thermostat** (climate), attributes include `predicted_temperature`, `expected_peak` and `expected_pv_kw` (PV power expected over the lead time)
 * Sensors **Status**, **Heat-up rate**, **Cooling rate**, **Overshoot after switch-off**, **Dead time**, **Recovery time after airing**, **Outdoor influence**, **Sun influence**, **Learning progress**
 * Sensor **Ventilation recommendation** and binary sensor **Ventilation recommended** (also for areas without heating circuit)
 

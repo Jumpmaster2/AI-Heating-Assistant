@@ -345,3 +345,22 @@ async def test_vacation_return_in_past_is_ignored_and_preheat_before_return(
     await _advance(hass, freezer, 1)
     assert hass.states.get("climate.living_room").attributes["effective_target"] == 21.0
     assert hass.states.get("sensor.living_room_status").state == "preheat"
+
+
+async def test_pv_forecast_sensor_sets_expected_sun(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.pv_power", "0", {"unit_of_measurement": "W"})
+    hass.states.async_set("sensor.pv_energy_next_hour", "3.0", {"unit_of_measurement": "kWh"})
+    await _setup(
+        hass, make_entry(pv_power="sensor.pv_power", pv_forecast="sensor.pv_energy_next_hour")
+    )
+    await _advance(hass, freezer, 1)
+    expected = hass.states.get("climate.living_room").attributes["expected_pv_kw"]
+    assert expected > 0
+
+    # forecast unavailable: only the current PV power counts
+    hass.states.async_set("sensor.pv_energy_next_hour", "unavailable")
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("climate.living_room").attributes["expected_pv_kw"] == 0

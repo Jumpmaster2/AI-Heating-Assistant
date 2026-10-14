@@ -103,6 +103,7 @@ class AreaClimate(AreaEntity, ClimateEntity):
             "heating_day": self.coordinator.heating_day,
             "predicted_temperature": decision.predicted_temp if decision else None,
             "expected_peak": decision.expected_peak if decision else None,
+            "expected_pv_kw": area.learned_values.pv_plan_kw if area.has_circuit else None,
         }
 
     async def async_set_temperature(self, **kwargs: Any) -> None:

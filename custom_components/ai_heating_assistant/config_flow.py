@@ -73,6 +73,7 @@ from .const import (
     CONF_PUFFER,
     CONF_PUFFER_DOWN,
     CONF_PUFFER_UP,
+    CONF_PV_FORECAST,
     CONF_PV_POWER,
     CONF_RECOVERY,
     CONF_REF_HUMIDITY,
@@ -155,6 +156,7 @@ def _general_schema(v: dict[str, Any]) -> vol.Schema:
             _opt_entity(CONF_OUTDOOR_HUMIDITY, v): _entity(["sensor"]),
             _opt_entity(CONF_WEATHER, v): _entity(["weather"]),
             _opt_entity(CONF_PV_POWER, v): _entity(["sensor"]),
+            _opt_entity(CONF_PV_FORECAST, v): _entity(["sensor"]),
             _req(CONF_SEASON_START, v): TextSelector(),
             _req(CONF_SEASON_END, v): TextSelector(),
             _req(CONF_FROST_TEMP, v): _number(0, 15, 0.5, "°C"),
@@ -481,7 +483,8 @@ class AiHeatingOptionsFlow(OptionsFlow):
             errors = _validate_general(user_input)
             if not errors:
                 return self._save(
-                    _clean(user_input), remove=(CONF_OUTDOOR_HUMIDITY, CONF_WEATHER, CONF_PV_POWER)
+                    _clean(user_input),
+                    remove=(CONF_OUTDOOR_HUMIDITY, CONF_WEATHER, CONF_PV_POWER, CONF_PV_FORECAST),
                 )
         return self.async_show_form(
             step_id="general",
