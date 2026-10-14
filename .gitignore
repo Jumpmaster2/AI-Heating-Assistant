@@ -1,0 +1,32 @@
+# Local analysis and private data (never commit)
+ANALYSE.md
+ANALYSE*.md
+*.private*
+private-patterns*.txt
+local/
+.env
+.env.*
+secrets.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+.venv-ha/
+*.egg-info/
+
+# Local test data
+tests/data/local/
+*.db
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
