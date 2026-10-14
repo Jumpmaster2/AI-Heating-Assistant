@@ -291,3 +291,25 @@ async def test_unload_and_storage(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.get("climate.living_room").attributes["temperature"] == 20.0
+
+
+async def test_entity_id_rename_keeps_entity(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """Renaming an entity id re-adds the entity from HA core (regression for via_device)."""
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    await _setup(hass, make_entry())
+    er.async_get(hass).async_update_entity(
+        "climate.living_room", new_entity_id="climate.living_room_heating"
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("climate.living_room_heating") is not None
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    devices = dr.async_get(hass)
+    area_id = next(iter(entry.subentries))
+    area_device = devices.async_get_device_by_identifier((DOMAIN, area_id), entry.entry_id)
+    main_device = devices.async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
+    assert area_device is not None and main_device is not None
+    assert area_device.via_device_id == main_device.id

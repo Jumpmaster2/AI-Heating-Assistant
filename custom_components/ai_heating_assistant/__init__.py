@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .const import DOMAIN, PLATFORMS, STORAGE_VERSION
 from .coordinator import AiHeatingConfigEntry, HeatingCoordinator
+from .entity import global_device_info
 from .services import async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -23,6 +25,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> bool:
     """Set up the integration from a config entry."""
     coordinator = HeatingCoordinator(hass, entry)
+    # Create the main device first so area devices can point to it by id.
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, **global_device_info(entry.entry_id)
+    )
+    coordinator.global_device_id = device.id
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

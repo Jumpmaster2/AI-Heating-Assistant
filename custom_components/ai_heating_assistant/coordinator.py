@@ -229,6 +229,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.ai_state: dict[str, Any] = {}
         self.budget = Budget()
         self.client: ClaudeClient | None = None
+        self.global_device_id: str | None = None
         self.outdoor_temp: float | None = None
         self.pv_kw: float = 0.0
         self.season_active = False
