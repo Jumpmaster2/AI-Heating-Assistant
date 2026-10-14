@@ -154,7 +154,8 @@ class DayAreaStats:
     @property
     def observed(self) -> bool:
         """Did the area deliver any evidence today?"""
-        return self.observed_min > 0 or self.relay_min > 0 or self.emergency or self.manual_heat
+        # The relay alone is no evidence: with the thermostat off nothing counts as cold.
+        return self.observed_min > 0 or self.too_cold_min > 0 or self.emergency or self.manual_heat
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -194,6 +195,7 @@ class DayRecord:
     phase: str = Phase.AI_LEADS
     learned: bool = False
     manual: bool = False  # the day ran under a manual override
+    vacation: bool = False  # the day ran with the vacation target
     extra: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -322,7 +324,7 @@ def track_virtual(
     virtual = stats.virtual_temp - cool_rate_kph(stats.virtual_temp) * minutes / 60
     if not airing:
         virtual = min(temp, virtual)
-    stats.virtual_temp = round(virtual, 3)
+    stats.virtual_temp = virtual  # not rounded: ticks can be seconds apart
     if counting and virtual < target - margin:
         stats.virtual_cold_min += minutes
 
@@ -388,8 +390,8 @@ def agreement(history: list[DayRecord], days: int) -> float | None:
 
 
 def rule_errors(history: list[DayRecord], days: int) -> int:
-    """Number of rule errors within the last days (days under a manual override do not count)."""
-    return sum(1 for r in _window(history, days) if r.err_rule and not r.manual)
+    """Number of rule errors within the last days (manual override and vacation days do not count)."""
+    return sum(1 for r in _window(history, days) if r.err_rule and not r.manual and not r.vacation)
 
 
 def next_phase(

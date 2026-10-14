@@ -208,14 +208,14 @@ def test_track_virtual_cools_with_the_model_and_counts_cold_minutes() -> None:
     for _ in range(50):
         track_virtual(s, 21.0, 1.0, lambda t: 0.6, **kw)  # 0.01 K per minute
     assert s.virtual_temp == pytest.approx(20.5)
-    assert s.virtual_cold_min == 0
+    assert s.virtual_cold_min <= 1  # float rounding at the 20.5 boundary
     for _ in range(30):
         track_virtual(s, 21.0, 1.0, lambda t: 0.6, **kw)
     assert s.virtual_temp == pytest.approx(20.2)
-    assert s.virtual_cold_min == 30
+    assert 30 <= s.virtual_cold_min <= 31  # float rounding at the 20.5 boundary
     assert s.cold_min == 0  # nothing heated: the real room counts
     s.relay_min = 10
-    assert s.cold_min == 30
+    assert s.cold_min == s.virtual_cold_min  # heating ran: the virtual room counts
 
 
 def test_track_virtual_follows_the_real_room_down_except_while_airing() -> None:
@@ -232,3 +232,27 @@ def test_track_virtual_stays_unknown_once_heating_ran() -> None:
     kw = {"target": 21.0, "margin": 0.5, "ready": True, "counting": True, "airing": False}
     track_virtual(s, 21.0, 1.0, lambda t: 0.5, **kw)
     assert s.virtual_temp is None and s.cold_min is None
+
+
+def test_track_virtual_with_ticks_shorter_than_a_minute() -> None:
+    s = DayAreaStats()
+    kw = {"target": 21.0, "margin": 0.5, "ready": True, "counting": True, "airing": False}
+    for _ in range(600):
+        track_virtual(s, 21.0, 0.1, lambda t: 0.6, **kw)  # 6 s ticks for an hour
+    assert s.virtual_temp == pytest.approx(20.4)
+    assert s.virtual_cold_min == pytest.approx(10.0, abs=0.2)
+
+
+def test_relay_alone_is_no_observation() -> None:
+    # frost protection or external switching with the thermostat off: nothing is known
+    assert evaluate_need({"a": DayAreaStats(relay_min=30)}, EVAL) == Need.UNCLEAR
+    assert evaluate_need({"a": DayAreaStats(too_cold_min=20)}, EVAL) == Need.YES
+
+
+def test_vacation_days_do_not_count_as_rule_errors() -> None:
+    history = _history(20) + _history(2, rule_err="B")
+    for record in history[-2:]:
+        record.vacation = True
+    assert rule_errors(history, 7) == 0
+    record = DayRecord("2026-10-14", True, "ai", False, True, vacation=True)
+    assert DayRecord.from_dict(record.as_dict()) == record

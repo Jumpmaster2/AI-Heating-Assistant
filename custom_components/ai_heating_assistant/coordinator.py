@@ -145,6 +145,7 @@ from .logic.sun import (
     clear_sky_index,
     cloud_factor,
     cloud_pct,
+    expected_now,
     planning_pv,
     sensor_point,
     solar_elevation,
@@ -162,6 +163,7 @@ WEATHER_PV_REFRESH_S = 1800  # s between hourly forecast requests for the expect
 VIRTUAL_MIN_COOL_UPDATES = 24  # model updates without heating before the virtual room is trusted
 TWILIGHT_INDEX = 0.05  # clear sky index (about 5 degrees elevation) below which PV counts as 0
 PV_NEGLIGIBLE_KW = 0.05  # expected PV power below which a missing PV value counts as 0
+PV_MISSING_WARN_MIN = 60.0  # daytime minutes without a PV value before a warning
 INACTIVE_STATES = {"off", "idle", STATE_UNAVAILABLE, STATE_UNKNOWN, "none", ""}
 
 
@@ -251,6 +253,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.pv_kw: float | None = 0.0  # None: sensor configured but without a value by day
         self.pv_assumed: float = 0.0  # pv_kw, or the expected power while it is unknown
         self._pv_measured = False  # pv_kw comes from the sensor (calibration allowed)
+        self._pv_missing_min = 0.0  # daytime minutes the PV sensor had no value
         self._pv_warned = False
         self.sun_scale = SunScale()
         self._pv_points: list[Point] = []
@@ -549,9 +552,6 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if not entity_id:
             return 0.0
         state = self._state(entity_id)
-        if state is None and not self._pv_warned:
-            self._pv_warned = True
-            LOGGER.warning("PV power sensor %s does not exist: sun is not learned", entity_id)
         value = self._float(entity_id)
         if value is None:
             return None
@@ -635,10 +635,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.outdoor_temp = self._float(self.opt(CONF_OUTDOOR_TEMP))
         self.pv_kw = self._pv_kw()
         self._pv_measured = self.pv_kw is not None
-        if self.pv_kw is None and self._pv_negligible(ts):
-            self.pv_kw = 0.0  # inverter asleep: no sun worth mentioning, no power
-        self.pv_assumed = self.pv_kw if self.pv_kw is not None else self._pv_estimate(ts)
         await self._update_pv_forecast(ts)
+        if self.pv_kw is None:
+            self._pv_missing(minutes, ts)
+            if self._pv_negligible(ts):
+                self.pv_kw = 0.0  # inverter asleep: no sun worth mentioning, no power
+        else:
+            self._pv_missing_min, self._pv_warned = 0.0, False
+        self.pv_assumed = self.pv_kw if self.pv_kw is not None else (self._pv_estimate(ts) or 0.0)
         self.season_active = self._season()
         self.vacation = any(self._is_on(e) for e in self.opt(CONF_VACATION_ENTITIES) or [])
         return_ts = self._return_ts() if self.vacation else None
@@ -702,11 +706,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return None
         return cloud_pct({"condition": weather.state, **weather.attributes})
 
-    def _pv_estimate(self, ts: float) -> float:
-        """PV power expected now from sun position, clouds and the learned scale (0 if unknown)."""
+    def _pv_estimate(self, ts: float) -> float | None:
+        """PV power expected now: from the forecast points, else from sun position, clouds
+        and the learned clear sky scale; None without any basis."""
+        if (expected := expected_now(self._pv_points, ts)) is not None:
+            return expected
         scale = self.sun_scale.value
         index = self._sun_index(ts)
-        if scale is None or index <= 0:
+        if scale is None:
+            return None
+        if index <= 0:
             return 0.0
         cloud = self._cloud_now()
         return scale * index * cloud_factor(100.0 if cloud is None else cloud) * FORECAST_TRUST
@@ -715,7 +724,22 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         """A missing PV value may be read as zero: the sun is low or little is expected."""
         if self._sun_index(ts) < TWILIGHT_INDEX:
             return True
-        return self.sun_scale.value is not None and self._pv_estimate(ts) < PV_NEGLIGIBLE_KW
+        expected = self._pv_estimate(ts)
+        return expected is not None and expected < PV_NEGLIGIBLE_KW
+
+    def _pv_missing(self, minutes: float, ts: float) -> None:
+        """Warn once when the PV sensor has had no value for a while by day."""
+        if self._sun_index(ts) < TWILIGHT_INDEX:
+            return
+        self._pv_missing_min += minutes
+        if self._pv_missing_min >= PV_MISSING_WARN_MIN and not self._pv_warned:
+            self._pv_warned = True
+            LOGGER.warning(
+                "PV power sensor %s has had no value for %.0f minutes by day: sun and model "
+                "are not learned until it delivers again",
+                self.opt(CONF_PV_POWER),
+                self._pv_missing_min,
+            )
 
     def _learned_values(self, area: Area, run_hours: float, ts: float) -> LearnedValues:
         learner = area.learner
@@ -835,8 +859,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 pv_unknown=self.pv_kw is None,
             )
         )
-        self._count(area, minutes, target)
+        # The virtual room first: on the first tick of a day it starts at the real
+        # temperature even if the circuit is running at that moment.
         self._track_virtual(area, minutes, target)
+        self._count(area, minutes, target)
 
     def _handle_events(
         self, area: Area, ts: float, open_since: float | None, temp_before: float | None
@@ -907,7 +933,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         kept warm by the decision itself. The virtual room cools with the learned model
         and is never warmer than the real one.
         """
-        if not self.season_active or area.temp is None or area.learner is None:
+        if area.temp is None or area.learner is None:
             return
         model = area.learner.model
         outdoor, pv, sun = self.outdoor_temp, self.pv_assumed, area.params.sun_factor
@@ -996,7 +1022,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.day_state["override"] = override
         self.day_state["override_date"] = today
         if override != hd.Override.AUTO:
-            self.day_state["manual_day"] = today
+            # Marks the day being decided and, before the nightly run, also the day
+            # still running: both ran partly under the override.
+            days = {today, str((self.current_day or {}).get("date") or today)}
+            manual = [d for d in self.day_state.get("manual_days", []) if d not in days]
+            self.day_state["manual_days"] = (manual + sorted(days))[-5:]
         self._config_changed()  # heating day may have changed: plan a check again (and save)
         self.async_update_listeners()
         await self.async_request_refresh()
@@ -1067,9 +1097,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         local_today = dt_util.now().date().isoformat()
         self.season_active = self._season()
         current = self.current_day
-        new_day = (
-            current is None or current.get("date") != local_today or self._decision_expired(now)
-        )
+        # An expired decision of the same date (made between midnight and the nightly
+        # time) is decided again, not evaluated as a day of its own.
+        new_day = current is None or current.get("date") != local_today
 
         if new_day and current is not None and not current.get("evaluated"):
             self._evaluate(current)
@@ -1159,7 +1189,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             phase=phase,
             reason=reason,
         )
-        if heat and self.ai_enabled:
+        if self.heating_day and self.ai_enabled:  # honours a manual override
             # A check already planned keeps its date: the interval grows while nothing
             # changes, and a daily reset would undo that. A room that was too cold since
             # the last check does not wait for it, though.
@@ -1199,7 +1229,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         date = str(current.get("date"))
         override = self.day_state.get("override", hd.Override.AUTO)
         active = override != hd.Override.AUTO and self.day_state.get("override_date", date) == date
-        manual = active or self.day_state.get("manual_day") == date
+        manual = active or date in self.day_state.get("manual_days", [])
         record = hd.DayRecord(
             date=date,
             final=override == hd.Override.HEAT if active else bool(current.get("heat")),
@@ -1209,6 +1239,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             need=need,
             phase=str(current.get("phase", self.phase)),
             manual=manual,
+            vacation=bool(current.get("vacation")),
         )
         record.err_final = hd.error_of(record.final, need)
         record.err_rule = hd.error_of(record.rule, need)
@@ -1381,7 +1412,6 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     @callback
     def _check_due(self, now: datetime) -> None:
         self._unsub_check = None
-        self.ai_state["next_check"] = None  # the check plans the next one; none if it fails
         self.config_entry.async_create_background_task(
             self.hass, self.async_run_ai_check("scheduled"), f"{DOMAIN} ai check"
         )

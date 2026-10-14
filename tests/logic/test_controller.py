@@ -296,6 +296,8 @@ def test_carry_does_not_block_force_on_and_is_not_restored_from_a_stale_peak() -
     restored = AreaRuntime.from_dict(rt.as_dict())
     assert restored.carry_peak == 21.0 and restored.last_peak is None and not restored.was_on
     assert AreaRuntime.from_dict({"window_paused": False}).carry_peak is None
+    old = AreaRuntime.from_dict({"was_on": True, "last_peak": 21.6})  # store of an older version
+    assert not old.was_on and old.last_peak is None
 
 
 def test_window_reopened_during_recovery_keeps_the_first_reference() -> None:
