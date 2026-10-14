@@ -139,3 +139,31 @@ def test_cooling_margin_is_configurable_and_ignored_outside_season() -> None:
 def test_drying_not_affected_by_cooling_margin() -> None:
     result = recommend(_data(humidity=70.0, season_active=True, target=23.0), SETTINGS)
     assert result.state == VentilationState.VENTILATE_NOW
+
+
+def test_cooling_min_temp_applies_all_year() -> None:
+    settings = VentilationSettings(cooling_min_temp=23.5)
+    # 22 °C room: below the minimum -> no cooling advice, in and outside the heating period
+    for season in (True, False):
+        result = recommend(_data(humidity=45.0, season_active=season, target=18.0), settings)
+        assert result.state == VentilationState.OPTIMAL
+        assert not result.cooling_useful
+    warm = recommend(_data(temp=24.0, humidity=45.0, season_active=True, target=18.0), settings)
+    assert warm.state == VentilationState.VENTILATION_USEFUL
+
+
+def test_no_cooling_if_outside_air_makes_room_too_humid() -> None:
+    # 14.5 °C / 99 % outside is about 12.3 g/m³, at 22 °C that is about 63 % > 60 %
+    result = recommend(
+        _data(humidity=60.0, ref_temp=14.5, ref_humidity=99.0, season_active=True, target=18.0),
+        SETTINGS,
+    )
+    assert not result.cooling_useful
+    assert result.rh_after_exchange is not None and result.rh_after_exchange > 60
+    assert result.state == VentilationState.DO_NOT_VENTILATE
+    # same air with a higher humidity threshold of the area is fine
+    relaxed = recommend(
+        _data(humidity=55.0, ref_temp=14.5, ref_humidity=99.0, season_active=True, target=18.0),
+        VentilationSettings(rh_threshold=70.0),
+    )
+    assert relaxed.cooling_useful

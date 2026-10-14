@@ -6,7 +6,7 @@ Custom Integration für Home Assistant, die eine Fußbodenheizung mit einem Scha
 
 Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), Better Thermostat, Automationen für Sollwert, Wetter, Kälte und Urlaub sowie eine Lüftungsempfehlung auf Basis der Luftfeuchte.
 
-> Status: Version 0.1.0, erste veröffentlichte Version. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.4.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -51,7 +51,7 @@ Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionale
 ### Lüftungsempfehlung
 
 Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder eines Referenzraums):
-*Jetzt lüften* (Feuchte über Schwelle und Außenluft trockener), *Lüften sinnvoll* (kühlt, wenn nicht geheizt wird; in der Heizperiode nur, wenn der Raum deutlich über dem Sollwert liegt), *Nicht lüften*, *Fenster schließen* (offen, bringt aber nichts), *Lüften blockiert* (Sperr-Entität aktiv, z. B. Klimaanlage) und *Alles optimal*.
+*Jetzt lüften* (Feuchte über Schwelle und Außenluft trockener), *Lüften sinnvoll* (kühlt, wenn nicht geheizt wird; in der Heizperiode nur, wenn der Raum deutlich über dem Sollwert liegt; nie unter der optionalen Mindesttemperatur und nie, wenn die Außenluft die relative Feuchte des Raums über seine Feuchte-Schwelle bringen würde), *Nicht lüften*, *Fenster schließen* (offen, bringt aber nichts), *Lüften blockiert* (Sperr-Entität aktiv, z. B. Klimaanlage) und *Alles optimal*.
 
 ## Installation über HACS
 
@@ -87,7 +87,7 @@ Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von An
 
 * **Allgemein, Urlaub:** wie oben.
 * **Notfallregel:** an, 1 K unter Sollwert, 45 min, Fenster 30 min unverändert.
-* **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, Nacht 20 bis 8 Uhr.
+* **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20 bis 8 Uhr.
 * **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in €/Million Tokens (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
 * **KI-Grenzen:** Minimum, Maximum, größte Änderung je Prüfung für jeden Parameter.
 * **Heiztag-Entscheidung:** Startwert `theta` (16 °C), Bewertungsschwellen, Lernschritte, Bedingungen der Phasenwechsel.

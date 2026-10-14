@@ -154,6 +154,7 @@
           "ventilation_max_reference_excess": "Außen höchstens wärmer um",
           "ventilation_min_cooling_advantage": "Mindest-Kühlvorteil",
           "ventilation_cooling_margin": "Mindestabstand über Sollwert für Kühlen",
+          "ventilation_cooling_min_temp": "Kühlen erst ab Raumtemperatur",
           "night_start_hour": "Nacht beginnt um",
           "night_end_hour": "Nacht endet um"
         },
@@ -162,6 +163,7 @@
           "ventilation_max_reference_excess": "Trocknen wird nicht empfohlen, wenn es außen um mehr als diesen Wert wärmer ist als innen.",
           "ventilation_min_cooling_advantage": "'Lüften sinnvoll', wenn es innen mindestens so viel wärmer ist als außen (nicht während Heizbetrieb).",
           "ventilation_cooling_margin": "In der Heizperiode wird 'Lüften sinnvoll' (Kühlen) nur empfohlen, wenn der Raum mindestens so viel wärmer ist als sein Sollwert. Außerhalb der Heizperiode gilt das nicht. Bereiche ohne Heizkreis nutzen ihren Start-Sollwert.",
+          "ventilation_cooling_min_temp": "'Lüften sinnvoll' (Kühlen) erst ab dieser Raumtemperatur, ganzjährig. 0 = aus. Zusätzlich wird Kühlen nie empfohlen, wenn die Außenluft die relative Feuchte des Raums über seine Feuchte-Schwelle bringen würde.",
           "night_start_hour": "Bei einem anderen Raum als Referenz zählt der Kühlvorteil nur nachts.",
           "night_end_hour": "Ende der Nacht (Stunde)."
         }

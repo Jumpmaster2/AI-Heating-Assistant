@@ -90,6 +90,7 @@ from .const import (
     CONF_VACATION_TEMP,
     CONF_VENT_BLOCK,
     CONF_VENT_COOL_MARGIN,
+    CONF_VENT_COOL_MIN_TEMP,
     CONF_VENT_MAX_EXCESS,
     CONF_VENT_MIN_AH,
     CONF_VENT_MIN_COOLING,
@@ -889,6 +890,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 max_reference_excess=float(self.opt(CONF_VENT_MAX_EXCESS)),
                 min_cooling_advantage=float(self.opt(CONF_VENT_MIN_COOLING)),
                 cooling_margin=float(self.opt(CONF_VENT_COOL_MARGIN)),
+                cooling_min_temp=float(self.opt(CONF_VENT_COOL_MIN_TEMP)),
             ),
         )
 

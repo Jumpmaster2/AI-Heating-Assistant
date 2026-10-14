@@ -154,6 +154,7 @@
           "ventilation_max_reference_excess": "Maximum outside warmer by",
           "ventilation_min_cooling_advantage": "Minimum cooling advantage",
           "ventilation_cooling_margin": "Minimum distance above target for cooling",
+          "ventilation_cooling_min_temp": "Cool only from room temperature",
           "night_start_hour": "Night starts at",
           "night_end_hour": "Night ends at"
         },
@@ -162,6 +163,7 @@
           "ventilation_max_reference_excess": "Drying is not recommended if outside is warmer than inside by more than this.",
           "ventilation_min_cooling_advantage": "'Ventilation useful' if inside is warmer than outside by at least this (not while heating).",
           "ventilation_cooling_margin": "Within the heating period 'ventilation useful' (cooling) is only recommended if the room is at least this much warmer than its target. Not used outside the heating period. Areas without a heating circuit use their initial target.",
+          "ventilation_cooling_min_temp": "'Ventilation useful' (cooling) only from this room temperature on, all year. 0 = off. In addition cooling is never recommended if the outside air would raise the relative humidity of the room above its humidity threshold.",
           "night_start_hour": "Used when the reference is another room: cooling advantage only counts at night.",
           "night_end_hour": "End of the night (hour)."
         }

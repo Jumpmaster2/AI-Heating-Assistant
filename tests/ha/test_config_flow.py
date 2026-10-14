@@ -211,6 +211,7 @@ async def test_options_ventilation_cooling_margin(hass: HomeAssistant, base_stat
         "ventilation_max_reference_excess": 4.0,
         "ventilation_min_cooling_advantage": 1.0,
         "ventilation_cooling_margin": 1.5,
+        "ventilation_cooling_min_temp": 23.5,
         "night_start_hour": 20,
         "night_end_hour": 8,
     }
@@ -218,6 +219,7 @@ async def test_options_ventilation_cooling_margin(hass: HomeAssistant, base_stat
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["ventilation_cooling_margin"] == 1.5
+    assert entry.options["ventilation_cooling_min_temp"] == 23.5
 
 
 async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, base_states) -> None:

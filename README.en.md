@@ -6,7 +6,7 @@ Custom integration for Home Assistant that controls underfloor heating with one 
 
 It typically replaces: thermostat helpers (Generic Thermostat), Better Thermostat, automations for setpoint, weather, cold and vacation handling, and a humidity based ventilation recommendation.
 
-> Status: version 0.1.0, first public release. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.4.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -51,7 +51,7 @@ On a no-heating day all circuits stay off except frost protection and the option
 ### Ventilation recommendation
 
 Per area (also without heating circuit) from the absolute humidity inside and outside (or of a reference room):
-*Ventilate now* (humidity above threshold and outside air drier), *Ventilation useful* (cools while not heating; within the heating period only if the room is clearly above its target), *Do not ventilate*, *Close window* (open but useless), *Ventilation blocked* (block entity active, e.g. air conditioner) and *All fine*.
+*Ventilate now* (humidity above threshold and outside air drier), *Ventilation useful* (cools while not heating; within the heating period only if the room is clearly above its target; never below the optional minimum temperature and never if the outside air would raise the relative humidity of the room above its threshold), *Do not ventilate*, *Close window* (open but useless), *Ventilation blocked* (block entity active, e.g. air conditioner) and *All fine*.
 
 ## Installation via HACS
 
@@ -87,7 +87,7 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 
 * **General, Vacation:** as above.
 * **Emergency rule:** on, 1 K below target, 45 min, windows unchanged for 30 min.
-* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, night 20 to 8 h.
+* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
 * **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in €/million tokens (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
 * **Heating day decision:** start value `theta` (16 °C), evaluation thresholds, learning steps, conditions for phase changes.

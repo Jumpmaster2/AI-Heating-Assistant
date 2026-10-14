@@ -5,7 +5,9 @@ The decision order follows a proven template based solution:
 2. window open although ventilating brings nothing -> close window
 3. relative humidity high and outside air is drier -> ventilate now
 4. room is warmer than the reference and nobody heats -> ventilating is useful
-   (within the heating period only if the room is clearly above its target)
+   (within the heating period only if the room is clearly above its target, never
+   below the optional minimum room temperature and never if the outside air would
+   push the relative humidity of the room above its threshold)
 5. humidity high but outside air not drier -> do not ventilate
 6. otherwise everything is fine
 """
@@ -42,6 +44,7 @@ class VentilationSettings:
     max_reference_excess: float = 4.0
     min_cooling_advantage: float = 1.0
     cooling_margin: float = 1.0  # heating period: cool only this far above target
+    cooling_min_temp: float = 0.0  # cool only from this room temperature on (0 = off)
 
 
 @dataclass(slots=True)
@@ -74,6 +77,7 @@ class VentilationResult:
     rh_high: bool = False
     drying_useful: bool = False
     cooling_useful: bool = False
+    rh_after_exchange: float | None = None
 
     @property
     def recommended(self) -> bool:
@@ -95,6 +99,9 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
     reference_excess = data.ref_temp - data.temp
 
     rh_high = data.humidity >= settings.rh_threshold
+    # Relative humidity of the room if its air were replaced by reference air
+    # (walls and floor keep the room temperature).
+    rh_after = 100.0 * ah_ref / absolute_humidity(data.temp, 100.0)
     drying_useful = (
         delta_ah >= settings.min_ah_advantage and reference_excess <= settings.max_reference_excess
     )
@@ -107,6 +114,8 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
             or data.target is None
             or data.temp >= data.target + settings.cooling_margin
         )
+        and (settings.cooling_min_temp <= 0 or data.temp >= settings.cooling_min_temp)
+        and rh_after <= settings.rh_threshold
     )
     benefit = drying_useful or cooling_useful
 
@@ -137,4 +146,5 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
         rh_high=rh_high,
         drying_useful=drying_useful,
         cooling_useful=cooling_useful,
+        rh_after_exchange=round(rh_after, 1),
     )

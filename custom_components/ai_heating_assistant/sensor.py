@@ -136,6 +136,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
                 "humidity_high": a.ventilation.rh_high,
                 "drying_useful": a.ventilation.drying_useful,
                 "cooling_useful": a.ventilation.cooling_useful,
+                "humidity_after_exchange": a.ventilation.rh_after_exchange,
             }
             if a.ventilation
             else {}
