@@ -66,8 +66,8 @@ def apply_start_values(
             if first and ewma.count > 0:
                 continue
             value = clamp(new, *LEARNED_BOUNDS[name])
-            if ewma.count == 0 and _same(ewma.value, value):
-                continue
+            if _same(ewma.value, value):
+                continue  # already in effect: keep the samples, nothing to log
             setattr(learner, name, Ewma(value))
             applied.append((name, ewma.value, value))
         else:

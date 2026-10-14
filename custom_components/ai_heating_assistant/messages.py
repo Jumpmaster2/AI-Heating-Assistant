@@ -33,8 +33,8 @@ _TEXTS: dict[str, dict[str, str]] = {
     },
     "recovery_end": {"de": "Erholung beendet.", "en": "Recovery finished."},
     "emergency": {
-        "de": "Notfallregel: {temp} °C, voraussichtlich {predicted} °C nach der Totzeit, seit langem unter Sollwert; heizt trotz Nicht-Heiztag.",
-        "en": "Emergency rule: {temp} °C, expected {predicted} °C after the dead time, long below target; heating despite no heating day.",
+        "de": "Notfallregel: {temp} °C, voraussichtlich {predicted} °C nach der Vorlaufzeit (Grenze {limit} °C), seit langem darunter; heizt trotz Nicht-Heiztag.",
+        "en": "Emergency rule: {temp} °C, expected {predicted} °C after the lead time (limit {limit} °C), long below it; heating despite no heating day.",
     },
     "frost_start": {
         "de": "Frostschutz aktiv ({temp} °C).",
@@ -73,7 +73,7 @@ _TEXTS: dict[str, dict[str, str]] = {
     "dead_time": {"de": "Totzeit", "en": "dead time"},
     "recovery": {"de": "Erholungszeit", "en": "recovery time"},
     "window_delay_min": {"de": "Fensterverzögerung", "en": "window delay"},
-    "puffer": {"de": "puffer", "en": "puffer"},
+    "puffer": {"de": "Puffer", "en": "puffer"},
 }
 
 

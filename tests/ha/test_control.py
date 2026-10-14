@@ -367,7 +367,7 @@ async def test_pv_forecast_sensor_sets_expected_sun(
 
 
 async def test_old_store_applies_unlearned_start_values(
-    hass: HomeAssistant, base_states, hass_storage: dict
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory, hass_storage: dict
 ) -> None:
     """A store of an older version has no record: the configuration wins where nothing was learned."""
     entry = make_entry()
@@ -402,3 +402,11 @@ async def test_old_store_applies_unlearned_start_values(
         "puffer": 0.7,
     }
     assert any("dead time" in e.data["message"] for e in events)
+    # the record reaches the store with the delayed save
+    freezer.tick(timedelta(seconds=31))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    stored = hass_storage[key]["data"]["areas"][sub.subentry_id]
+    assert (
+        stored["start"]["dead_time"] == 1800.0 and stored["learner"]["dead_time"]["value"] == 1800
+    )

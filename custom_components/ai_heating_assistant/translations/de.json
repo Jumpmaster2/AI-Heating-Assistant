@@ -140,9 +140,9 @@
           "emergency_window_quiet": "Notfall: keine Fensteränderung seit"
         },
         "data_description": {
-          "emergency_enabled": "An Tagen ohne Heizbetrieb darf ein Bereich trotzdem heizen, wenn die nach der Totzeit erwartete Temperatur lange und deutlich unter dem Sollwert liegt, ohne dass gelüftet wurde.",
-          "emergency_delta": "Wie weit die nach der Totzeit erwartete Temperatur unter dem Sollwert liegen muss.",
-          "emergency_duration": "Wie lange der Bereich so kalt sein muss.",
+          "emergency_enabled": "An Tagen ohne Heizbetrieb darf ein Bereich trotzdem heizen, wenn die nach der Vorlaufzeit erwartete Temperatur lange und deutlich unter dem Sollwert liegt, ohne dass gelüftet wurde.",
+          "emergency_delta": "Wie weit die nach der Vorlaufzeit erwartete Temperatur unter dem Sollwert liegen muss (mindestens die Einschalthysterese).",
+          "emergency_duration": "Wie lange die erwartete Temperatur so tief bleiben muss.",
           "emergency_window_quiet": "Lüften zählt nicht: die Fenster dürfen sich so lange nicht verändert haben."
         }
       },
