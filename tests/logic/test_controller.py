@@ -62,6 +62,41 @@ def test_predictive_switch_off_uses_overshoot() -> None:
     assert want
 
 
+def test_overshoot_carried_after_switch_off() -> None:
+    """After an overshoot based switch-off the circuit must not come back at once."""
+    rt = AreaRuntime()
+    on = LearnedValues(cool_rate_kph=0.1, dead_time_s=1800, overshoot_k=0.6)
+    # on: 20.4 + 0.6 reaches the target -> off
+    d = step(_input(temp=20.4, switch_on=True, last_switch_change=0.0), PARAMS, SETTINGS, on, rt)
+    assert not d.want_on
+    # off, minimum off time over: 20.4 - 0.05 < 20.8 would switch on again without the carry
+    off = LearnedValues(cool_rate_kph=0.1, dead_time_s=1800, overshoot_k=0.0)
+    later = {"switch_on": False, "last_switch_change": 100_000.0}
+    d = step(_input(now=100_601.0, temp=20.4, **later), PARAMS, SETTINGS, off, rt)
+    assert rt.carry_peak == 21.0
+    assert not d.want_on and d.predicted_temp == 20.95
+    # the room rises and falls again: the overshoot has arrived, normal logic resumes
+    step(_input(now=101_800.0, temp=20.9, **later), PARAMS, SETTINGS, off, rt)
+    assert rt.carry_peak == 21.0
+    d = step(_input(now=103_600.0, temp=20.7, **later), PARAMS, SETTINGS, off, rt)
+    assert rt.carry_peak is None and d.want_on
+
+
+def test_carried_overshoot_expires() -> None:
+    rt = AreaRuntime()
+    on = LearnedValues(cool_rate_kph=0.1, dead_time_s=1800, overshoot_k=0.6)
+    step(_input(temp=20.4, switch_on=True, last_switch_change=0.0), PARAMS, SETTINGS, on, rt)
+    off = LearnedValues(cool_rate_kph=0.1, dead_time_s=1800, overshoot_k=0.0)
+    later = {"switch_on": False, "last_switch_change": 100_000.0}
+    d = step(_input(now=100_601.0, temp=20.4, **later), PARAMS, SETTINGS, off, rt)
+    assert not d.want_on
+    d = step(_input(now=100_601.0 + 4 * 3600, temp=20.4, **later), PARAMS, SETTINGS, off, rt)
+    assert rt.carry_peak is None and d.want_on
+    # switched on again: nothing is carried any more
+    step(_input(now=100_601.0 + 4 * 3600 + 60, temp=20.4, switch_on=True), PARAMS, SETTINGS, on, rt)
+    assert rt.was_on and rt.carry_peak is None
+
+
 def test_far_below_target_always_on() -> None:
     want, _, _ = thermostat(
         _input(temp=19.5, switch_on=True), PARAMS, LearnedValues(overshoot_k=3.0)
