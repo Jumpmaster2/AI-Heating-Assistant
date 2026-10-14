@@ -68,8 +68,6 @@ CONF_LIMITS = "limits"
 CONF_THETA_START = "theta_start"
 CONF_TOO_COLD_MARGIN = "too_cold_margin"
 CONF_TOO_COLD_MINUTES = "too_cold_minutes"
-CONF_RELAY_NEED = "relay_need_minutes"
-CONF_RELAY_NO_NEED = "relay_no_need_minutes"
 CONF_THETA_UP = "theta_step_up"
 CONF_THETA_DOWN = "theta_step_down"
 CONF_PUFFER_UP = "puffer_step_up"
@@ -154,12 +152,10 @@ DEFAULTS: Final[dict[str, object]] = {
     CONF_THETA_START: 16.0,
     CONF_TOO_COLD_MARGIN: 0.5,
     CONF_TOO_COLD_MINUTES: 15,
-    CONF_RELAY_NEED: 30,
-    CONF_RELAY_NO_NEED: 10,
     CONF_THETA_UP: 1.0,
-    CONF_THETA_DOWN: 0.5,
+    CONF_THETA_DOWN: 1.0,
     CONF_PUFFER_UP: 0.2,
-    CONF_PUFFER_DOWN: 0.1,
+    CONF_PUFFER_DOWN: 0.2,
     CONF_SHARED_DAYS: 14,
     CONF_SHARED_AGREEMENT: 80,
     CONF_RULE_DAYS: 21,

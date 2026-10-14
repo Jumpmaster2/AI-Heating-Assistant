@@ -53,12 +53,10 @@ class EvalSettings:
     """Thresholds of the daily evaluation and learning steps."""
 
     too_cold_minutes: float = 15.0
-    relay_need_minutes: float = 30.0
-    relay_no_need_minutes: float = 10.0
     theta_up: float = 1.0
-    theta_down: float = 0.5
+    theta_down: float = 1.0
     puffer_up: float = 0.2
-    puffer_down: float = 0.1
+    puffer_down: float = 0.2
     theta_min: float = 10.0
     theta_max: float = 20.0
     puffer_min: float = 0.0
@@ -126,6 +124,24 @@ class DayAreaStats:
     window_min: float = 0.0
     emergency: bool = False
     manual_heat: bool = False
+    # Counterfactual: temperature the area would have without any heating today
+    # (follows the learned cooling, None until the model knows enough) and the minutes
+    # that virtual room was too cold.
+    virtual_temp: float | None = None
+    virtual_cold_min: float = 0.0
+
+    @property
+    def cold_min(self) -> float | None:
+        """Minutes the area would have been too cold without heating.
+
+        The real room is the truth while nothing heated. Once the circuit ran, the
+        virtual room counts as well; None if it is not known yet.
+        """
+        if self.relay_min <= 0:
+            return self.too_cold_min
+        if self.virtual_temp is None:
+            return None
+        return max(self.too_cold_min, self.virtual_cold_min)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -134,10 +150,12 @@ class DayAreaStats:
     def from_dict(cls, data: dict[str, Any] | None) -> DayAreaStats:
         stats = cls()
         if data:
-            for key in ("too_cold_min", "relay_min", "window_min"):
+            for key in ("too_cold_min", "relay_min", "window_min", "virtual_cold_min"):
                 setattr(stats, key, float(data.get(key, 0.0)))
             stats.emergency = bool(data.get("emergency", False))
             stats.manual_heat = bool(data.get("manual_heat", False))
+            virtual = data.get("virtual_temp")
+            stats.virtual_temp = float(virtual) if isinstance(virtual, int | float) else None
         return stats
 
 
@@ -156,6 +174,7 @@ class DayRecord:
     err_ai: str | None = None
     phase: str = Phase.AI_LEADS
     learned: bool = False
+    manual: bool = False  # the day ran under a manual override
     extra: dict[str, Any] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
@@ -235,17 +254,30 @@ def final_decision(phase: Phase, rule: RuleResult, ai: AiDecision | None) -> tup
 
 
 def evaluate_need(stats: dict[str, DayAreaStats], settings: EvalSettings) -> Need:
-    """Was heating needed on the evaluated day?"""
+    """Was heating needed on the evaluated day?
+
+    While nothing heated, the real temperature is the truth. Once a circuit ran, the
+    room was kept warm by the decision itself; then the counterfactual room (cooling
+    without heating) tells whether it would have become too cold. Without it the
+    day stays unclear, unless the real room was cold anyway.
+    """
     if not stats:
         return Need.UNCLEAR
-    relay = sum(s.relay_min for s in stats.values())
-    if (
-        any(s.too_cold_min >= settings.too_cold_minutes for s in stats.values())
-        or any(s.emergency or s.manual_heat for s in stats.values())
-        or relay >= settings.relay_need_minutes
+    cold = 0.0
+    unknown = False
+    for s in stats.values():
+        area_cold = s.cold_min
+        if area_cold is None:
+            unknown = True
+            area_cold = s.too_cold_min
+        cold = max(cold, area_cold)
+    if cold >= settings.too_cold_minutes or any(
+        s.emergency or s.manual_heat for s in stats.values()
     ):
         return Need.YES
-    if relay < settings.relay_no_need_minutes:
+    if unknown:
+        return Need.UNCLEAR
+    if cold <= 0:
         return Need.NO
     return Need.UNCLEAR
 
@@ -278,7 +310,7 @@ def learn_rule(
         new_theta = theta + settings.theta_up
         changes.append("theta")
         for area_id, s in stats.items():
-            if s.too_cold_min >= settings.too_cold_minutes and area_id in new_puffers:
+            if (s.cold_min or 0.0) >= settings.too_cold_minutes and area_id in new_puffers:
                 new_puffers[area_id] = new_puffers[area_id] + settings.puffer_up
                 changes.append(f"puffer:{area_id}")
     elif err == "B":
@@ -311,8 +343,8 @@ def agreement(history: list[DayRecord], days: int) -> float | None:
 
 
 def rule_errors(history: list[DayRecord], days: int) -> int:
-    """Number of rule errors within the last days."""
-    return sum(1 for r in _window(history, days) if r.err_rule)
+    """Number of rule errors within the last days (days under a manual override do not count)."""
+    return sum(1 for r in _window(history, days) if r.err_rule and not r.manual)
 
 
 def next_phase(

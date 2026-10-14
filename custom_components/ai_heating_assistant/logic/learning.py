@@ -32,6 +32,13 @@ OVERSHOOT_BOUNDS = (0.0, 2.0)  # K
 OVERSHOOT_RATE_BOUNDS = (0.0, 2.0)  # K per hour of heating
 DEAD_TIME_BOUNDS = (300.0, 4 * 3600.0)  # s
 RECOVERY_BOUNDS = (0.0, 4 * 3600.0)  # s
+RISE_K = 0.1  # K above the minimum: a rise may have started (one sensor step)
+RISE_CONFIRM_K = 0.2  # K above the minimum: the rise is real, not sensor noise
+RISE_CONFIRM_S = 5 * 60  # s a single step has to last to count as a real rise
+PEAK_PASSED_K = 0.15  # K below the highest temperature after switch-off: overshoot is over
+# A recovery cut short by heating only says the true value is larger than the time
+# waited. Counting it a little longer lets the estimate grow in that direction at all.
+CENSORED_RECOVERY_FACTOR = 1.25
 
 SAMPLE_INTERVAL = 15 * 60  # s between model updates
 RATE_WINDOW = 60 * 60  # s window used to compute dT/dt
@@ -76,7 +83,9 @@ class ThermalModel:
     )
     n_heat: int = 0
     n_cool: int = 0
-    forgetting: float = 0.998
+    # Per update (every 15 min): about three weeks of memory. Heat loss and solar gain
+    # need weeks of different weather to separate, a few days are not enough.
+    forgetting: float = 0.9995
 
     @property
     def a(self) -> float:
@@ -252,9 +261,14 @@ class AreaLearner:
             self.track_on = self.track_off = None
             return
         if turned_on:
+            # The controller switches on once the peak has passed: that is a valid sample.
+            if self.track_off is not None and temp <= self.track_off["max"] - PEAK_PASSED_K:
+                self._add_overshoot(self.track_off)
             self.track_on = {"start": ts, "min": temp}
             self.track_off = None
         else:
+            if self.track_on is not None:
+                self._confirm_dead_time(self.track_on, ts)
             self.track_off = {"start": ts, "t_off": temp, "max": temp, "run_h": run_hours}
             self.track_on = None
 
@@ -277,8 +291,12 @@ class AreaLearner:
         """Feed one tick. Returns names of values that changed."""
         changed: list[str] = []
         self.samples.append(sample)
-        if sample.temp is not None and not sample.excluded:
-            changed += self._track(sample)
+        if sample.temp is not None:
+            # The recovery is measured while the controller still waits for it; those
+            # samples are excluded from everything else.
+            changed += self._track_recovery(sample)
+            if not sample.excluded:
+                changed += self._track(sample)
         if self.last_model_update is None or sample.ts - self.last_model_update >= SAMPLE_INTERVAL:
             if self._update_model(sample.ts):
                 changed.append("model")
@@ -294,36 +312,71 @@ class AreaLearner:
             if not s.valve or s.ts - t["start"] > TRACK_TIMEOUT:
                 self.track_on = None
             else:
-                t["min"] = min(t["min"], temp)
-                if temp >= t["min"] + 0.1:
-                    self.dead_time.add(clamp(s.ts - t["start"], *DEAD_TIME_BOUNDS))
+                if temp < t["min"]:
+                    t["min"] = temp
+                    t.pop("rise", None)
+                if temp >= t["min"] + RISE_K:
+                    t.setdefault("rise", s.ts)
+                else:
+                    t.pop("rise", None)
+                if self._confirm_dead_time(t, s.ts, temp):
                     self.track_on = None
                     changed.append("dead_time")
         if self.track_off is not None:
             t = self.track_off
-            peak_passed = temp <= t["max"] - 0.15
+            peak_passed = temp <= t["max"] - PEAK_PASSED_K
             if s.valve and not peak_passed:
                 self.track_off = None
             elif peak_passed or s.ts - t["start"] > TRACK_TIMEOUT:
-                over = clamp(t["max"] - t["t_off"], *OVERSHOOT_BOUNDS)
-                self.overshoot.add(over)
-                run_h = t.get("run_h", 0.0)
-                if run_h >= 0.25:
-                    rate = over / min(run_h, MAX_RUN_HOURS_FOR_OVERSHOOT)
-                    self.overshoot_rate.add(clamp(rate, *OVERSHOOT_RATE_BOUNDS))
+                self._add_overshoot(t)
                 self.track_off = None
                 changed.append("overshoot")
             else:
                 t["max"] = max(t["max"], temp)
-        if self.track_recovery is not None:
-            t = self.track_recovery
-            if s.valve or s.ts - t["start"] > TRACK_TIMEOUT:
-                self.track_recovery = None  # censored, keep the old value
-            elif temp >= t["t_before"] - 0.1:
-                self.recovery.add(clamp(s.ts - t["start"], *RECOVERY_BOUNDS))
-                self.track_recovery = None
-                changed.append("recovery")
         return changed
+
+    def _confirm_dead_time(self, t: dict[str, float], ts: float, temp: float | None = None) -> bool:
+        """Add the dead time once the rise is real: a second sensor step, or the first
+        step lasting a while. One step alone may be noise. The dead time ends at the
+        first step."""
+        rise = t.get("rise")
+        confirmed = (temp is not None and temp >= t["min"] + RISE_CONFIRM_K) or (
+            rise is not None and ts - rise >= RISE_CONFIRM_S
+        )
+        if not confirmed:
+            return False
+        self.dead_time.add(clamp((ts if rise is None else rise) - t["start"], *DEAD_TIME_BOUNDS))
+        return True
+
+    def _add_overshoot(self, t: dict[str, float]) -> None:
+        over = clamp(t["max"] - t["t_off"], *OVERSHOOT_BOUNDS)
+        self.overshoot.add(over)
+        run_h = t.get("run_h", 0.0)
+        if run_h >= 0.25:
+            rate = over / min(run_h, MAX_RUN_HOURS_FOR_OVERSHOOT)
+            self.overshoot_rate.add(clamp(rate, *OVERSHOOT_RATE_BOUNDS))
+
+    def _track_recovery(self, s: Sample) -> list[str]:
+        if self.track_recovery is None or s.temp is None:
+            return []
+        t = self.track_recovery
+        elapsed = s.ts - t["start"]
+        if s.ts - t["start"] > TRACK_TIMEOUT:
+            self.track_recovery = None  # the room never got back on its own: keep the value
+            return []
+        if s.valve:
+            # Censored by heating. Waiting the learned time and still not recovered means
+            # the true value is larger; an earlier start says nothing about it.
+            self.track_recovery = None
+            if elapsed < self.recovery.value:
+                return []
+            self.recovery.add(clamp(elapsed * CENSORED_RECOVERY_FACTOR, *RECOVERY_BOUNDS))
+            return ["recovery"]
+        if s.temp >= t["t_before"] - 0.1:
+            self.recovery.add(clamp(elapsed, *RECOVERY_BOUNDS))
+            self.track_recovery = None
+            return ["recovery"]
+        return []
 
     def _update_model(self, now: float) -> bool:
         """Estimate dT/dt over the last hour and update the RLS model."""

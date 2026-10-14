@@ -10,6 +10,8 @@ FROST_HYSTERESIS = 0.5  # K above the frost limit before frost protection ends
 RECOVERED_MARGIN = 0.1  # K below the temperature before airing counts as recovered
 FORCE_ON_BELOW = 1.0  # K below target: heat regardless of predictions
 SHORT_AIRING_S = 120.0  # shorter openings are ignored after closing
+PEAK_PASSED_K = 0.15  # K below the highest temperature since switch-off: overshoot has arrived
+PEAK_CARRY_MAX_S = 4 * 3600.0  # the overshoot expected at switch-off is forgotten after this
 
 
 class AreaStatus(StrEnum):
@@ -97,6 +99,12 @@ class AreaRuntime:
     emergency_active: bool = False
     frost_active: bool = False
     heating_since: float | None = None
+    # Overshoot carried over a switch-off: the floor keeps warming the room for a while.
+    was_on: bool = False
+    last_peak: float | None = None  # expected peak on the last tick with the circuit on
+    carry_peak: float | None = None  # expected peak after switch-off, until it has arrived
+    carry_max: float | None = None  # highest temperature seen since switch-off
+    carry_since: float | None = None
     events: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
@@ -204,6 +212,31 @@ def _update_window(
     return True
 
 
+def _update_carry(data: ControlInput, rt: AreaRuntime) -> None:
+    """Keep the overshoot expected at switch-off until the temperature falls again.
+
+    Without it the switch-on prediction starts from the current temperature, which is
+    below target by the very overshoot the switch-off counted on, and the circuit would
+    come back after the minimum off time while the floor is still delivering heat.
+    """
+    if data.switch_on:
+        rt.was_on = True
+        rt.carry_peak = None
+        return
+    if rt.was_on:
+        rt.was_on = False
+        rt.carry_peak = rt.last_peak
+        rt.carry_max = data.temp
+        rt.carry_since = data.now
+        rt.last_peak = None
+    if rt.carry_peak is None or data.temp is None:
+        return
+    rt.carry_max = data.temp if rt.carry_max is None else max(rt.carry_max, data.temp)
+    expired = rt.carry_since is None or data.now - rt.carry_since >= PEAK_CARRY_MAX_S
+    if expired or data.temp <= rt.carry_max - PEAK_PASSED_K:
+        rt.carry_peak = None
+
+
 def _update_emergency(data: ControlInput, settings: AreaSettings, rt: AreaRuntime) -> None:
     """Emergency rule on days without heating: long and clearly too cold, no airing."""
     if not settings.emergency_enabled or data.temp is None or rt.emergency_active:
@@ -223,12 +256,21 @@ def _update_emergency(data: ControlInput, settings: AreaSettings, rt: AreaRuntim
 
 
 def thermostat(
-    data: ControlInput, params: ControlParams, learned: LearnedValues
+    data: ControlInput,
+    params: ControlParams,
+    learned: LearnedValues,
+    carry_peak: float | None = None,
 ) -> tuple[bool, float, float]:
-    """Predictive on/off decision. Returns (want_on, predicted_temp, expected_peak)."""
+    """Predictive on/off decision. Returns (want_on, predicted_temp, expected_peak).
+
+    ``carry_peak`` is the peak expected from the heat still in the floor after a
+    switch-off; while it is pending the prediction starts from it, not from the
+    current temperature.
+    """
     assert data.temp is not None
     lead_h = learned.dead_time_s * params.lead_factor / 3600.0
-    predicted = data.temp - learned.cool_rate_kph * lead_h
+    basis = data.temp if data.switch_on or carry_peak is None else max(data.temp, carry_peak)
+    predicted = basis - learned.cool_rate_kph * lead_h
     peak = data.temp + learned.overshoot_k * params.overshoot_factor
     on_threshold = data.target - params.hysteresis_on
     off_threshold = data.target + params.hysteresis_off
@@ -251,6 +293,7 @@ def step(
     """Decide whether the circuit of one area should be on."""
     rt.events.clear()
     may_switch = _may_switch(data, settings)
+    _update_carry(data, rt)
     recovering = _update_window(data, params, learned, rt)
 
     if data.temp is None:
@@ -283,7 +326,9 @@ def step(
         if not rt.emergency_active:
             return ControlDecision(False, AreaStatus.NO_HEATING_DAY, may_switch)
 
-    want, predicted, peak = thermostat(data, params, learned)
+    want, predicted, peak = thermostat(data, params, learned, rt.carry_peak)
+    if data.switch_on:
+        rt.last_peak = peak
     if hold and want and not data.switch_on:
         status = AreaStatus.WINDOW_OPEN if data.window_open else AreaStatus.RECOVERY
         return ControlDecision(False, status, may_switch, predicted, peak)

@@ -15,6 +15,7 @@ from logic.heating_day import (
     final_decision,
     learn_rule,
     next_phase,
+    rule_errors,
     rule_proposal,
     should_ask_ai,
 )
@@ -81,13 +82,32 @@ def test_final_decision_per_phase() -> None:
 
 def test_evaluate_need() -> None:
     assert evaluate_need({"a": DayAreaStats(too_cold_min=20)}, EVAL) == Need.YES
+    # nothing heated and nothing was cold
+    assert evaluate_need({"a": DayAreaStats()}, EVAL) == Need.NO
+    assert evaluate_need({"a": DayAreaStats(too_cold_min=5)}, EVAL) == Need.UNCLEAR
+    # heating ran: the virtual room without heating decides, not the relay minutes
     assert (
-        evaluate_need({"a": DayAreaStats(relay_min=20), "b": DayAreaStats(relay_min=15)}, EVAL)
+        evaluate_need(
+            {"a": DayAreaStats(relay_min=30, virtual_temp=19.5, virtual_cold_min=20)}, EVAL
+        )
         == Need.YES
     )
-    assert evaluate_need({"a": DayAreaStats(relay_min=5)}, EVAL) == Need.NO
-    assert evaluate_need({"a": DayAreaStats(relay_min=20)}, EVAL) == Need.UNCLEAR
+    assert evaluate_need({"a": DayAreaStats(relay_min=30, virtual_temp=20.8)}, EVAL) == Need.NO
+    assert (
+        evaluate_need(
+            {"a": DayAreaStats(relay_min=30, virtual_temp=20.4, virtual_cold_min=5)}, EVAL
+        )
+        == Need.UNCLEAR
+    )
+    # heating ran but the virtual room is not known yet: unclear unless really cold
+    assert evaluate_need({"a": DayAreaStats(relay_min=30)}, EVAL) == Need.UNCLEAR
+    assert evaluate_need({"a": DayAreaStats(relay_min=30, too_cold_min=20)}, EVAL) == Need.YES
+    assert (
+        evaluate_need({"a": DayAreaStats(relay_min=30), "b": DayAreaStats(too_cold_min=20)}, EVAL)
+        == Need.YES
+    )
     assert evaluate_need({"a": DayAreaStats(emergency=True)}, EVAL) == Need.YES
+    assert evaluate_need({"a": DayAreaStats(manual_heat=True)}, EVAL) == Need.YES
     assert evaluate_need({}, EVAL) == Need.UNCLEAR
 
 
@@ -110,7 +130,7 @@ def test_learn_error_a_raises_theta_and_puffer() -> None:
 def test_learn_error_b_outdoor_rule_lowers_theta() -> None:
     rule = rule_proposal(15.0, _areas(22.0), 16.0, RULE)
     theta, _, _ = learn_rule(16.0, {"a0": 0.7}, rule, Need.NO, {"a0": DayAreaStats()}, EVAL)
-    assert theta == 15.5
+    assert theta == 15.0
 
 
 def test_learn_error_b_area_rule_lowers_puffer_and_clamps() -> None:
@@ -151,8 +171,24 @@ def test_phase_falls_back_on_errors() -> None:
     assert next_phase(Phase.SHARED, history, 30, PHASE) == Phase.AI_LEADS
 
 
+def test_manual_days_do_not_count_as_rule_errors() -> None:
+    history = _history(20) + _history(2, rule_err="A")
+    for record in history[-2:]:
+        record.manual = True
+    assert rule_errors(history, 7) == 0
+    assert next_phase(Phase.RULE_LEADS, history, 30, PHASE) == Phase.RULE_LEADS
+
+
 def test_day_stats_roundtrip() -> None:
-    s = DayAreaStats(too_cold_min=3, relay_min=4, window_min=5, emergency=True)
+    s = DayAreaStats(
+        too_cold_min=3,
+        relay_min=4,
+        window_min=5,
+        emergency=True,
+        virtual_temp=20.5,
+        virtual_cold_min=6,
+    )
     assert DayAreaStats.from_dict(s.as_dict()) == s
-    record = DayRecord("2026-10-14", True, "ai", False, True)
+    assert DayAreaStats.from_dict({"too_cold_min": 1}).virtual_temp is None
+    record = DayRecord("2026-10-14", True, "ai", False, True, manual=True)
     assert DayRecord.from_dict(record.as_dict()) == record

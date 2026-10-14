@@ -75,6 +75,48 @@ def test_dead_time_learned() -> None:
     assert 1800 < learner.dead_time.value < 3600
 
 
+def test_dead_time_ignores_single_sensor_step() -> None:
+    learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
+    learner.on_switch(0, 20.0, turned_on=True, run_hours=0)
+
+    # one sensor step that falls back at once: noise, no sample
+    changed = _feed(learner, 0, 40, lambda m: 20.1 if m == 2 else 20.0, valve=True)
+    assert "dead_time" not in changed
+    assert learner.track_on is not None and "rise" not in learner.track_on
+
+    # the rise starts at minute 45 (first step) and is confirmed at minute 50
+    def temp(m: int) -> float:
+        return 20.0 if m < 5 else 20.1 if m < 10 else 20.2
+
+    changed = _feed(learner, 40 * 60, 30, temp, valve=True)
+    assert "dead_time" in changed
+    assert learner.dead_time.count == 1
+    # the dead time is the first step: 2700 s, averaged with the start value 1800 s
+    assert learner.dead_time.value == pytest.approx(2250)
+
+
+def test_dead_time_single_step_counts_once_it_lasts() -> None:
+    learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
+    learner.on_switch(0, 20.0, turned_on=True, run_hours=0)
+    changed = _feed(learner, 0, 50, lambda m: 20.0 if m < 30 else 20.1, valve=True)
+    assert "dead_time" in changed
+    assert learner.dead_time.value == pytest.approx(1800 + 0.5 * (30 * 60 - 1800))
+
+
+def test_dead_time_and_overshoot_finished_at_switch_events() -> None:
+    learner = AreaLearner.create(dead_time_s=1800, recovery_s=1800)
+    learner.on_switch(0, 20.0, turned_on=True, run_hours=0)
+    # rise of one step for 6 minutes, then the circuit switches off: still a sample
+    _feed(learner, 0, 36, lambda m: 20.0 if m < 30 else 20.1, valve=True)
+    learner.on_switch(36 * 60, 20.1, turned_on=False, run_hours=0.6)
+    assert learner.dead_time.count == 1
+    # peak 20.5 passed by 0.15 K exactly when the controller switches on again
+    _feed(learner, 36 * 60, 60, lambda m: 20.1 + min(m, 30) * 0.4 / 30, valve=False)
+    learner.on_switch(96 * 60, 20.35, turned_on=True, run_hours=0)
+    assert learner.overshoot.count == 1
+    assert learner.track_off is None and learner.track_on is not None
+
+
 def test_overshoot_learned() -> None:
     learner = AreaLearner.create(1800, 1800)
     learner.on_switch(0, 21.0, turned_on=False, run_hours=2.0)
@@ -90,13 +132,26 @@ def test_overshoot_learned() -> None:
 def test_recovery_learned_and_censored_by_heating() -> None:
     learner = AreaLearner.create(1800, 1800)
     learner.on_window_closed(0, temp_before=21.0, open_seconds=600)
-    changed = _feed(learner, 0, 60, lambda m: 20.0 + m * 0.025, valve=False)
+    # measured while the controller still waits (samples excluded from the rest)
+    changed = _feed(learner, 0, 60, lambda m: 20.0 + m * 0.025, valve=False, excluded=True)
     assert "recovery" in changed
     assert learner.recovery.count == 1
+    assert learner.recovery.value == pytest.approx(1980)  # recovered after 36 min
 
+    # heating starts before the learned time: says nothing, no update
     learner.on_window_closed(10_000, temp_before=21.0, open_seconds=600)
-    _feed(learner, 10_000, 30, lambda m: 20.0, valve=True)
-    assert learner.recovery.count == 1  # censored, no update
+    _feed(learner, 10_000, 5, lambda m: 20.0, valve=False, excluded=True)
+    _feed(learner, 10_300, 1, lambda m: 20.0, valve=True)
+    assert learner.recovery.count == 1
+    assert learner.track_recovery is None
+
+    # heating starts after the learned time passed: the true value is larger
+    learner.on_window_closed(20_000, temp_before=21.0, open_seconds=600)
+    waited = int(learner.recovery.value / 60) + 1
+    _feed(learner, 20_000, waited, lambda m: 20.0, valve=False, excluded=True)
+    _feed(learner, 20_000 + waited * 60, 1, lambda m: 20.0, valve=True)
+    assert learner.recovery.count == 2
+    assert learner.recovery.value > 1980
     assert learner.track_recovery is None
 
 
