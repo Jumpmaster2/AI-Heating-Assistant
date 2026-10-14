@@ -6,7 +6,7 @@ Custom Integration für Home Assistant, die eine Fußbodenheizung mit einem Scha
 
 Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), Better Thermostat, Automationen für Sollwert, Wetter, Kälte und Urlaub sowie eine Lüftungsempfehlung auf Basis der Luftfeuchte.
 
-> Status: Version 0.5.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.6.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -32,7 +32,7 @@ Einmal pro Nacht (Uhrzeit einstellbar) wird entschieden, ob heute überhaupt geh
 3. Ein **Phasenmodell** entscheidet, wer führt: *KI führt* (Start), *Gemeinsam* (bei Einigkeit diese, sonst die Regel, wenn sie sich sicher ist), *Regel führt* (die KI wird nur gefragt, wenn die Regel unsicher ist, plus einmal pro Woche zur Kontrolle). Ein Wechsel erfolgt nach genügend Tagen mit hoher Übereinstimmung und wenigen Regelfehlern, bei Fehlern geht es eine Phase zurück.
 4. Jeder Tag wird nachträglich **bewertet**. Solange nichts geheizt hat, zählt die echte Raumtemperatur (Minuten zu kalt außerhalb von Lüftungsphasen). Sobald ein Kreis lief, hat die Entscheidung den Raum selbst warm gehalten; dann zählt ein virtueller Raum, der mit der gelernten Abkühlrate ohne Heizung weiterläuft. Fehler A (nicht geheizt, obwohl nötig) und Fehler B (geheizt ohne Bedarf) passen `theta` und `puffer` an. Tage mit manuellem Override werden nicht gelernt.
 
-Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionalen **Notfallregel** (Bereich lange und deutlich unter dem Sollwert, ohne dass gelüftet wurde). Über die Auswahl "Heiztag manuell" lässt sich der Tag übersteuern, das gilt bis zur nächsten Entscheidung.
+Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionalen **Notfallregel** (Temperatur voraussichtlich nach der Totzeit lange und deutlich unter dem Sollwert, ohne dass gelüftet wurde). Über die Auswahl "Heiztag manuell" lässt sich der Tag übersteuern, das gilt bis zur nächsten Entscheidung.
 
 ### Lernen je Bereich
 
@@ -86,7 +86,7 @@ Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von An
 ### Optionen (Menü)
 
 * **Allgemein, Urlaub:** wie oben.
-* **Notfallregel:** an, 1 K unter Sollwert, 45 min, Fenster 30 min unverändert.
+* **Notfallregel:** an, 1 K unter Sollwert (voraussichtlich nach der Totzeit), 45 min, Fenster 30 min unverändert.
 * **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20 bis 8 Uhr.
 * **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in €/Million Tokens (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
 * **KI-Grenzen:** Minimum, Maximum, größte Änderung je Prüfung für jeden Parameter.
@@ -105,10 +105,12 @@ Unter der Integration **Heizbereich hinzufügen**. Je Bereich:
 | Heizkreis-Schalter | z. B. `switch.heating_circuit_1`; leer = nur Lüftungsempfehlung |
 | Start-Sollwert, kleinster und größter Sollwert | 21 / 16 / 24 °C |
 | Mindest-Ein- und -Ausschaltzeit | 10 / 10 min (fest) |
-| Startwerte Fensterverzögerung, Erholungszeit, Totzeit, puffer | 5 min, 30 min, 30 min, 0,7 K |
+| Startwerte Fensterverzögerung, Erholungszeit, Totzeit, puffer | 5 min, 30 min, 30 min, 0,7 K; eine Änderung ersetzt den gelernten Wert |
 | Feuchte-Schwelle | 60 % |
 | Referenz-Temperatur und -Feuchte | optional, statt außen (Raum ohne eigenes Fenster) |
 | Lüftungs-Sperr-Entität | optional |
+
+Startwerte gelten, bis etwas gelernt wurde. Änderst du einen Startwert später, ersetzt er den gelernten bzw. von der KI angepassten Wert, das Lernen dieses Werts beginnt neu, und das Logbuch vermerkt es.
 
 ## Entitäten
 
@@ -133,7 +135,7 @@ Alle wichtigen Entscheidungen und jede KI-Anpassung mit Begründung stehen im **
 |---|---|
 | `ai_heating_assistant.export_parameters` | Lernwerte und Parameter als JSON (Antwort des Dienstes) |
 | `ai_heating_assistant.import_parameters` | Lernwerte und Parameter aus JSON setzen (z. B. Startwerte) |
-| `ai_heating_assistant.reset_learned` | Lernwerte einzelner Bereiche zurücksetzen, optional auch die Parameter |
+| `ai_heating_assistant.reset_learned` | Lernwerte einzelner Bereiche auf die Startwerte zurücksetzen, optional auch die Parameter |
 | `ai_heating_assistant.run_ai_check` | KI-Prüfung sofort starten |
 | `ai_heating_assistant.decide_heating_day` | Heiztag-Entscheidung sofort ausführen, optional ohne KI |
 

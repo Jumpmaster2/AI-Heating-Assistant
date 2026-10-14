@@ -7,9 +7,10 @@ from unittest.mock import patch
 from homeassistant.config_entries import SOURCE_USER, FlowType
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.ai_heating_assistant.ai_client import AiAuthError
-from custom_components.ai_heating_assistant.const import DOMAIN, SUBENTRY_AREA
+from custom_components.ai_heating_assistant.const import DOMAIN, EVENT_LOGBOOK, SUBENTRY_AREA
 
 from .conftest import make_entry
 
@@ -253,3 +254,45 @@ async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, b
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["reason"] == "reconfigure_successful"
     assert entry.runtime_data.areas[sub.subentry_id].target == 18.0
+
+
+async def test_changed_start_value_replaces_the_learned_one(
+    hass: HomeAssistant, base_states
+) -> None:
+    """A start value changed in the area configuration replaces the learned value."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    sub = next(s for s in entry.subentries.values() if s.title == "Living room")
+    area = entry.runtime_data.areas[sub.subentry_id]
+    area.learner.dead_time.add(2400)  # one sample: 30 min -> 35 min
+    assert area.start["dead_time"] == 1800
+    events = async_capture_events(hass, EVENT_LOGBOOK)
+
+    result = await entry.start_subentry_reconfigure_flow(hass, sub.subentry_id)
+    user_input = {
+        "name": "Living room",
+        "sensors": {
+            "temperature_sensor": "sensor.living_room_temperature",
+            "humidity_sensor": "sensor.living_room_humidity",
+            "window_sensors": ["binary_sensor.living_room_window"],
+        },
+        "heating": {
+            "heater_switch": "input_boolean.heating_circuit_1",
+            "default_target": 21.0,
+            "min_target": 16.0,
+            "max_target": 24.0,
+            "min_on_time": 10,
+            "min_off_time": 10,
+        },
+        "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 45, "puffer": 0.7},
+        "ventilation": {"ventilation_rh_threshold": 60},
+    }
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["reason"] == "reconfigure_successful"
+    area = entry.runtime_data.areas[sub.subentry_id]
+    assert area.learner.dead_time.value == 45 * 60 and area.learner.dead_time.count == 0
+    assert area.start["dead_time"] == 45 * 60
+    assert any("dead time" in e.data["message"] for e in events)

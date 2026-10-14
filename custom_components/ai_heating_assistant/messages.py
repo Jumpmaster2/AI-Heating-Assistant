@@ -33,8 +33,8 @@ _TEXTS: dict[str, dict[str, str]] = {
     },
     "recovery_end": {"de": "Erholung beendet.", "en": "Recovery finished."},
     "emergency": {
-        "de": "Notfallregel: {temp} °C seit langem unter Sollwert, heizt trotz Nicht-Heiztag.",
-        "en": "Emergency rule: {temp} °C long below target, heating despite no heating day.",
+        "de": "Notfallregel: {temp} °C, voraussichtlich {predicted} °C nach der Totzeit, seit langem unter Sollwert; heizt trotz Nicht-Heiztag.",
+        "en": "Emergency rule: {temp} °C, expected {predicted} °C after the dead time, long below target; heating despite no heating day.",
     },
     "frost_start": {
         "de": "Frostschutz aktiv ({temp} °C).",
@@ -66,6 +66,14 @@ _TEXTS: dict[str, dict[str, str]] = {
     },
     "import": {"de": "Parameter importiert: {areas}.", "en": "Parameters imported: {areas}."},
     "reset": {"de": "Gelernte Werte zurückgesetzt.", "en": "Learned values reset."},
+    "start_value": {
+        "de": "Startwert {name} aus der Konfiguration übernommen: {old} → {new} {unit}.",
+        "en": "Start value {name} applied from the configuration: {old} → {new} {unit}.",
+    },
+    "dead_time": {"de": "Totzeit", "en": "dead time"},
+    "recovery": {"de": "Erholungszeit", "en": "recovery time"},
+    "window_delay_min": {"de": "Fensterverzögerung", "en": "window delay"},
+    "puffer": {"de": "puffer", "en": "puffer"},
 }
 
 

@@ -6,7 +6,7 @@ Custom integration for Home Assistant that controls underfloor heating with one 
 
 It typically replaces: thermostat helpers (Generic Thermostat), Better Thermostat, automations for setpoint, weather, cold and vacation handling, and a humidity based ventilation recommendation.
 
-> Status: version 0.5.0. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.6.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -32,7 +32,7 @@ Once per night (time configurable) it is decided whether heating is needed today
 3. A **phase model** decides who leads: *AI leads* (start), *shared* (agreement wins, otherwise the rule if it is sure), *rule leads* (the AI is only asked when the rule is unsure, plus once a week as a control). The phase advances after enough days with high agreement and few rule errors and falls back after errors.
 4. Every day is **evaluated** afterwards. While nothing heated, the real room temperature is the truth (minutes too cold outside airing phases). Once a circuit ran, the decision itself kept the room warm; then a virtual room that keeps cooling with the learned rate and no heating decides. Error A (no heating although needed) and error B (heating without need) adapt `theta` and `puffer`. Days under a manual override are not learned from.
 
-On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (area long and clearly below target without airing). The select "Heating day override" overrides the day until the next decision.
+On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (temperature expected after the dead time long and clearly below target, without airing). The select "Heating day override" overrides the day until the next decision.
 
 ### Learning per area
 
@@ -86,7 +86,7 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 ### Options (menu)
 
 * **General, Vacation:** as above.
-* **Emergency rule:** on, 1 K below target, 45 min, windows unchanged for 30 min.
+* **Emergency rule:** on, 1 K below target (expected after the dead time), 45 min, windows unchanged for 30 min.
 * **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
 * **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in €/million tokens (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
@@ -105,10 +105,12 @@ Under the integration choose **Add heating area**. Per area:
 | Heating circuit switch | e.g. `switch.heating_circuit_1`; empty = ventilation recommendation only |
 | Initial, minimum and maximum target | 21 / 16 / 24 °C |
 | Minimum on and off time | 10 / 10 min (fixed) |
-| Start values window delay, recovery time, dead time, puffer | 5 min, 30 min, 30 min, 0.7 K |
+| Start values window delay, recovery time, dead time, puffer | 5 min, 30 min, 30 min, 0.7 K; a change replaces the learned value |
 | Humidity threshold | 60 % |
 | Reference temperature and humidity | optional, instead of outdoor (room without its own window) |
 | Ventilation block entity | optional |
+
+Start values apply until something has been learned. If you change a start value later, it replaces the learned or AI-adjusted value, learning of that value starts again, and the logbook records it.
 
 ## Entities
 
@@ -133,7 +135,7 @@ All important decisions and every AI adjustment with its reason are written to t
 |---|---|
 | `ai_heating_assistant.export_parameters` | learned values and parameters as JSON (service response) |
 | `ai_heating_assistant.import_parameters` | set learned values and parameters from JSON (e.g. start values) |
-| `ai_heating_assistant.reset_learned` | reset learned values of areas, optionally the parameters too |
+| `ai_heating_assistant.reset_learned` | reset learned values of areas to the start values, optionally the parameters too |
 | `ai_heating_assistant.run_ai_check` | run the AI check now |
 | `ai_heating_assistant.decide_heating_day` | run the heating day decision now, optionally without AI |
 

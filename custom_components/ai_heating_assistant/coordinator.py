@@ -138,6 +138,7 @@ from .logic.controller import (
 from .logic.learning import DEAD_TIME_BOUNDS, P_START, RECOVERY_BOUNDS, AreaLearner, Sample
 from .logic.physics import clamp, in_season, parse_day_month
 from .logic.prompts import check_messages, nightly_messages, r
+from .logic.start_values import apply_start_values, read_record
 from .logic.sun import (
     FORECAST_TRUST,
     Point,
@@ -198,6 +199,7 @@ class Area:
     ventilation: VentilationResult | None = None
     status: str = AreaStatus.IDLE
     learned_values: LearnedValues = field(default_factory=LearnedValues)
+    start: dict[str, float] = field(default_factory=dict)  # start values last applied
 
     @property
     def has_circuit(self) -> bool:
@@ -207,6 +209,25 @@ class Area:
     def airing(self) -> bool:
         rt = self.runtime
         return self.window_open or rt.window_paused or rt.recovery_until is not None
+
+
+def _start_values(cfg: dict[str, Any]) -> dict[str, float]:
+    """Configured start values in the units the learner and the parameters use."""
+    return {
+        "dead_time": float(cfg.get(CONF_DEAD_TIME, 30)) * 60,
+        "recovery": float(cfg.get(CONF_RECOVERY, 30)) * 60,
+        "window_delay_min": float(cfg.get(CONF_WINDOW_DELAY, 5)),
+        "puffer": float(cfg.get(CONF_PUFFER, 0.7)),
+    }
+
+
+# Divisor and unit for the logbook: seconds are shown as minutes.
+_START_UNITS = {
+    "dead_time": (60.0, "min"),
+    "recovery": (60.0, "min"),
+    "window_delay_min": (1.0, "min"),
+    "puffer": (1.0, "K"),
+}
 
 
 def _new_check_stats() -> dict[str, float]:
@@ -384,6 +405,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 stored_areas.get(subentry.subentry_id, {}),
                 index,
             )
+        self._save()  # applied start values are on record from now on
 
         if self.ai_configured:
             self.client = await ClaudeClient.create(
@@ -409,12 +431,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     def _build_area(
         self, area_id: str, title: str, cfg: dict[str, Any], stored: dict[str, Any], index: int
     ) -> Area:
-        dead_time = float(cfg.get(CONF_DEAD_TIME, 30)) * 60
-        recovery = float(cfg.get(CONF_RECOVERY, 30)) * 60
+        start = _start_values(cfg)
         params = ControlParams.from_dict(
             stored.get("params"),
-            window_delay_min=float(cfg.get(CONF_WINDOW_DELAY, 5)),
-            puffer=float(cfg.get(CONF_PUFFER, 0.7)),
+            window_delay_min=start["window_delay_min"],
+            puffer=start["puffer"],
         )
         settings = AreaSettings(
             min_on_s=float(cfg.get(CONF_MIN_ON, 10)) * 60,
@@ -425,11 +446,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             emergency_window_quiet_s=float(self.opt(CONF_EMERGENCY_QUIET)) * 60,
         )
         learner = (
-            AreaLearner.from_dict(stored.get("learner"), dead_time, recovery)
+            AreaLearner.from_dict(stored.get("learner"), start["dead_time"], start["recovery"])
             if cfg.get(CONF_SWITCH)
             else None
         )
-        return Area(
+        area = Area(
             area_id=area_id,
             name=title,
             prompt_id=f"a{index + 1}",
@@ -448,6 +469,24 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             day=hd.DayAreaStats.from_dict(stored.get("day")),
             check=stored.get("check") or _new_check_stats(),
         )
+        self._apply_start_values(area, start, stored.get("start"))
+        return area
+
+    def _apply_start_values(self, area: Area, configured: dict[str, float], stored: Any) -> None:
+        """A start value changed in the configuration replaces the stored one, and the
+        configuration is then on record (see ``logic.start_values``)."""
+        applied = apply_start_values(configured, read_record(stored), area.learner, area.params)
+        for name, old, new in applied:
+            divisor, unit = _START_UNITS[name]
+            self._log(
+                "start_value",
+                area,
+                name=text(self.language, name),
+                old=f"{old / divisor:g}",
+                new=f"{new / divisor:g}",
+                unit=unit,
+            )
+        area.start = configured
 
     def _register_listeners(self) -> None:
         watched: set[str] = set()
@@ -613,6 +652,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     "runtime": area.runtime.as_dict(),
                     "day": area.day.as_dict(),
                     "check": area.check,
+                    "start": area.start,
                 }
                 for area in self.areas.values()
             },
@@ -886,7 +926,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 self._log("recovery_end", area)
             elif event == "emergency":
                 area.day.emergency = True
-                self._log("emergency", area, temp=area.temp)
+                self._log(
+                    "emergency",
+                    area,
+                    temp=area.temp,
+                    predicted=area.decision.predicted_temp if area.decision else None,
+                )
             elif event in ("frost_start", "frost_end"):
                 self._log(event, area, temp=area.temp)
 
@@ -1621,6 +1666,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             if area.learner is not None and isinstance(learned, dict):
                 _import_learned(area.learner, learned, counts)
             imported.append(area.name)
+        # An import is no configuration change: the start value record stays as it is.
         self._config_changed()
         self._log("import", areas=", ".join(imported) or "-")
         return imported
@@ -1628,16 +1674,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     def reset_learned(self, area_ids: list[str], include_parameters: bool) -> None:
         for area_id in area_ids:
             area = self.areas[area_id]
+            start = _start_values(area.cfg)
             if area.learner is not None:
-                area.learner = AreaLearner.create(
-                    float(area.cfg.get(CONF_DEAD_TIME, 30)) * 60,
-                    float(area.cfg.get(CONF_RECOVERY, 30)) * 60,
-                )
+                area.learner = AreaLearner.create(start["dead_time"], start["recovery"])
             if include_parameters:
                 area.params = ControlParams(
-                    window_delay_min=float(area.cfg.get(CONF_WINDOW_DELAY, 5)),
-                    puffer=float(area.cfg.get(CONF_PUFFER, 0.7)),
+                    window_delay_min=start["window_delay_min"], puffer=start["puffer"]
                 )
+            area.start = start  # the configuration is in effect again
             self._log("reset", area)
         self._config_changed()
 
