@@ -19,7 +19,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 * **Mindest-Ein- und -Ausschaltzeit** werden immer eingehalten.
 * **Frostschutz** gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.
 * **Heizperiode:** Außerhalb (z. B. 01.04. bis 30.09.) bleiben alle Kreise aus, es gibt keine KI-Abfragen.
-* **Urlaub:** Frei wählbare Entitäten zeigen Urlaub an (z. B. `input_boolean.vacation_mode` oder ein Kalender). Dann gilt die Urlaubstemperatur für alle Bereiche. Mit einer optionalen Rückkehr-Entität (z. B. `input_datetime.vacation_end`) wird anhand der gelernten Aufheizrate so rechtzeitig vorgeheizt, dass bei Rückkehr der normale Sollwert erreicht ist.
+* **Urlaub:** Frei wählbare Entitäten zeigen Urlaub an (z. B. `input_boolean.vacation_mode` oder ein Kalender). Dann gilt die Urlaubstemperatur für alle Bereiche. Mit einer optionalen Rückkehr-Entität (z. B. `input_datetime.vacation_end`) wird anhand der gelernten Aufheizrate so rechtzeitig vorgeheizt, dass bei Rückkehr der normale Sollwert erreicht ist. Liegt das Rückkehrdatum in der Vergangenheit (z. B. Urlaub manuell eingeschaltet), wird es ignoriert und die Urlaubstemperatur gilt.
 
 ### Heiztag-Entscheidung (Nachtlauf)
 

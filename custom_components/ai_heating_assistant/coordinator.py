@@ -687,7 +687,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         area.preheat = False
         target = area.target
         if self.vacation:
-            if return_ts is not None:
+            # A return time in the past (e.g. vacation switched on manually with an old
+            # date) is ignored, otherwise the vacation temperature would never apply.
+            if return_ts is not None and return_ts > ts:
                 start = preheat_start(
                     return_ts,
                     area.temp,

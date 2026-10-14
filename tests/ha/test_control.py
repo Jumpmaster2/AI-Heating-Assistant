@@ -313,3 +313,35 @@ async def test_entity_id_rename_keeps_entity(
     main_device = devices.async_get_device_by_identifier((DOMAIN, entry.entry_id), entry.entry_id)
     assert area_device is not None and main_device is not None
     assert area_device.via_device_id == main_device.id
+
+
+async def test_vacation_return_in_past_is_ignored_and_preheat_before_return(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from datetime import datetime
+
+    def set_return(value: str) -> None:
+        stamp = datetime.fromisoformat(value + "+01:00").timestamp()
+        hass.states.async_set(
+            "input_datetime.vacation_end",
+            value,
+            {"has_date": True, "has_time": True, "timestamp": stamp},
+        )
+
+    hass.states.async_set("input_boolean.vacation", "on")
+    set_return("2026-04-10 18:00:00")
+    entry = make_entry(
+        vacation_entities=["input_boolean.vacation"], return_entity="input_datetime.vacation_end"
+    )
+    await _setup(hass, entry)
+    await _advance(hass, freezer, 1)
+    # return date long past: vacation temperature applies, no preheating
+    assert hass.states.get("climate.living_room").attributes["effective_target"] == 18.0
+    # 19 °C is above 18 °C + puffer, so no heating is needed at all
+    assert hass.states.get("sensor.living_room_status").state in ("vacation", "no_heating_day")
+
+    # return in 2 hours: preheating to the normal target has to start already
+    set_return("2026-11-16 12:00:00")
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("climate.living_room").attributes["effective_target"] == 21.0
+    assert hass.states.get("sensor.living_room_status").state == "preheat"

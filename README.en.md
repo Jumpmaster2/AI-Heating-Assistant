@@ -19,7 +19,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 * **Minimum on and off times** are always respected.
 * **Frost protection** always applies, also outside the heating period and with the thermostat switched off.
 * **Heating period:** outside (e.g. 01.04. to 30.09.) all circuits stay off and the AI is not called.
-* **Vacation:** freely selectable entities indicate vacation (e.g. `input_boolean.vacation_mode` or a calendar). Then the vacation temperature applies to all areas. With an optional return entity (e.g. `input_datetime.vacation_end`) preheating starts early enough, based on the learned heat-up rate, to reach the normal target on return.
+* **Vacation:** freely selectable entities indicate vacation (e.g. `input_boolean.vacation_mode` or a calendar). Then the vacation temperature applies to all areas. With an optional return entity (e.g. `input_datetime.vacation_end`) preheating starts early enough, based on the learned heat-up rate, to reach the normal target on return. A return time in the past (e.g. vacation switched on manually) is ignored and the vacation temperature applies.
 
 ### Heating day decision (nightly run)
 
