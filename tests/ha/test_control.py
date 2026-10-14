@@ -1,0 +1,293 @@
+"""Control loop, AI calls, services and diagnostics with a test instance."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+from unittest.mock import patch
+
+import pytest
+from freezegun.api import FrozenDateTimeFactory
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import (
+    async_capture_events,
+    async_fire_time_changed,
+)
+
+from custom_components.ai_heating_assistant.const import DOMAIN, EVENT_LOGBOOK
+from custom_components.ai_heating_assistant.diagnostics import (
+    async_get_config_entry_diagnostics,
+)
+
+from .conftest import IN_SEASON, make_entry
+
+STRUCTURED = "custom_components.ai_heating_assistant.ai_client.ClaudeClient.structured"
+USAGE = {"input_tokens": 1500, "output_tokens": 500}
+
+
+async def _setup(hass: HomeAssistant, entry) -> None:
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def _advance(hass: HomeAssistant, freezer: FrozenDateTimeFactory, minutes: float) -> None:
+    """Advance time minute by minute so every controller tick runs."""
+    for _ in range(int(minutes)):
+        freezer.tick(timedelta(minutes=1))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_heats_respects_min_times_and_window(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    await _setup(hass, entry)
+
+    climate = hass.states.get("climate.living_room")
+    assert climate is not None
+    assert climate.attributes["temperature"] == 21.0
+    assert hass.states.get("binary_sensor.ai_heating_assistant_heating_day").state == "on"
+    # switch was just created: minimum off time first
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "off"
+
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+    assert hass.states.get("climate.living_room").attributes["hvac_action"] == "heating"
+    assert hass.states.get("sensor.living_room_status").state == "heating"
+
+    # window open: pause after the delay, switch off after the minimum on time
+    hass.states.async_set("binary_sensor.living_room_window", "on")
+    await _advance(hass, freezer, 1)
+    hass.states.async_set("sensor.living_room_temperature", "18.0")
+    await _advance(hass, freezer, 5)
+    assert hass.states.get("sensor.living_room_status").state == "window_open"
+    await _advance(hass, freezer, 5)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "off"
+
+    # closed again: recovery
+    hass.states.async_set("binary_sensor.living_room_window", "off")
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("sensor.living_room_status").state == "recovery"
+
+
+async def test_external_switching_is_logged(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.living_room_temperature", "22.5")
+    await _setup(hass, make_entry())
+    events = async_capture_events(hass, EVENT_LOGBOOK)
+    await hass.services.async_call(
+        "input_boolean", "turn_on", {"entity_id": "input_boolean.heating_circuit_1"}, blocking=True
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert any("external" in e.data["message"] or "außen" in e.data["message"] for e in events)
+
+
+async def test_set_target_and_off(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.living_room", "temperature": 22.5},
+        blocking=True,
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("climate.living_room").attributes["temperature"] == 22.5
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.living_room", "hvac_mode": "off"},
+        blocking=True,
+    )
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("sensor.living_room_status").state == "off"
+
+
+async def test_out_of_season_frost_only(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-07-01 10:00:00+02:00")
+    await _setup(hass, make_entry())
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("sensor.living_room_status").state == "out_of_season"
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "off"
+    hass.states.async_set("sensor.living_room_temperature", "5.0")
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("sensor.living_room_status").state == "frost_protection"
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+
+
+async def test_ventilation_only_area(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    assert hass.states.get("climate.storage_room") is None
+    state = hass.states.get("sensor.storage_room_ventilation_recommendation")
+    assert state is not None and state.state == "ventilate_now"
+    assert hass.states.get("binary_sensor.storage_room_ventilation_recommended").state == "on"
+
+
+async def test_nightly_ai_says_no(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    answer = (
+        {"heating_day": False, "confidence": 80, "reason": "Mild.", "critical_area": "a1"},
+        USAGE,
+    )
+    with patch(STRUCTURED, return_value=answer) as mock:
+        await _setup(hass, make_entry(api_key="test-key"))
+        assert mock.call_count == 1
+        system, user = mock.call_args.args[0], mock.call_args.args[1]
+        assert "underfloor" in system and "test-key" not in user
+    state = hass.states.get("binary_sensor.ai_heating_assistant_heating_day")
+    assert state.state == "off"
+    assert state.attributes["source"] == "ai"
+    assert state.attributes["critical_area"] == "Living room"
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("sensor.living_room_status").state == "no_heating_day"
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "off"
+    cost = hass.states.get("sensor.ai_heating_assistant_ai_costs_this_month")
+    assert float(cost.state) == pytest.approx((1500 * 4 + 500 * 20) / 1e6, abs=1e-4)
+
+
+async def test_periodic_check_adjusts_within_limits(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    nightly = (
+        {"heating_day": True, "confidence": 90, "reason": "Cold.", "critical_area": ""},
+        USAGE,
+    )
+    check = (
+        {
+            "adjustments": [
+                {
+                    "area": "a1",
+                    "parameter": "hysteresis_on",
+                    "value": 0.6,
+                    "reason": "Too cold in the morning.",
+                },
+                {"area": "a1", "parameter": "bogus", "value": 1, "reason": "x"},
+            ],
+            "summary": "One change.",
+            "confidence": 70,
+        },
+        USAGE,
+    )
+    with patch(STRUCTURED, side_effect=[nightly, check]) as mock:
+        await _setup(hass, make_entry(api_key="test-key"))
+        events = async_capture_events(hass, EVENT_LOGBOOK)
+        coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+        await coordinator.async_run_ai_check("manual")
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert mock.call_count == 2
+    area = next(iter(coordinator.areas.values()))
+    assert area.params.hysteresis_on == pytest.approx(0.3)  # 0.2 + max step 0.1
+    assert any("hysteresis_on" in e.data["message"] for e in events)
+    assert coordinator.ai_state["last_rejected"]
+    assert coordinator.ai_state["next_check"] is not None
+
+
+async def test_budget_blocks_calls(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    with patch(STRUCTURED) as mock:
+        await _setup(hass, make_entry(api_key="test-key", monthly_budget=0.0))
+        assert mock.call_count == 0
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    assert coordinator.budget.blocked
+    # the rule decided instead
+    assert coordinator.current_day["source"] == "rule_fallback"
+
+
+async def test_ai_error_keeps_control_running(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from custom_components.ai_heating_assistant.ai_client import AiError
+
+    freezer.move_to(IN_SEASON)
+    with patch(STRUCTURED, side_effect=AiError("cannot connect or timeout")):
+        await _setup(hass, make_entry(api_key="test-key"))
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    assert coordinator.current_day["source"] == "rule_fallback"
+    assert "cannot connect" in coordinator.ai_state["last_error"]
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+
+
+async def test_services_export_import_reset(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    exported = await hass.services.async_call(
+        DOMAIN, "export_parameters", {}, blocking=True, return_response=True
+    )
+    assert "Living room" in exported["areas"]
+    data = exported["areas"]["Living room"]
+    data["learned"]["dead_time_min"] = 75
+    data["params"]["hysteresis_on"] = 5.0  # clamped to the limit
+    result = await hass.services.async_call(
+        DOMAIN, "import_parameters", {"data": exported}, blocking=True, return_response=True
+    )
+    assert result == {"imported": ["Living room", "Storage room"]}
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    area = next(iter(coordinator.areas.values()))
+    assert area.learner.dead_time.value == 75 * 60
+    assert area.params.hysteresis_on == 0.6
+
+    await hass.services.async_call(
+        DOMAIN,
+        "reset_learned",
+        {"entity_id": "climate.living_room", "include_parameters": True},
+        blocking=True,
+    )
+    area = next(iter(coordinator.areas.values()))
+    assert area.learner.dead_time.value == 30 * 60
+    assert area.params.hysteresis_on == 0.2
+
+
+async def test_diagnostics_redacts_key(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    with patch(
+        STRUCTURED,
+        return_value=(
+            {"heating_day": True, "confidence": 50, "reason": "", "critical_area": ""},
+            USAGE,
+        ),
+    ):
+        entry = make_entry(api_key="secret-key")
+        await _setup(hass, entry)
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    assert "secret-key" not in str(diagnostics)
+    assert diagnostics["entry"]["data"]["api_key"] == "**REDACTED**"
+
+
+async def test_unload_and_storage(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    await _setup(hass, entry)
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": "climate.living_room", "temperature": 20.0},
+        blocking=True,
+    )
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get("climate.living_room").attributes["temperature"] == 20.0
