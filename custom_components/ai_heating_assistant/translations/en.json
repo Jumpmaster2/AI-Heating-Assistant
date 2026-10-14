@@ -140,9 +140,9 @@
           "emergency_window_quiet": "Emergency: no window change for"
         },
         "data_description": {
-          "emergency_enabled": "On days without heating, an area may still heat if the temperature expected after the dead time is long and clearly below its target, without airing.",
-          "emergency_delta": "How far below the target the temperature expected after the dead time has to be.",
-          "emergency_duration": "How long the area has to be that cold.",
+          "emergency_enabled": "On days without heating, an area may still heat if the temperature expected after the lead time is long and clearly below its target, without airing.",
+          "emergency_delta": "How far below the target the temperature expected after the lead time has to be (at least the switch-on hysteresis).",
+          "emergency_duration": "How long the expected temperature has to stay that low.",
           "emergency_window_quiet": "Airing does not count: windows must not have changed for this time."
         }
       },

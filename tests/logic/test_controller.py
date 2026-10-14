@@ -351,6 +351,30 @@ def test_emergency_uses_the_predicted_temperature() -> None:
         assert d.status == AreaStatus.NO_HEATING_DAY and rt.below_emergency_since is None
 
 
+def test_emergency_needs_the_room_below_target_now() -> None:
+    """Steep learned cooling must not fire the rule while the room is above target."""
+    rt = AreaRuntime()
+    steep = LearnedValues(cool_rate_kph=1.3, dead_time_s=7200)  # 2.6 K over the lead time
+    d = step(_input(now=0, temp=22.5, heating_day=False), PARAMS, SETTINGS, steep, rt)
+    assert d.status == AreaStatus.NO_HEATING_DAY and rt.below_emergency_since is None
+    step(_input(now=0, temp=20.9, heating_day=False), PARAMS, SETTINGS, steep, rt)
+    assert rt.below_emergency_since == 0
+
+
+def test_emergency_limit_is_at_least_the_switch_on_hysteresis() -> None:
+    settings = AreaSettings(emergency_delta=0.2, emergency_duration_s=60)
+    params = ControlParams(hysteresis_on=0.4)
+    rt = AreaRuntime()
+    # expected 20.7: below target - 0.2, but not below target - 0.4 where the thermostat heats
+    for now in (0, 120):
+        d = step(_input(now=now, temp=20.9, heating_day=False), params, settings, LEARNED, rt)
+    assert d.status == AreaStatus.NO_HEATING_DAY and rt.below_emergency_since is None
+    rt = AreaRuntime()
+    for now in (0, 120):
+        d = step(_input(now=now, temp=20.7, heating_day=False), params, settings, LEARNED, rt)
+    assert d.status == AreaStatus.EMERGENCY and d.want_on
+
+
 def test_emergency_prediction_starts_from_the_carried_peak() -> None:
     rt = AreaRuntime(carry_peak=20.6, carry_max=20.1, carry_since=0.0)
     d = step(_input(now=0, temp=20.1, heating_day=False), PARAMS, SETTINGS, LEARNED, rt)

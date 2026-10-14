@@ -267,6 +267,12 @@ def predict_temp(
     return basis - learned.cool_rate_kph * lead_h
 
 
+def emergency_limit(target: float, params: ControlParams, settings: AreaSettings) -> float:
+    """Expected temperature below which the emergency rule counts: at least the thermostat's
+    own switch-on threshold, or the rule would fire without the thermostat heating."""
+    return target - max(settings.emergency_delta, params.hysteresis_on)
+
+
 def _update_emergency(
     data: ControlInput,
     params: ControlParams,
@@ -288,7 +294,9 @@ def _update_emergency(
         or data.now - rt.last_window_change >= settings.emergency_window_quiet_s
     )
     predicted = predict_temp(data, params, learned, rt.carry_peak)
-    if predicted < data.target - settings.emergency_delta and quiet and not data.window_open:
+    # Never while the room is still above target, however steep the learned cooling.
+    cold = data.temp < data.target and predicted < emergency_limit(data.target, params, settings)
+    if cold and quiet and not data.window_open:
         if rt.below_emergency_since is None:
             rt.below_emergency_since = data.now
         elif data.now - rt.below_emergency_since >= settings.emergency_duration_s:

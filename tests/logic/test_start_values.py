@@ -52,6 +52,14 @@ def test_unchanged_configuration_keeps_imported_values() -> None:
     assert learner.dead_time.value == 4500.0
 
 
+def test_configuration_equal_to_the_learned_value_keeps_the_samples() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    learner.dead_time = Ewma(2700.0, count=4)
+    configured = {**CFG, "dead_time": 2700.0}
+    assert apply_start_values(configured, CFG, learner, _params()) == []
+    assert learner.dead_time.count == 4
+
+
 def test_configured_values_are_clamped_once() -> None:
     learner = AreaLearner.create(1800, 1800)
     configured = {**CFG, "dead_time": 120.0}

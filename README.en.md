@@ -32,7 +32,7 @@ Once per night (time configurable) it is decided whether heating is needed today
 3. A **phase model** decides who leads: *AI leads* (start), *shared* (agreement wins, otherwise the rule if it is sure), *rule leads* (the AI is only asked when the rule is unsure, plus once a week as a control). The phase advances after enough days with high agreement and few rule errors and falls back after errors.
 4. Every day is **evaluated** afterwards. While nothing heated, the real room temperature is the truth (minutes too cold outside airing phases). Once a circuit ran, the decision itself kept the room warm; then a virtual room that keeps cooling with the learned rate and no heating decides. Error A (no heating although needed) and error B (heating without need) adapt `theta` and `puffer`. Days under a manual override are not learned from.
 
-On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (temperature expected after the dead time long and clearly below target, without airing). The select "Heating day override" overrides the day until the next decision.
+On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (area below target and temperature expected after the lead time long and clearly below it, without airing). The select "Heating day override" overrides the day until the next decision.
 
 ### Learning per area
 
@@ -86,7 +86,7 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 ### Options (menu)
 
 * **General, Vacation:** as above.
-* **Emergency rule:** on, 1 K below target (expected after the dead time), 45 min, windows unchanged for 30 min.
+* **Emergency rule:** on, 1 K below target (expected after the lead time, at least the switch-on hysteresis), 45 min, windows unchanged for 30 min.
 * **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
 * **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in €/million tokens (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.

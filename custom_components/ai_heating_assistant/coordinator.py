@@ -132,6 +132,7 @@ from .logic.controller import (
     ControlInput,
     ControlParams,
     LearnedValues,
+    emergency_limit,
     preheat_start,
     step,
 )
@@ -405,7 +406,6 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 stored_areas.get(subentry.subentry_id, {}),
                 index,
             )
-        self._save()  # applied start values are on record from now on
 
         if self.ai_configured:
             self.client = await ClaudeClient.create(
@@ -427,6 +427,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             )
         )
         self._restore_check_schedule()
+        self._save()  # applied start values are on record from now on
 
     def _build_area(
         self, area_id: str, title: str, cfg: dict[str, Any], stored: dict[str, Any], index: int
@@ -925,12 +926,17 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             elif event == "recovery_end":
                 self._log("recovery_end", area)
             elif event == "emergency":
-                area.day.emergency = True
+                # The rule fires on the expected temperature; for the day's evaluation only
+                # a room that is really that cold counts as observed need.
+                target = area.effective_target or area.target
+                limit = emergency_limit(target, area.params, area.settings)
+                area.day.emergency = area.temp is not None and area.temp < limit
                 self._log(
                     "emergency",
                     area,
                     temp=area.temp,
                     predicted=area.decision.predicted_temp if area.decision else None,
+                    limit=round(limit, 2),
                 )
             elif event in ("frost_start", "frost_end"):
                 self._log(event, area, temp=area.temp)
@@ -1711,7 +1717,9 @@ def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[
     for key, ewma, factor, bounds, count_key in pairs:
         if (value := num(key)) is not None:
             ewma.value = clamp(value * factor, *bounds)
-            ewma.count = int(counts.get(count_key, 0) or 0)
+            # An imported value is a deliberate one: it counts as an observation, so a
+            # later start value only replaces it when the configuration changes.
+            ewma.count = max(1, int(counts.get(count_key, 0) or 0))
 
 
 def _parse_time(value: str) -> time:
