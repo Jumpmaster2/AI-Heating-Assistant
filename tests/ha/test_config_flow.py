@@ -218,3 +218,36 @@ async def test_options_ventilation_cooling_margin(hass: HomeAssistant, base_stat
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["ventilation_cooling_margin"] == 1.5
+
+
+async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, base_states) -> None:
+    """Areas without a heating circuit take the target from their configuration."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    sub = next(s for s in entry.subentries.values() if s.title == "Storage room")
+    assert entry.runtime_data.areas[sub.subentry_id].target == 21.0
+
+    result = await entry.start_subentry_reconfigure_flow(hass, sub.subentry_id)
+    user_input = {
+        "name": "Storage room",
+        "sensors": {
+            "temperature_sensor": "sensor.storage_temperature",
+            "humidity_sensor": "sensor.storage_humidity",
+            "window_sensors": [],
+        },
+        "heating": {
+            "default_target": 18.0,
+            "min_target": 16.0,
+            "max_target": 24.0,
+            "min_on_time": 10,
+            "min_off_time": 10,
+        },
+        "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 30, "puffer": 0.7},
+        "ventilation": {"ventilation_rh_threshold": 65},
+    }
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.runtime_data.areas[sub.subentry_id].target == 18.0

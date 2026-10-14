@@ -412,7 +412,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             settings=settings,
             learner=learner,
             runtime=AreaRuntime.from_dict(stored.get("runtime")),
-            target=float(stored.get("target", cfg.get(CONF_DEFAULT_TARGET, 21.0))),
+            # Without a circuit there is no thermostat card: the configured value is the reference.
+            target=float(
+                stored.get("target", cfg.get(CONF_DEFAULT_TARGET, 21.0))
+                if cfg.get(CONF_SWITCH)
+                else cfg.get(CONF_DEFAULT_TARGET, 21.0)
+            ),
             hvac_on=bool(stored.get("hvac_on", True)),
             day=hd.DayAreaStats.from_dict(stored.get("day")),
             check=stored.get("check") or _new_check_stats(),
