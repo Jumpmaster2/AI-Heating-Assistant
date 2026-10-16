@@ -1,6 +1,7 @@
 {
   "domain": "ai_heating_assistant",
   "name": "AI Heating Assistant",
+  "after_dependencies": ["frontend", "http", "panel_custom", "websocket_api"],
   "codeowners": ["@Jumpmaster2"],
   "config_flow": true,
   "documentation": "https://github.com/Jumpmaster2/AI-Heating-Assistant",
@@ -9,5 +10,5 @@
   "issue_tracker": "https://github.com/Jumpmaster2/AI-Heating-Assistant/issues",
   "requirements": ["anthropic>=0.125.0"],
   "single_config_entry": true,
-  "version": "0.6.0"
+  "version": "0.7.0"
 }

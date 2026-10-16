@@ -11,14 +11,17 @@ from homeassistant.helpers.typing import ConfigType
 from .const import CONF_PUFFER_DOWN, CONF_THETA_DOWN, DOMAIN, PLATFORMS, STORAGE_VERSION
 from .coordinator import AiHeatingConfigEntry, HeatingCoordinator
 from .entity import global_device_info
+from .panel import async_register_panel, async_unregister_panel
 from .services import async_setup_services
+from .websocket import async_register_websocket
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Register the services once."""
+    """Register the services and the panel commands once."""
     async_setup_services(hass)
+    async_register_websocket(hass)
     return True
 
 
@@ -51,6 +54,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) ->
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    await async_register_panel(hass, entry.entry_id)
     return True
 
 
@@ -68,5 +72,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
-    """Delete stored learning data when the integration is removed."""
+    """Delete stored learning data and the panel when the integration is removed."""
+    async_unregister_panel(hass)
     await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()

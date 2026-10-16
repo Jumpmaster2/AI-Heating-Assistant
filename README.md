@@ -64,6 +64,16 @@ Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von An
 
 ## Konfiguration
 
+### Dashboard
+
+Nach der Einrichtung gibt es in der Seitenleiste die Seite **AI Heating Assistant** (nur für Administratoren). **Konfigurieren** unter Einstellungen > Geräte & Dienste führt direkt dorthin.
+
+* **Übersicht:** Heiztag mit Phase und Begründung, Heiztag manuell (Automatik, Heute heizen, Heute nicht heizen), alle Bereiche mit Temperatur, Sollwert, Status und Lüftungsempfehlung (anklicken öffnet das Thermostat), Schalter KI aktiv, letzte und nächste KI-Prüfung, KI-Kosten im Monat, Hinweise (fehlende Entitäten, letzter KI-Fehler, Budget erreicht) und eine Zusammenfassung der Einstellungen.
+* **Heizbereiche:** alle Bereiche als Tabelle; anklicken zum Bearbeiten, hinzufügen und löschen.
+* **Allgemein, Notfall & Lüftung, KI, Heiztag-Entscheidung:** alle Einstellungen nach Themen in Karten, jede Karte wird für sich gespeichert. Unter **KI** auch der API-Key (wird vor dem Speichern geprüft, der gespeicherte Key wird nie angezeigt) und die KI-Grenzen.
+
+Die Einrichtung selbst läuft weiterhin als Dialog.
+
 ### Einrichtung (global)
 
 | Option | Standard | Bedeutung |
@@ -83,20 +93,20 @@ Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von An
 | Nachtlauf | 03:00 | |
 | Monatsbudget | 5 € | |
 
-### Optionen (Menü)
+### Einstellungen
 
-* **Allgemein, Urlaub:** wie oben.
+* **Allgemein:** Sensoren, Heizperiode und Frostschutz, Urlaub wie oben.
 * **Notfallregel:** an, 1 K unter Sollwert (voraussichtlich nach der Vorlaufzeit, mindestens die Einschalthysterese), 45 min, Fenster 30 min unverändert.
 * **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20 bis 8 Uhr.
 * **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in €/Million Tokens (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
 * **KI-Grenzen:** Minimum, Maximum, größte Änderung je Prüfung für jeden Parameter.
 * **Heiztag-Entscheidung:** Startwert `theta` (16 °C), Bewertungsschwellen, Lernschritte, Bedingungen der Phasenwechsel.
 
-Den API-Key änderst du über **Neu konfigurieren**.
+Den API-Key änderst du im Dashboard unter **KI** oder über **Neu konfigurieren**.
 
 ### Heizbereiche
 
-Unter der Integration **Heizbereich hinzufügen**. Je Bereich:
+Im Dashboard unter **Heizbereiche** (oder unter der Integration **Heizbereich hinzufügen**). Je Bereich:
 
 | Option | Standard |
 |---|---|
@@ -161,6 +171,8 @@ data:
 pip install -r requirements_test.txt
 pytest
 ```
+
+Die Texte des Dashboards (`frontend/labels.js`) werden aus den Übersetzungsdateien erzeugt. Nach einer Änderung an `translations/*.json` einmal `python scripts/build_labels.py` ausführen (ein Test prüft das).
 
 Die Regel- und Lernlogik in `custom_components/ai_heating_assistant/logic/` hat keine Abhängigkeit zu Home Assistant und ist einzeln testbar. Die Tests mit Home Assistant brauchen Linux oder macOS (sie laufen auch in GitHub Actions).
 

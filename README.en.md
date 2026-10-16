@@ -64,6 +64,16 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 
 ## Configuration
 
+### Dashboard
+
+After the setup the sidebar has the page **AI Heating Assistant** (administrators only). **Configure** under Settings > Devices & services leads straight there.
+
+* **Overview:** heating day with phase and reason, manual heating day (automatic, heat today, no heating today), all areas with temperature, target, status and ventilation recommendation (click opens the thermostat), switch AI active, last and next AI check, AI costs this month, notes (missing entities, last AI error, budget reached) and a summary of the settings.
+* **Heating areas:** all areas as a table; click to edit, add and delete.
+* **General, Emergency & ventilation, AI, Heating day decision:** all settings by topic in cards, each card is saved on its own. **AI** also holds the API key (checked before saving, the stored key is never shown) and the AI limits.
+
+The setup itself is still a dialog.
+
 ### Setup (global)
 
 | Option | Default | Meaning |
@@ -83,20 +93,20 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 | Nightly run | 03:00 | |
 | Monthly budget | 5 € | |
 
-### Options (menu)
+### Settings
 
-* **General, Vacation:** as above.
+* **General:** sensors, heating period and frost protection, vacation as above.
 * **Emergency rule:** on, 1 K below target (expected after the lead time, at least the switch-on hysteresis), 45 min, windows unchanged for 30 min.
 * **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
 * **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in €/million tokens (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
 * **Heating day decision:** start value `theta` (16 °C), evaluation thresholds, learning steps, conditions for phase changes.
 
-Change the API key via **Reconfigure**.
+Change the API key in the dashboard under **AI** or via **Reconfigure**.
 
 ### Heating areas
 
-Under the integration choose **Add heating area**. Per area:
+In the dashboard under **Heating areas** (or under the integration with **Add heating area**). Per area:
 
 | Option | Default |
 |---|---|
@@ -161,6 +171,8 @@ data:
 pip install -r requirements_test.txt
 pytest
 ```
+
+The dashboard texts (`frontend/labels.js`) are generated from the translation files. After changing `translations/*.json` run `python scripts/build_labels.py` once (a test checks this).
 
 The control and learning logic in `custom_components/ai_heating_assistant/logic/` does not depend on Home Assistant and can be tested on its own. The Home Assistant tests need Linux or macOS (they also run in GitHub Actions).
 
