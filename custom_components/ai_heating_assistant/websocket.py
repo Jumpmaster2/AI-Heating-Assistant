@@ -64,6 +64,13 @@ AREA_ENTITY_KEYS = {
     "ventilation": "sensor",
     "ventilation_recommended": "binary_sensor",
     "learning_progress": "sensor",
+    "heat_rate": "sensor",
+    "cool_rate": "sensor",
+    "dead_time": "sensor",
+    "overshoot": "sensor",
+    "recovery_time": "sensor",
+    "outdoor_influence": "sensor",
+    "sun_influence": "sensor",
 }
 REQUIRED_OPTIONS = (CONF_OUTDOOR_TEMP,)
 

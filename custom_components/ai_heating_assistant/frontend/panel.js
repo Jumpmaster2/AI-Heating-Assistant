@@ -14,6 +14,7 @@ const UI = {
     tabs: {
       overview: "Übersicht",
       areas: "Heizbereiche",
+      learned: "Lernwerte",
       general: "Allgemein",
       rules: "Notfall & Lüftung",
       ai: "KI",
@@ -62,6 +63,22 @@ const UI = {
     lastCheck: "Letzte Prüfung",
     nextCheck: "Nächste Prüfung",
     nextNightly: "Nächster Nachtlauf",
+    learnedNames: {
+      heat_rate: "Aufheizrate",
+      cool_rate: "Abkühlrate",
+      dead_time: "Totzeit",
+      overshoot: "Überschwingen",
+      recovery_time: "Erholung nach Lüften",
+      outdoor_influence: "Einfluss Außentemp.",
+      sun_influence: "Einfluss Sonne",
+    },
+    learningProgress: "Lernstand",
+    aiParams: "Regelparameter (von der KI anpassbar)",
+    dayRule: "Heiztag-Regel",
+    theta: "Schwelle theta",
+    evaluatedDays: "Bewertete Tage",
+    noLearning: "Ohne Heizkreis wird nichts gelernt:",
+    noLearnedAreas: "Noch kein Bereich mit Heizkreis.",
     lastDecision: "Letzte Heiztag-Entscheidung",
     sources: {
       ai: "KI",
@@ -108,6 +125,7 @@ const UI = {
     tabs: {
       overview: "Overview",
       areas: "Heating areas",
+      learned: "Learned values",
       general: "General",
       rules: "Emergency & ventilation",
       ai: "AI",
@@ -156,6 +174,22 @@ const UI = {
     lastCheck: "Last check",
     nextCheck: "Next check",
     nextNightly: "Next nightly run",
+    learnedNames: {
+      heat_rate: "Heat-up rate",
+      cool_rate: "Cooling rate",
+      dead_time: "Dead time",
+      overshoot: "Overshoot",
+      recovery_time: "Recovery after airing",
+      outdoor_influence: "Outdoor influence",
+      sun_influence: "Sun influence",
+    },
+    learningProgress: "Learning progress",
+    aiParams: "Control parameters (adjustable by the AI)",
+    dayRule: "Heating day rule",
+    theta: "Threshold theta",
+    evaluatedDays: "Evaluated days",
+    noLearning: "Nothing is learned without a heating circuit:",
+    noLearnedAreas: "No area with a heating circuit yet.",
     lastDecision: "Last heating day decision",
     sources: {
       ai: "AI",
@@ -202,6 +236,7 @@ const UI = {
 const TABS = [
   ["overview", "mdi:view-dashboard-outline"],
   ["areas", "mdi:home-thermometer-outline"],
+  ["learned", "mdi:school-outline"],
   ["general", "mdi:cog-outline"],
   ["rules", "mdi:weather-windy"],
   ["ai", "mdi:robot-outline"],
@@ -263,6 +298,17 @@ const AREA_GROUPS = [
   ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time"], false],
   ["start_values", ["window_delay", "recovery_time", "dead_time", "puffer"], true],
   ["ventilation", ["ventilation_rh_threshold", "reference_temperature", "reference_humidity", "ventilation_block_entity"], true],
+];
+
+// Learned values per area: [entity key, icon, digits if the frontend cannot format]
+const LEARNED = [
+  ["heat_rate", "mdi:thermometer-chevron-up", 2],
+  ["cool_rate", "mdi:thermometer-chevron-down", 3],
+  ["dead_time", "mdi:timer-sand", 0],
+  ["overshoot", "mdi:chart-bell-curve", 2],
+  ["recovery_time", "mdi:timer-refresh-outline", 0],
+  ["outdoor_influence", "mdi:home-thermometer-outline", 4],
+  ["sun_influence", "mdi:white-balance-sunny", 3],
 ];
 
 const STATUS_PILL = {
@@ -445,6 +491,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     if (this._edit) return this._editor();
     if (this._tab === "overview") return this._overview();
     if (this._tab === "areas") return this._areasTab();
+    if (this._tab === "learned") return this._learnedTab();
     return (SETTINGS[this._tab] || []).map((card) => this._settingsCard(card)).join("");
   }
 
@@ -500,7 +547,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     if (sig === this._sig) return;
     this._sig = sig;
     if (this._edit) return;
-    if (this._tab === "overview" || this._tab === "areas") this._rerenderContent();
+    if (["overview", "areas", "learned"].includes(this._tab)) this._rerenderContent();
   }
 
   // ------------------------------------------------------------------ overview
@@ -705,6 +752,59 @@ class AiHeatingAssistantPanel extends HTMLElement {
         : `<div class="muted">${esc(ui.noItems)}</div>`}
       <div class="actions"><button class="btn primary" data-new="area"><ha-icon icon="mdi:plus"></ha-icon>${esc(ui.add)}</button></div>
     </div>`;
+  }
+
+  _formatState(entityId, digits) {
+    const st = this._state(entityId);
+    if (!this._ok(st)) return this.ui.none;
+    if (typeof this._hass.formatEntityState === "function") return this._hass.formatEntityState(st);
+    const n = Number(st.state);
+    if (Number.isNaN(n)) return st.state;
+    const lang = this._hass.locale?.language || this._hass.language;
+    const text = n.toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    return `${text} ${st.attributes.unit_of_measurement || ""}`.trim();
+  }
+
+  _learnedTab() {
+    const ui = this.ui;
+    const heating = this._cfg.areas.filter((a) => a.entities.learning_progress);
+    const others = this._cfg.areas.filter((a) => !a.entities.learning_progress);
+    const phase = this._state(this._cfg.entities.decision_phase);
+    const dayRule = this._ok(phase)
+      ? `<div class="card learn"><div class="learn-head"><h2><ha-icon icon="mdi:calendar-check-outline"></ha-icon>${esc(ui.dayRule)}</h2></div>
+          <div class="learn-grid">
+            <div class="learn-cell"><span class="lbl small">${esc(ui.theta)}</span><span>${esc(`${this._num(phase.attributes.theta)} °C`)}</span></div>
+            <div class="learn-cell"><span class="lbl small">${esc(ui.evaluatedDays)}</span><span>${esc(this._num(phase.attributes.evaluated_days, 0))}</span></div>
+          </div></div>`
+      : "";
+    const units = Object.fromEntries((this._cfg.limit_params || []).map((p) => [p.key, p.unit]));
+    const cards = heating
+      .map((area) => {
+        const progress = this._state(area.entities.learning_progress);
+        const cells = LEARNED.filter(([key]) => area.entities[key])
+          .map(
+            ([key, icon, digits]) => `<div class="learn-cell"><span class="lbl small"><ha-icon icon="${icon}"></ha-icon>${esc(ui.learnedNames[key])}</span>
+              <span>${esc(this._formatState(area.entities[key], digits))}</span></div>`,
+          )
+          .join("");
+        const params = Object.entries(progress?.attributes?.parameters || {})
+          .map(([key, value]) => {
+            const unit = units[key] ? ` ${units[key]}` : "";
+            return `<div class="learn-cell"><span class="lbl small">${esc(this.labels.limits[key] || key)}</span><span>${esc(`${this._num(value, 2)}${unit}`)}</span></div>`;
+          })
+          .join("");
+        const open = this._openDetails?.has(`params-${area.id}`);
+        return `<div class="card learn">
+          <div class="learn-head"><h2>${esc(area.title)}</h2>
+            <span class="pill ${this._ok(progress) ? "" : "muted"}" title="${esc(ui.learningProgress)}"><ha-icon icon="mdi:school-outline"></ha-icon>${esc(this._formatState(area.entities.learning_progress, 0))}</span></div>
+          <div class="learn-grid">${cells}</div>
+          ${params ? `<details data-keep="params-${esc(area.id)}" ${open ? "open" : ""}><summary>${esc(ui.aiParams)}</summary><div class="learn-grid">${params}</div></details>` : ""}
+        </div>`;
+      })
+      .join("");
+    const note = others.length ? `<p class="desc">${esc(ui.noLearning)} ${esc(others.map((a) => a.title).join(", "))}</p>` : "";
+    const empty = heating.length ? "" : `<div class="card"><div class="muted">${esc(ui.noLearnedAreas)}</div></div>`;
+    return `<div class="learn-cards">${dayRule}${cards}</div>${empty}${note}`;
   }
 
   _editor() {
@@ -929,6 +1029,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
         if (details.open) this._edit.open.add(details.dataset.section);
         else this._edit.open.delete(details.dataset.section);
       }
+    }
+    this._openDetails = this._openDetails || new Set();
+    for (const details of content.querySelectorAll("details[data-keep]")) {
+      if (details.open) this._openDetails.add(details.dataset.keep);
+      else this._openDetails.delete(details.dataset.keep);
     }
     const scroll = content.scrollTop;
     content.innerHTML = this._content();
@@ -1185,6 +1290,17 @@ table.limits tbody tr { cursor:default; }
 table.limits tbody tr:hover { background:none; }
 table.limits th.c-name { width:34%; }
 table.limits td { padding:4px; }
+.learn-cards { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:12px; align-items:start; margin-bottom:12px; }
+.card.learn { padding:12px 14px; }
+.learn-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.learn-head h2 { margin:0; font-size:16px; }
+.learn-head .pill ha-icon { --mdc-icon-size:14px; margin-right:4px; vertical-align:-2px; }
+.learn-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; margin-top:8px; }
+.learn-cell { display:flex; flex-direction:column; min-width:0; font-size:14px; }
+.learn-cell .lbl { font-weight:400; color:var(--secondary-text-color); display:flex; align-items:center; gap:4px; }
+.learn-cell .lbl ha-icon { --mdc-icon-size:14px; color:var(--state-icon-color, var(--primary-color)); flex:none; }
+.card.learn details { margin-top:8px; }
+.card.learn summary { font-size:13px; }
 details { margin-top:16px; }
 summary { cursor:pointer; font-weight:500; color:var(--primary-color); }
 details .desc { margin-top:8px; }
