@@ -61,6 +61,16 @@ const UI = {
     aiEnabled: "KI aktiv",
     lastCheck: "Letzte Prüfung",
     nextCheck: "Nächste Prüfung",
+    nextNightly: "Nächster Nachtlauf",
+    lastDecision: "Letzte Heiztag-Entscheidung",
+    sources: {
+      ai: "KI",
+      rule: "Regel",
+      rule_fallback: "Regel (ohne KI)",
+      agreement: "Regel und KI einig",
+      vacation_rule: "Regel (Urlaub)",
+      season: "außerhalb der Heizperiode",
+    },
     costMonth: "Kosten im Monat",
     noApiKey: "Kein API-Key: nur lokale Regelung",
     budgetReached: "Monatsbudget erreicht, keine KI-Abfragen bis zum Monatswechsel",
@@ -77,7 +87,7 @@ const UI = {
       emergency: "Notfallregel",
       model: "KI-Modell",
     },
-    columns: { name: "Name", circuit: "Heizkreis", temp: "Temperatur", status: "Status" },
+    columns: { name: "Name", circuit: "Heizkreis", temp: "Temperatur", tempShort: "Temp.", status: "Status" },
     noItems: "Noch nichts angelegt.",
     keySet: "API-Key ist gesetzt",
     keyNotSet: "Kein API-Key",
@@ -145,6 +155,16 @@ const UI = {
     aiEnabled: "AI active",
     lastCheck: "Last check",
     nextCheck: "Next check",
+    nextNightly: "Next nightly run",
+    lastDecision: "Last heating day decision",
+    sources: {
+      ai: "AI",
+      rule: "rule",
+      rule_fallback: "rule (without AI)",
+      agreement: "rule and AI agree",
+      vacation_rule: "rule (vacation)",
+      season: "outside the heating period",
+    },
     costMonth: "Costs this month",
     noApiKey: "No API key: local control only",
     budgetReached: "Monthly budget reached, no AI requests until the next month",
@@ -161,7 +181,7 @@ const UI = {
       emergency: "Emergency rule",
       model: "AI model",
     },
-    columns: { name: "Name", circuit: "Heating circuit", temp: "Temperature", status: "Status" },
+    columns: { name: "Name", circuit: "Heating circuit", temp: "Temperature", tempShort: "Temp.", status: "Status" },
     noItems: "Nothing added yet.",
     keySet: "API key is set",
     keyNotSet: "No API key",
@@ -470,7 +490,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
         const st = this._state(id);
         if (!st) return `${id}=-`;
         const a = st.attributes;
-        return `${id}=${st.state}|${a.current_temperature ?? ""}|${a.temperature ?? ""}|${a.hvac_action ?? ""}|${a.reason ?? ""}|${a.last_error ?? ""}|${a.summary ?? ""}`;
+        return `${id}=${st.state}|${a.current_temperature ?? ""}|${a.temperature ?? ""}|${a.hvac_action ?? ""}|${a.reason ?? ""}|${a.decided_at ?? ""}|${a.next_decision ?? ""}|${a.last_error ?? ""}|${a.summary ?? ""}`;
       })
       .join(";");
   }
@@ -491,6 +511,13 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const current = climate ? climate.attributes.current_temperature : this._ok(sensor) ? sensor.state : null;
     const target = climate ? climate.attributes.temperature : null;
     return [current, target, climate];
+  }
+
+  _tempHtml(current, target) {
+    // each value stays on one line; a narrow column breaks before the arrow
+    const now = `<span class="temp">${esc(`${this._num(current)} °C`)}</span>`;
+    if (target === null || target === undefined) return now;
+    return `${now} <span class="temp">${esc(`→ ${this._num(target)} °C`)}</span>`;
   }
 
   _areaStatus(area) {
@@ -552,13 +579,14 @@ class AiHeatingAssistantPanel extends HTMLElement {
         const heating = climate?.attributes?.hvac_action === "heating";
         const [statusText, statusCls] = this._areaStatus(area);
         const vent = this._areaVent(area);
-        const temp = `${this._num(current)} °C${target !== null && target !== undefined ? ` → ${this._num(target)} °C` : ""}`;
+        const temp = this._tempHtml(current, target);
         const action = area.entities.climate ? `data-action="more-info" data-entity="${esc(area.entities.climate)}"` : `data-edit="${esc(area.id)}"`;
         return `<button class="row link" ${action}>
           <ha-icon icon="${heating ? "mdi:fire" : area.entities.climate ? "mdi:home-thermometer-outline" : "mdi:weather-windy"}" style="${heating ? "color:var(--warning-color, #ffa600)" : ""}"></ha-icon>
-          <span class="grow">${esc(area.title)}</span><span class="muted">${esc(temp)}</span>
+          <span class="grow">${esc(area.title)}</span>
+          <span class="meta"><span class="muted">${temp}</span>
           ${vent ? `<span class="pill ${vent[1]}">${esc(vent[0])}</span>` : ""}
-          ${statusText ? `<span class="pill ${statusCls}">${esc(statusText)}</span>` : ""}</button>`;
+          ${statusText ? `<span class="pill ${statusCls}">${esc(statusText)}</span>` : ""}</span></button>`;
       })
       .join("");
     const areas = `
@@ -575,6 +603,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const next = this._state(ent.ai_next_check);
     const cost = this._state(ent.ai_cost_month);
     const budget = cost?.attributes?.budget ?? o.monthly_budget;
+    const source = attrs.source ? ui.sources[attrs.source] || attrs.source : "";
+    const decision = attrs.decided_at ? [this._time(attrs.decided_at), source].filter(Boolean).join(" · ") : ui.none;
     const ai = `
       <div class="card">
         <h2><ha-icon icon="mdi:robot-outline"></ha-icon>${esc(ui.ai)}</h2>
@@ -586,6 +616,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
           <div class="row"><ha-icon icon="mdi:history"></ha-icon><span class="grow">${esc(ui.lastCheck)}</span><span class="muted">${esc(this._ok(last) ? this._time(last.state) : ui.none)}</span></div>
           ${last?.attributes?.summary ? `<div class="row"><ha-icon icon="mdi:text-short"></ha-icon><span class="muted small">${esc(last.attributes.summary)}</span></div>` : ""}
           <div class="row"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="grow">${esc(ui.nextCheck)}</span><span class="muted">${esc(this._ok(next) ? this._time(next.state) : ui.none)}</span></div>
+          <div class="row"><ha-icon icon="mdi:weather-night"></ha-icon><span class="grow">${esc(ui.nextNightly)}</span><span class="muted">${esc(this._time(attrs.next_decision))}</span></div>
+          <div class="row"><ha-icon icon="mdi:calendar-check-outline"></ha-icon><span class="grow">${esc(ui.lastDecision)}</span><span class="muted">${esc(decision)}</span></div>
           <div class="row"><ha-icon icon="mdi:currency-eur"></ha-icon><span class="grow">${esc(ui.costMonth)}</span><span class="muted">${esc(`${this._num(this._ok(cost) ? cost.state : 0, 2)} € / ${this._num(budget, 2)} €`)}</span></div>
         </div>
       </div>`;
@@ -655,12 +687,12 @@ class AiHeatingAssistantPanel extends HTMLElement {
         const [statusText, statusCls] = this._areaStatus(area);
         const vent = this._areaVent(area);
         const circuit = area.data.heater_switch ? this._name(area.data.heater_switch) : ui.noCircuit;
-        const temp = `${this._num(current)} °C${target !== null && target !== undefined ? ` → ${this._num(target)} °C` : ""}`;
+        const temp = this._tempHtml(current, target);
         return `<tr data-edit="${esc(area.id)}">
           <td class="c-icon"><ha-icon icon="${area.data.heater_switch ? "mdi:home-thermometer-outline" : "mdi:weather-windy"}"></ha-icon></td>
           <td class="c-name"><div>${esc(area.title)}</div><div class="muted small entity-id">${esc(area.data.temperature_sensor)}</div></td>
           <td class="hide-narrow">${esc(circuit)}</td>
-          <td class="c-temp">${esc(temp)}</td>
+          <td class="c-temp">${temp}</td>
           <td class="c-state">${statusText ? `<span class="pill ${statusCls}">${esc(statusText)}</span>` : ""}${vent ? `<span class="pill ${vent[1]}">${esc(vent[0])}</span>` : ""}</td>
           <td class="c-edit hide-narrow"><ha-icon icon="mdi:pencil-outline" class="muted"></ha-icon></td>
         </tr>`;
@@ -669,7 +701,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     return `<div class="card">
       <h2><ha-icon icon="mdi:home-thermometer-outline"></ha-icon>${esc(title)}</h2><p class="desc">${esc(desc)}</p>
       ${this._cfg.areas.length
-        ? `<div class="table-wrap"><table><thead><tr><th class="c-icon"></th><th class="c-name">${esc(ui.columns.name)}</th><th class="hide-narrow">${esc(ui.columns.circuit)}</th><th class="c-temp">${esc(ui.columns.temp)}</th><th class="c-state">${esc(ui.columns.status)}</th><th class="c-edit hide-narrow"></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        ? `<div class="table-wrap"><table><thead><tr><th class="c-icon"></th><th class="c-name">${esc(ui.columns.name)}</th><th class="hide-narrow">${esc(ui.columns.circuit)}</th><th class="c-temp"><span class="hide-narrow">${esc(ui.columns.temp)}</span><span class="show-narrow">${esc(ui.columns.tempShort)}</span></th><th class="c-state">${esc(ui.columns.status)}</th><th class="c-edit hide-narrow"></th></tr></thead><tbody>${rows}</tbody></table></div>`
         : `<div class="muted">${esc(ui.noItems)}</div>`}
       <div class="actions"><button class="btn primary" data-new="area"><ha-icon icon="mdi:plus"></ha-icon>${esc(ui.add)}</button></div>
     </div>`;
@@ -1125,12 +1157,15 @@ input:focus, select:focus { outline:2px solid var(--primary-color); outline-offs
 .row > span { min-width:0; overflow-wrap:anywhere; }
 .row > span.grow { flex:1 1 40%; min-width:7em; overflow-wrap:normal; }
 .row > span.muted { flex:0 1 auto; text-align:right; }
+.row > .meta { flex:0 1 auto; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:4px 6px; }
+.temp { white-space:nowrap; }
 .row.link { cursor:pointer; }
 .row.link:hover, tbody tr:hover { background:var(--secondary-background-color, #f5f5f5); }
 .warn-row ha-icon { color:var(--warning-color, #ffa600); flex:none; }
 .muted { color:var(--secondary-text-color); }
 .small { font-size:12px; }
-.pill { display:inline-block; border-radius:12px; padding:2px 10px; margin:1px 0; font-size:12px; background:var(--secondary-background-color, #eee); white-space:nowrap; }
+.show-narrow { display:none; }
+.pill { flex:none; display:inline-block; border-radius:12px; padding:2px 10px; margin:1px 0; font-size:12px; background:var(--secondary-background-color, #eee); white-space:nowrap; }
 .pill.ok { background:rgba(67,160,71,.15); color:var(--success-color, #2e7d32); }
 .pill.warn { background:rgba(255,166,0,.18); color:var(--warning-color, #b26a00); }
 .pill.bad { background:rgba(219,68,55,.15); color:var(--error-color, #db4437); }
@@ -1141,8 +1176,9 @@ input:focus, select:focus { outline:2px solid var(--primary-color); outline-offs
 table { width:100%; border-collapse:collapse; font-size:14px; table-layout:fixed; }
 th.c-icon { width:40px; } th.c-temp { width:140px; } th.c-state { width:150px; } th.c-edit { width:32px; }
 td.c-name div { overflow-wrap:anywhere; }
+td.c-name div:first-child { overflow-wrap:break-word; hyphens:auto; }
 td.c-state .pill { margin-right:4px; }
-th { text-align:left; font-weight:500; color:var(--secondary-text-color); padding:6px 8px; border-bottom:1px solid var(--divider-color); }
+th { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:left; font-weight:500; color:var(--secondary-text-color); padding:6px 8px; border-bottom:1px solid var(--divider-color); }
 td { padding:8px; border-bottom:1px solid var(--divider-color); vertical-align:middle; }
 tbody tr { cursor:pointer; }
 table.limits tbody tr { cursor:default; }
@@ -1155,10 +1191,10 @@ details .desc { margin-top:8px; }
 .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--primary-text-color); color:var(--primary-background-color); padding:10px 18px; border-radius:8px; z-index:10; }
 .toast.bad { background:var(--error-color, #db4437); color:#fff; }
 @media (max-width: 700px) {
-  .hide-narrow { display:none; } .content { padding:8px; } .grid { grid-template-columns:1fr; }
+  .hide-narrow { display:none; } .show-narrow { display:inline; } .content { padding:8px; } .grid { grid-template-columns:1fr; }
   .tab span { display:none; } .tab.active span { display:inline; } .tab { padding:10px 12px; }
   .fields { grid-template-columns:1fr; }
-  th.c-icon { width:32px; } th.c-temp { width:96px; } th.c-state { width:96px; }
+  th.c-icon { width:32px; } th.c-temp { width:84px; } th.c-state { width:96px; }
   td { padding:8px 4px; } .entity-id { font-size:11px; }
   table.limits th.c-name { width:40%; }
   .card { padding:12px; }
