@@ -6,7 +6,9 @@ Custom integration for Home Assistant that controls underfloor heating with one 
 
 It typically replaces: thermostat helpers (Generic Thermostat), Better Thermostat, automations for setpoint, weather, cold and vacation handling, and a humidity based ventilation recommendation.
 
-> Status: version 0.6.0. Please keep an eye on the logbook during the first weeks.
+The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
+
+> Status: version 0.8.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
