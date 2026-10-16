@@ -186,6 +186,7 @@ def test_day_stats_roundtrip() -> None:
         emergency=True,
         virtual_temp=20.5,
         virtual_cold_min=6,
+        over_kh=0.7,
     )
     assert DayAreaStats.from_dict(s.as_dict()) == s
     assert DayAreaStats.from_dict({"too_cold_min": 1}).virtual_temp is None

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from unittest.mock import patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     async_capture_events,
     async_fire_time_changed,
@@ -213,6 +215,54 @@ async def test_periodic_check_adjusts_within_limits(
     assert any("hysteresis_on" in e.data["message"] for e in events)
     assert coordinator.ai_state["last_rejected"]
     assert coordinator.ai_state["next_check"] is not None
+
+
+async def test_overheating_is_counted_and_shown_to_the_ai(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    nightly = (
+        {"heating_day": True, "confidence": 90, "reason": "Cold.", "critical_area": ""},
+        USAGE,
+    )
+    change = {"area": "a1", "parameter": "overshoot_factor", "value": 1.1, "reason": "Peak."}
+    first = ({"adjustments": [change], "summary": "", "confidence": 60}, USAGE)
+    second = ({"adjustments": [], "summary": "", "confidence": 60}, USAGE)
+    with patch(STRUCTURED, side_effect=[nightly, first, second]) as mock:
+        await _setup(hass, make_entry(api_key="test-key"))
+        coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+        area = next(a for a in coordinator.areas.values() if a.has_circuit)
+        ts = dt_util.utcnow().timestamp()
+        area.check = {}
+        area.temp, area.switch_on, area.window_open = 21.5, False, False
+        # warm without recent heating (sun only): not wasted
+        area.off_at = None
+        coordinator._count(area, 60, 21.0, ts)
+        assert area.check.get("over_kh", 0.0) == 0.0
+        # one hour after switch-off: 0.3 K beyond the tolerance for one hour
+        area.off_at = ts - 3600
+        coordinator._count(area, 60, 21.0, ts)
+        assert area.check["over_kh"] == pytest.approx(0.3)
+        assert area.day.over_kh == pytest.approx(0.3)
+        assert area.check["deg_h"] == pytest.approx(2 * 16.0)  # outdoor 5 °C, target 21 °C
+
+        await coordinator.async_run_ai_check("manual")
+        await hass.async_block_till_done(wait_background_tasks=True)
+        stats = json.loads(mock.call_args.args[1])["areas"][0]["stats"]
+        assert stats["over_kh"] == pytest.approx(0.3)
+        # overheating keeps the interval at its base value
+        assert coordinator.ai_state["stable"] == 0
+
+        await coordinator.async_run_ai_check("manual")
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert mock.call_count == 3
+        history = json.loads(mock.call_args.args[1])["history"]
+    assert history[0]["changes"] == ["a1 overshoot_factor 1>1.1"]
+    assert history[0]["areas"]["a1"]["over_kh"] == pytest.approx(0.3)
+    assert len(coordinator.ai_state["check_history"]) == 2
+
+    coordinator.reset_learned([area.area_id], include_parameters=False)
+    assert all("a1" not in h["areas"] for h in coordinator.ai_state["check_history"])
 
 
 async def test_budget_blocks_calls(

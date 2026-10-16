@@ -131,6 +131,7 @@ class DayAreaStats:
     # that virtual room was too cold.
     virtual_temp: float | None = None
     virtual_cold_min: float = 0.0
+    over_kh: float = 0.0  # Kelvin hours above the target after heating (wasted heat)
 
     @property
     def cold_min(self) -> float | None:
@@ -170,6 +171,7 @@ class DayAreaStats:
                 "window_min",
                 "observed_min",
                 "virtual_cold_min",
+                "over_kh",
             ):
                 setattr(stats, key, float(data.get(key, 0.0)))
             stats.emergency = bool(data.get("emergency", False))

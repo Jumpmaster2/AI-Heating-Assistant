@@ -112,6 +112,7 @@ from .logic.ai_policy import (
     cost_eur,
     estimate_cost,
     next_interval_hours,
+    overheat_issue,
     update_stable_count,
 )
 from .logic.ai_schema import (
@@ -160,6 +161,10 @@ SAVE_DELAY = 30
 HISTORY_DAYS = 60
 EXTERNAL_SWITCH_GRACE = 120  # s within which a switch change counts as our own command
 CHECK_COLD_MARGIN = 0.3
+OVERHEAT_MARGIN = 0.2  # K above target tolerated before heat counts as wasted
+OVERHEAT_AFTER_S = 4 * 3600.0  # s after switch-off in which overheating is due to heating
+SUN_OVERHEAT_KW = 0.3  # PV power from which overheating counts as caused by sun as well
+CHECK_HISTORY = 6  # earlier checks shown to the AI
 SAVE_EVERY_TICKS = 10
 WEATHER_PV_REFRESH_S = 1800  # s between hourly forecast requests for the expected sun
 VIRTUAL_MIN_COOL_UPDATES = 24  # model updates without heating before the virtual room is trusted
@@ -192,6 +197,7 @@ class Area:
     switch_available: bool = False
     last_switch_change: float | None = None
     on_since: float | None = None
+    off_at: float | None = None  # last real switch-off seen (not restored after a restart)
     commanded: tuple[bool, float] | None = None
     effective_target: float | None = None
     vacation: bool = False
@@ -241,6 +247,9 @@ def _new_check_stats() -> dict[str, float]:
         "min_t": 99.0,
         "max_t": -99.0,
         "window_min": 0.0,
+        "over_kh": 0.0,
+        "sun_over_kh": 0.0,
+        "deg_h": 0.0,
     }
 
 
@@ -477,6 +486,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         """A start value changed in the configuration replaces the stored one, and the
         configuration is then on record (see ``logic.start_values``)."""
         applied = apply_start_values(configured, read_record(stored), area.learner, area.params)
+        if applied:
+            self._forget_check_history(area)
         for name, old, new in applied:
             divisor, unit = _START_UNITS[name]
             self._log(
@@ -488,6 +499,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 unit=unit,
             )
         area.start = configured
+
+    def _forget_check_history(self, area: Area) -> None:
+        """Earlier checks of an area say nothing about its values after a reset."""
+        for entry in self.ai_state.get("check_history", []):
+            entry.get("areas", {}).pop(area.prompt_id, None)
 
     def _register_listeners(self) -> None:
         watched: set[str] = set()
@@ -536,6 +552,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if area.learner is not None:
             area.learner.on_switch(ts, area.temp, turned_on, run_hours)
         area.on_since = ts if turned_on else None
+        area.off_at = None if turned_on else ts
         if turned_on:
             area.check["cycles"] = area.check.get("cycles", 0) + 1
         own = (
@@ -903,7 +920,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         # The virtual room first: on the first tick of a day it starts at the real
         # temperature even if the circuit is running at that moment.
         self._track_virtual(area, minutes, target)
-        self._count(area, minutes, target)
+        self._count(area, minutes, target, ts)
 
     def _handle_events(
         self, area: Area, ts: float, open_since: float | None, temp_before: float | None
@@ -955,7 +972,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         except HomeAssistantError as err:
             LOGGER.warning("Switching %s failed: %s", entity_id, err)
 
-    def _count(self, area: Area, minutes: float, target: float) -> None:
+    def _count(self, area: Area, minutes: float, target: float, ts: float) -> None:
         if minutes <= 0 or area.temp is None:
             return
         margin = float(self.opt(CONF_TOO_COLD_MARGIN))
@@ -972,6 +989,22 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 day.too_cold_min += minutes
             if area.temp < target - CHECK_COLD_MARGIN:
                 check["cold_min"] = check.get("cold_min", 0.0) + minutes
+            # Heat above the target shortly after heating was wasted; warmth from sun
+            # alone on a day without heating costs nothing.
+            excess = area.temp - target - OVERHEAT_MARGIN
+            heated = area.switch_on or (
+                area.off_at is not None and 0 <= ts - area.off_at < OVERHEAT_AFTER_S
+            )
+            if excess > 0 and heated:
+                over = excess * minutes / 60
+                day.over_kh += over
+                check["over_kh"] = check.get("over_kh", 0.0) + over
+                if self.pv_assumed >= SUN_OVERHEAT_KW:
+                    check["sun_over_kh"] = check.get("sun_over_kh", 0.0) + over
+            if self.outdoor_temp is not None and target > self.outdoor_temp:
+                check["deg_h"] = (
+                    check.get("deg_h", 0.0) + (target - self.outdoor_temp) * minutes / 60
+                )
         check["minutes"] = check.get("minutes", 0.0) + minutes
         check["max_over"] = max(check.get("max_over", -99.0), area.temp - target)
         check["min_t"] = min(check.get("min_t", 99.0), area.temp)
@@ -1299,6 +1332,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             manual=manual,
             vacation=bool(current.get("vacation")),
         )
+        record.extra = {
+            "on_min": round(sum(s.relay_min for s in stats.values())),
+            "over_kh": round(sum(s.over_kh for s in stats.values()), 2),
+        }
         record.err_final = hd.error_of(record.final, need)
         record.err_rule = hd.error_of(record.rule, need)
         record.err_ai = hd.error_of(record.ai, need)
@@ -1390,6 +1427,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     "need": h.get("need"),
                     "err": h.get("err_final"),
                     **({"manual": True} if h.get("manual") else {}),
+                    **{
+                        k: v
+                        for k, v in (h.get("extra") or {}).items()
+                        if k in ("on_min", "over_kh")
+                    },
                 }
                 for h in history
             ],
@@ -1530,6 +1572,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                         ),
                         "cycles": int(check.get("cycles", 0)),
                         "on_min": r(check.get("on_min"), 0),
+                        "avg_run_min": r(check["on_min"] / check["cycles"], 0)
+                        if check.get("cycles") and check.get("on_min")
+                        else None,
+                        "on_per_kh": r(check.get("on_min", 0.0) / check["deg_h"], 3)
+                        if check.get("deg_h", 0) >= 1
+                        else None,
+                        "over_kh": r(check.get("over_kh", 0.0)),
+                        "sun_over_kh": r(check.get("sun_over_kh", 0.0)),
                         "min_t": r(check.get("min_t") if check.get("min_t", 99) < 99 else None),
                         "max_t": r(check.get("max_t") if check.get("max_t", -99) > -99 else None),
                         "window_min": r(check.get("window_min"), 0),
@@ -1545,6 +1595,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "forecast_12h": _hourly_compact(hourly, 12),
             "theta": self.theta,
             "areas": areas_payload,
+            "history": self.ai_state.get("check_history", []),
             "limits": {k: [v["min"], v["max"], v["step"]] for k, v in limits.items()},
         }
         system, user = check_messages(payload, self.language)
@@ -1552,6 +1603,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.ai_state["last_check"] = now.isoformat()
         comfort_issue = any(
             a.check.get("cold_min", 0) >= float(self.opt(CONF_TOO_COLD_MINUTES)) for a in controlled
+        )
+        efficiency_issue = any(
+            overheat_issue(a.check.get("over_kh", 0.0), a.check.get("minutes", 0.0))
+            for a in controlled
         )
         relevant = False
         if data is not None:
@@ -1582,7 +1637,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 self.ai_state["last_confidence"] = result.confidence
                 self.ai_state["last_rejected"] = result.rejected[:10]
                 stable = update_stable_count(
-                    int(self.ai_state.get("stable", 0)), relevant, comfort_issue
+                    int(self.ai_state.get("stable", 0)), relevant, comfort_issue, efficiency_issue
                 )
                 self.ai_state["stable"] = stable
                 hours = next_interval_hours(
@@ -1598,11 +1653,23 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     summary=result.summary,
                     hours=round(hours, 1),
                 )
+                self._add_check_history(areas_payload, result.applied)
                 for area in controlled:
                     area.check = _new_check_stats()
                 return
         # failure or no answer: try again after the base interval
         self._schedule_check(now + timedelta(hours=float(self.opt(CONF_CHECK_INTERVAL))))
+
+    def _add_check_history(self, areas_payload: list[dict[str, Any]], applied: list[Any]) -> None:
+        """Keep the key figures of this check and its changes for the next checks."""
+        keys = ("cold_min", "over_kh", "sun_over_kh", "on_per_kh", "cycles")
+        entry = {
+            "t": dt_util.now().strftime("%m-%d %H:%M"),
+            "areas": {a["id"]: {k: a["stats"].get(k) for k in keys} for a in areas_payload},
+            "changes": [f"{a.area} {a.parameter} {a.old:g}>{a.new:g}" for a in applied],
+        }
+        history = [*self.ai_state.get("check_history", []), entry]
+        self.ai_state["check_history"] = history[-CHECK_HISTORY:]
 
     # ------------------------------------------------------------------ services
 
@@ -1695,6 +1762,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     window_delay_min=start["window_delay_min"], puffer=start["puffer"]
                 )
             area.start = start  # the configuration is in effect again
+            self._forget_check_history(area)
             self._log("reset", area)
         self._config_changed()
 
