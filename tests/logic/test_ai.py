@@ -9,6 +9,7 @@ from logic.ai_policy import (
     cost_eur,
     estimate_cost,
     next_interval_hours,
+    overheat_issue,
     update_stable_count,
 )
 from logic.ai_schema import (
@@ -54,6 +55,14 @@ def test_adaptive_interval() -> None:
     assert update_stable_count(3, relevant_change=False, comfort_issue=False) == 4
     assert update_stable_count(3, relevant_change=True, comfort_issue=False) == 0
     assert update_stable_count(3, relevant_change=False, comfort_issue=True) == 0
+    assert update_stable_count(3, False, False, efficiency_issue=True) == 0
+
+
+def test_overheat_issue_is_pro_rata() -> None:
+    assert not overheat_issue(0.0, 0.0)
+    assert overheat_issue(0.5, 1440)  # 0.5 Kh in a day
+    assert not overheat_issue(0.4, 1440)
+    assert overheat_issue(0.1, 240)  # 4 h allow 0.083 Kh
 
 
 def test_validate_nightly() -> None:
@@ -123,3 +132,7 @@ def test_prompts_are_compact_json() -> None:
     assert user == '{"a":[1.234],"b":1}'
     system, user = check_messages({"x": 1}, "en")
     assert "hysteresis_on" in system and json.loads(user) == {"x": 1}
+    # the check aims at saving heat with comfort as a hard limit
+    assert "over_kh" in system and "on_per_kh" in system and "history" in system
+    assert "hard limit" in system
+    assert "over_kh" in nightly_messages({}, "en")[0]

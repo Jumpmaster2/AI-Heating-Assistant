@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass
 from typing import Any
 
 CHARS_PER_TOKEN = 3.5
+# Overheating after heating, in Kelvin hours per day, above which a check counts as
+# not stable: the interval must not keep growing while heat is wasted.
+OVERHEAT_KH_PER_DAY = 0.5
 
 
 @dataclass(slots=True)
@@ -96,8 +99,17 @@ def next_interval_hours(base_hours: float, max_hours: float, stable_count: int) 
     return min(max_hours, base_hours * (2 ** max(0, stable_count)))
 
 
-def update_stable_count(stable_count: int, relevant_change: bool, comfort_issue: bool) -> int:
-    """Reset on relevant change or comfort issue, otherwise count up."""
-    if relevant_change or comfort_issue:
+def update_stable_count(
+    stable_count: int, relevant_change: bool, comfort_issue: bool, efficiency_issue: bool = False
+) -> int:
+    """Reset on relevant change, comfort or efficiency issue, otherwise count up."""
+    if relevant_change or comfort_issue or efficiency_issue:
         return 0
     return stable_count + 1
+
+
+def overheat_issue(over_kh: float, minutes: float) -> bool:
+    """True if the overheating since the last check exceeds the daily allowance pro rata."""
+    if minutes <= 0:
+        return False
+    return over_kh >= OVERHEAT_KH_PER_DAY * minutes / 1440

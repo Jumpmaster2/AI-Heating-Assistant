@@ -30,7 +30,7 @@ The overview, the learned values and all settings are in the **AI Heating Assist
 Once per night (time configurable) it is decided whether heating is needed today at all.
 
 1. A **local rule** proposes: heat if the forecast maximum is below `theta` or an area is below target plus `puffer`.
-2. The **AI** receives forecast, room values, learned values and the evaluated recent days and answers with structured JSON (schema validated).
+2. The **AI** receives forecast, room values, learned values and the evaluated recent days (with heating minutes and overheating per day) and answers with structured JSON (schema validated). Comfort has priority, but it should avoid unnecessary heating days.
 3. A **phase model** decides who leads: *AI leads* (start), *shared* (agreement wins, otherwise the rule if it is sure), *rule leads* (the AI is only asked when the rule is unsure, plus once a week as a control). The phase advances after enough days with high agreement and few rule errors and falls back after errors.
 4. Every day is **evaluated** afterwards. While nothing heated, the real room temperature is the truth (minutes too cold outside airing phases). Once a circuit ran, the decision itself kept the room warm; then a virtual room that keeps cooling with the learned rate and no heating decides. Error A (no heating although needed) and error B (heating without need) adapt `theta` and `puffer`. Days under a manual override are not learned from.
 
@@ -45,8 +45,13 @@ On a no-heating day all circuits stay off except frost protection and the option
 ### AI check (Claude)
 
 * Only on heating days within the heating period. It receives a compact summary per area (actual, target, learned values, statistics since the last check) and returns parameter adjustments as JSON.
+* **Goal:** as little heat as possible without any area falling below its target. Comfort is a hard limit, not something to trade. Besides the minutes too cold the AI therefore receives:
+  * **Overheating** (`over_kh`): Kelvin hours more than 0.2 K above the target while the circuit runs and up to 4 hours after switch-off (heat the heating delivered in excess). Warmth from the sun alone on a day without heating does not count. The share with sun (`sun_over_kh`, PV from 0.3 kW) shows whether the sun factor is too low.
+  * **Heating effort per demand** (`on_per_kh`): heating minutes per Kelvin hour of difference between target and outdoor temperature, so checks in different weather can be compared.
+  * **Average run time** per switch-on.
+  * **History of the last 6 checks** with their figures and the changes made. The AI can judge whether a change helped and otherwise undo it. Resetting an area or changing a start value deletes its history.
 * Adjustable parameters: switch-on and switch-off hysteresis, overshoot factor, lead time factor, sun factor, window delay, recovery time correction, `puffer` and `theta`. Every value is clamped to minimum, maximum and a maximum change per check (all configurable).
-* **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, the AI changed something significant, or you change the target or settings. A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
+* **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, an area was clearly overheated (more than 0.5 Kelvin hours per day, pro rata), the AI changed something significant, or you change the target or settings. A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
 * **Costs:** token usage times the configured prices. Every call is estimated beforehand; once the monthly budget is reached there are no calls until the month changes.
 * **Failures:** on errors, timeouts or invalid answers the control continues with the last learned values. The API key never appears in the log and is redacted in diagnostics.
 
