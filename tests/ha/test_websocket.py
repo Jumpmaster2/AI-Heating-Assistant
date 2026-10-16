@@ -42,6 +42,9 @@ async def test_config_payload(hass: HomeAssistant, base_states, hass_ws_client) 
     storage = next(a for a in cfg["areas"] if a["title"] == "Storage room")
     assert living["entities"]["climate"].startswith("climate.")
     assert "climate" not in storage["entities"]
+    assert living["entities"]["heat_rate"] == "sensor.living_room_heat_up_rate"
+    assert living["entities"]["learning_progress"].startswith("sensor.")
+    assert "learning_progress" not in storage["entities"]
     assert storage["entities"]["ventilation"].startswith("sensor.")
     spec = cfg["option_specs"]["frost_temperature"]
     assert (spec["selector"], spec["min"], spec["max"]) == ("number", 0, 15)

@@ -70,6 +70,7 @@ After the setup the sidebar has the page **AI Heating Assistant** (administrator
 
 * **Overview:** heating day with phase and reason, manual heating day (automatic, heat today, no heating today), all areas with temperature, target, status and ventilation recommendation (click opens the thermostat), switch AI active, last and next AI check, next nightly run, last heating day decision with its source (AI, rule, both agree), AI costs this month, notes (missing entities, last AI error, budget reached) and a summary of the settings.
 * **Heating areas:** all areas as a table; click to edit, add and delete.
+* **Learned values:** a compact tile per area with a heating circuit with learning progress, heat-up and cooling rate, dead time, overshoot, recovery after airing, outdoor and sun influence; the control parameters the AI may adjust can be expanded. Plus the heating day rule (`theta`, evaluated days).
 * **General, Emergency & ventilation, AI, Heating day decision:** all settings by topic in cards, each card is saved on its own. **AI** also holds the API key (checked before saving, the stored key is never shown) and the AI limits.
 
 The setup itself is still a dialog.

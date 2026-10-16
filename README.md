@@ -70,6 +70,7 @@ Nach der Einrichtung gibt es in der Seitenleiste die Seite **AI Heating Assistan
 
 * **Übersicht:** Heiztag mit Phase und Begründung, Heiztag manuell (Automatik, Heute heizen, Heute nicht heizen), alle Bereiche mit Temperatur, Sollwert, Status und Lüftungsempfehlung (anklicken öffnet das Thermostat), Schalter KI aktiv, letzte und nächste KI-Prüfung, nächster Nachtlauf, letzte Heiztag-Entscheidung mit Quelle (KI, Regel, beide einig), KI-Kosten im Monat, Hinweise (fehlende Entitäten, letzter KI-Fehler, Budget erreicht) und eine Zusammenfassung der Einstellungen.
 * **Heizbereiche:** alle Bereiche als Tabelle; anklicken zum Bearbeiten, hinzufügen und löschen.
+* **Lernwerte:** je Bereich mit Heizkreis eine kompakte Kachel mit Lernstand, Aufheiz- und Abkühlrate, Totzeit, Überschwingen, Erholung nach Lüften, Einfluss Außentemperatur und Sonne; aufklappbar die von der KI anpassbaren Regelparameter. Dazu die Heiztag-Regel (`theta`, bewertete Tage).
 * **Allgemein, Notfall & Lüftung, KI, Heiztag-Entscheidung:** alle Einstellungen nach Themen in Karten, jede Karte wird für sich gespeichert. Unter **KI** auch der API-Key (wird vor dem Speichern geprüft, der gespeicherte Key wird nie angezeigt) und die KI-Grenzen.
 
 Die Einrichtung selbst läuft weiterhin als Dialog.
