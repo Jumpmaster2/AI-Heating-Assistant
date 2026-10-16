@@ -68,7 +68,7 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 
 After the setup the sidebar has the page **AI Heating Assistant** (administrators only). **Configure** under Settings > Devices & services leads straight there.
 
-* **Overview:** heating day with phase and reason, manual heating day (automatic, heat today, no heating today), all areas with temperature, target, status and ventilation recommendation (click opens the thermostat), switch AI active, last and next AI check, AI costs this month, notes (missing entities, last AI error, budget reached) and a summary of the settings.
+* **Overview:** heating day with phase and reason, manual heating day (automatic, heat today, no heating today), all areas with temperature, target, status and ventilation recommendation (click opens the thermostat), switch AI active, last and next AI check, next nightly run, last heating day decision with its source (AI, rule, both agree), AI costs this month, notes (missing entities, last AI error, budget reached) and a summary of the settings.
 * **Heating areas:** all areas as a table; click to edit, add and delete.
 * **General, Emergency & ventilation, AI, Heating day decision:** all settings by topic in cards, each card is saved on its own. **AI** also holds the API key (checked before saving, the stored key is never shown) and the AI limits.
 
@@ -126,7 +126,7 @@ Start values apply until something has been learned. If you change a start value
 
 Global (device "AI Heating Assistant"):
 
-* Binary sensor **Heating day** (with source, reason, confidence, phase)
+* Binary sensor **Heating day** (with source, reason, confidence, phase, time of the decision `decided_at` and next nightly run `next_decision`)
 * Sensors **Decision phase**, **Last AI check** (with summary and last error), **Next AI check**, **AI costs this month**
 * Switch **AI enabled**
 * Select **Heating day override** (automatic, heat today, no heating today)

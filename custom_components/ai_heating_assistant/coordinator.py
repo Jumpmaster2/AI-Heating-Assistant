@@ -1101,6 +1101,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             self.hass, self.async_decide_heating_day("nightly"), f"{DOMAIN} nightly"
         )
 
+    @property
+    def next_nightly(self) -> datetime:
+        """Time of the next nightly run (UTC)."""
+        return self._valid_until()
+
     def _valid_until(self) -> datetime:
         nightly = _parse_time(str(self.opt(CONF_NIGHTLY_TIME)))
         local_now = dt_util.now()
@@ -1168,6 +1173,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             self.day_state["current"] = {
                 "date": local_today,
                 "valid_until": self._valid_until().isoformat(),
+                "decided_at": now.isoformat(),
+                "trigger": trigger,
                 "heat": False,
                 "source": "season",
                 "phase": self.phase,

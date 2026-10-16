@@ -123,6 +123,22 @@ async def test_out_of_season_frost_only(
     assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
 
 
+async def test_nightly_run_out_of_season(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-07-01 02:58:00+02:00")
+    await _setup(hass, make_entry())
+    day = hass.states.get("binary_sensor.ai_heating_assistant_heating_day")
+    assert day.attributes["decided_at"] is None
+    assert day.attributes["next_decision"] == "2026-07-01T01:00:00+00:00"
+    await _advance(hass, freezer, 3)
+    day = hass.states.get("binary_sensor.ai_heating_assistant_heating_day")
+    assert day.state == "off"
+    assert day.attributes["source"] == "season"
+    assert day.attributes["decided_at"] == "2026-07-01T01:00:00+00:00"
+    assert day.attributes["next_decision"] == "2026-07-02T01:00:00+00:00"
+
+
 async def test_ventilation_only_area(
     hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
 ) -> None:
@@ -151,6 +167,9 @@ async def test_nightly_ai_says_no(
     assert state.state == "off"
     assert state.attributes["source"] == "ai"
     assert state.attributes["critical_area"] == "Living room"
+    # decided at setup, next nightly run at 03:00 local time
+    assert state.attributes["decided_at"] == "2026-11-16T09:00:00+00:00"
+    assert state.attributes["next_decision"] == "2026-11-17T02:00:00+00:00"
     await _advance(hass, freezer, 11)
     assert hass.states.get("sensor.living_room_status").state == "no_heating_day"
     assert hass.states.get("input_boolean.heating_circuit_1").state == "off"

@@ -42,6 +42,8 @@ class HeatingDaySensor(GlobalEntity, BinarySensorEntity):
         current = self.coordinator.current_day or {}
         return {
             "date": current.get("date"),
+            "decided_at": current.get("decided_at"),
+            "next_decision": self.coordinator.next_nightly.isoformat(),
             "source": current.get("source"),
             "phase": current.get("phase"),
             "confidence": current.get("confidence"),
