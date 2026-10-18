@@ -683,6 +683,9 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const heatState = this._state(ent.heat_today);
     const kwh = (value) => (value === null || value === undefined || value === "" || value === "unknown" || value === "unavailable" ? ui.none : `${this._num(value, 1)} kWh`);
     const ha = heatState?.attributes || {};
+    const meterState = this._state(o.heat_meter);
+    const meterValue = this._ok(meterState) ? `${this._num(meterState.state, 3)} ${meterState.attributes.unit_of_measurement || ""}`.trim() : ui.none;
+    const meterReading = ha.meter_reading_at ? `${meterValue} · ${this._time(ha.meter_reading_at)}` : meterValue;
     const heatCard = ent.heat_today && o.heat_meter
       ? `
       <div class="card">
@@ -691,7 +694,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
           <div class="row"><ha-icon icon="mdi:calendar-today"></ha-icon><span class="grow">${esc(ui.heatToday)}</span><span class="muted">${esc(kwh(heatState?.state))}</span></div>
           <div class="row"><ha-icon icon="mdi:calendar-arrow-left"></ha-icon><span class="grow">${esc(ui.heatYesterday)}</span><span class="muted">${esc(kwh(ha.yesterday))}</span></div>
           <div class="row"><ha-icon icon="mdi:calendar-month-outline"></ha-icon><span class="grow">${esc(ui.heatMonth)}</span><span class="muted">${esc(kwh(ha.month))}</span></div>
-          <div class="row"><ha-icon icon="mdi:counter"></ha-icon><span class="grow">${esc(ui.heatReading)}</span><span class="muted">${esc(ha.meter_reading_at ? this._time(ha.meter_reading_at) : ui.none)}</span></div>
+          <div class="row"><ha-icon icon="mdi:counter"></ha-icon><span class="grow">${esc(ui.heatReading)}</span><span class="muted">${esc(meterReading)}</span></div>
         </div>
       </div>`
       : "";
