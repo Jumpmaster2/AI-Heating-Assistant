@@ -304,6 +304,42 @@ async def test_no_heat_sensor_without_meter(
     assert hass.states.get("sensor.ai_heating_assistant_heat_today") is None
 
 
+async def test_heat_meter_reading_after_midnight_counts_for_the_new_day(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.heat_meter", "12.500", {"unit_of_measurement": "MWh"})
+    await _setup(hass, make_entry(heat_meter="sensor.heat_meter"))
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+
+    def reading(at: str, value: str) -> None:
+        freezer.move_to(at)
+        hass.states.async_set("sensor.heat_meter", value, {"unit_of_measurement": "MWh"})
+        coordinator._update_meter(dt_util.utcnow().timestamp(), 0.0)
+
+    reading("2026-11-16 23:55:00+01:00", "12.510")
+    reading("2026-11-17 00:01:00+01:00", "12.513")
+    assert coordinator.meter.closed["yesterday"] == pytest.approx(10.0)
+    assert coordinator.meter.kwh_since("today") == pytest.approx(3.0)
+
+
+async def test_heat_meter_removed_starts_again(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.heat_meter", "12.500", {"unit_of_measurement": "MWh"})
+    await _setup(hass, make_entry(heat_meter="sensor.heat_meter"))
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    assert coordinator.meter.last is not None
+    opt = coordinator.opt
+    with patch.object(
+        coordinator, "opt", side_effect=lambda key: None if key == "heat_meter" else opt(key)
+    ):
+        coordinator._update_meter(dt_util.utcnow().timestamp(), 1.0)
+    assert coordinator.meter.last is None
+    assert coordinator.meter.entity == ""
+
+
 async def test_budget_blocks_calls(
     hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
 ) -> None:
