@@ -731,6 +731,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         """Heating demand of this tick and the latest heat meter reading."""
         entity_id = self.opt(CONF_HEAT_METER)
         if not entity_id:
+            if self.meter.entity:
+                self.meter = HeatMeter()  # set again later: the gap would count as one span
             return
         if self.meter.entity != entity_id:
             self.meter = HeatMeter(entity=entity_id)  # readings of another meter do not compare
@@ -741,17 +743,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 max(0.0, (a.effective_target or a.target) - self.outdoor_temp) for a in controlled
             ) / len(controlled)
             self.meter.add_demand(diff * minutes / 60)
-        value = self._float(entity_id)
-        state = self._state(entity_id)
-        unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
-        kwh = None if value is None else to_kwh(value, unit)
-        if kwh is not None:
-            self.meter.update(kwh, ts)
-            for name in ("check", "day"):  # periods start with the first reading
-                if name not in self.meter.baselines:
-                    self.meter.rebase(name)
-        now = dt_util.now()
-        today = now.date()
+        # Calendar periods roll before taking the value: a reading that arrives after
+        # midnight already belongs to the new day.
+        today = dt_util.now().date()
         self.meter.roll(
             "today", today.isoformat(), "yesterday", (today - timedelta(days=1)).isoformat()
         )
@@ -762,6 +756,15 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "last_month",
             (first - timedelta(days=1)).strftime("%Y-%m"),
         )
+        value = self._float(entity_id)
+        state = self._state(entity_id)
+        unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
+        kwh = None if value is None else to_kwh(value, unit)
+        if kwh is not None:
+            self.meter.update(kwh, ts)
+            for name in ("check", "day", "today", "month"):  # periods start with the first reading
+                if name not in self.meter.baselines:
+                    self.meter.rebase(name)
 
     def _heat_payload(self) -> dict[str, Any] | None:
         """Measured heat since the last check, between two meter readings."""
