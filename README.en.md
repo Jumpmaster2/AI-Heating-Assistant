@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.9.0. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.10.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -55,6 +55,16 @@ On a no-heating day all circuits stay off except frost protection and the option
 * **Costs:** token usage times the configured prices. Every call is estimated beforehand; once the monthly budget is reached there are no calls until the month changes.
 * **Failures:** on errors, timeouts or invalid answers the control continues with the last learned values. The API key never appears in the log and is redacted in diagnostics.
 
+### Heat meter
+
+Optional. With a heat meter the AI sees the heat actually used instead of only the run time of the circuits.
+
+* Consumption is always taken **between two meter readings**, never between arbitrary points in time. With every reading the integration keeps the heating demand accumulated until then (Kelvin hours of target minus outdoor temperature, mean over the areas). Consumption and demand thus cover exactly the same span, even if the meter reports only every few hours and in coarse steps.
+* **AI check:** `heat` with kWh, hours and `kwh_per_kh` (kWh per Kelvin hour of demand, the best efficiency measure) since the last check; spans under one hour are not reported. `kwh_per_kh` is also in the check history.
+* **Nightly run:** kWh per past heating day in the history.
+* **Dashboard:** card **Heat** with today, yesterday, this month and the time of the last meter reading. A day runs from the last reading before midnight to the last one before the next midnight; "yesterday" is missing after a skipped day.
+* If the reading falls (new meter) or another meter is chosen, counting starts again.
+
 ### Ventilation recommendation
 
 Per area (also without heating circuit) from the absolute humidity inside and outside (or of a reference room):
@@ -91,6 +101,7 @@ The setup itself is still a dialog.
 | Weather entity | | optional, forecast for the nightly run and the expected sun |
 | PV power sensor | | optional, sunshine indicator (W or kW) |
 | PV forecast sensor | | optional, only with the PV power sensor: energy of the next hour (Wh or kWh) or power in one hour (W or kW); without it the weather forecast is used |
+| Heat meter | | optional, meter reading of the circuits controlled here (Wh, kWh, MWh, MJ or GJ); seldom and coarse readings are fine, see [Heat meter](#heat-meter) |
 | Heating period | 01.10. to 31.03. | format DD.MM. |
 | Frost protection | 7 °C | always applies |
 | Vacation entities | | "on" = vacation |
@@ -136,6 +147,7 @@ Global (device "AI Heating Assistant"):
 
 * Binary sensor **Heating day** (with source, reason, confidence, phase, time of the decision `decided_at` and next nightly run `next_decision`)
 * Sensors **Decision phase**, **Last AI check** (with summary and last error), **Next AI check**, **AI costs this month**
+* Sensor **Heat today** (only with a heat meter, kWh; attributes `yesterday`, `month`, `last_month`, `meter_reading_at`)
 * Switch **AI enabled**
 * Select **Heating day override** (automatic, heat today, no heating today)
 

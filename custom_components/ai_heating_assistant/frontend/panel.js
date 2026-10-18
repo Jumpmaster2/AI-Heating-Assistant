@@ -89,6 +89,11 @@ const UI = {
       season: "außerhalb der Heizperiode",
     },
     costMonth: "Kosten im Monat",
+    heat: "Wärme",
+    heatToday: "Heute",
+    heatYesterday: "Gestern",
+    heatMonth: "Diesen Monat",
+    heatReading: "Letzter Zählerwert",
     noApiKey: "Kein API-Key: nur lokale Regelung",
     budgetReached: "Monatsbudget erreicht, keine KI-Abfragen bis zum Monatswechsel",
     lastError: "Letzter KI-Fehler",
@@ -200,6 +205,11 @@ const UI = {
       season: "outside the heating period",
     },
     costMonth: "Costs this month",
+    heat: "Heat",
+    heatToday: "Today",
+    heatYesterday: "Yesterday",
+    heatMonth: "This month",
+    heatReading: "Last meter reading",
     noApiKey: "No API key: local control only",
     budgetReached: "Monthly budget reached, no AI requests until the next month",
     lastError: "Last AI error",
@@ -246,7 +256,7 @@ const TABS = [
 // Settings cards per tab (types and ranges come from the option specs)
 const SETTINGS = {
   general: [
-    { id: "sensors", icon: "mdi:thermometer", fields: ["outdoor_temperature", "outdoor_humidity", "weather", "pv_power", "pv_forecast"] },
+    { id: "sensors", icon: "mdi:thermometer", fields: ["outdoor_temperature", "outdoor_humidity", "weather", "pv_power", "pv_forecast", "heat_meter"] },
     { id: "season", icon: "mdi:calendar-range", fields: ["season_start", "season_end", "frost_temperature"] },
     { id: "vacation", icon: "mdi:bag-suitcase-outline", fields: ["vacation_entities", "vacation_temperature", "return_entity", "preheat_reserve"] },
   ],
@@ -669,6 +679,23 @@ class AiHeatingAssistantPanel extends HTMLElement {
         </div>
       </div>`;
 
+    // heat meter
+    const heatState = this._state(ent.heat_today);
+    const kwh = (value) => (value === null || value === undefined || value === "" || value === "unknown" || value === "unavailable" ? ui.none : `${this._num(value, 1)} kWh`);
+    const ha = heatState?.attributes || {};
+    const heatCard = ent.heat_today && o.heat_meter
+      ? `
+      <div class="card">
+        <h2><ha-icon icon="mdi:heat-wave"></ha-icon>${esc(ui.heat)}</h2>
+        <div class="rows">
+          <div class="row"><ha-icon icon="mdi:calendar-today"></ha-icon><span class="grow">${esc(ui.heatToday)}</span><span class="muted">${esc(kwh(heatState?.state))}</span></div>
+          <div class="row"><ha-icon icon="mdi:calendar-arrow-left"></ha-icon><span class="grow">${esc(ui.heatYesterday)}</span><span class="muted">${esc(kwh(ha.yesterday))}</span></div>
+          <div class="row"><ha-icon icon="mdi:calendar-month-outline"></ha-icon><span class="grow">${esc(ui.heatMonth)}</span><span class="muted">${esc(kwh(ha.month))}</span></div>
+          <div class="row"><ha-icon icon="mdi:counter"></ha-icon><span class="grow">${esc(ui.heatReading)}</span><span class="muted">${esc(ha.meter_reading_at ? this._time(ha.meter_reading_at) : ui.none)}</span></div>
+        </div>
+      </div>`
+      : "";
+
     // notes
     const warnings = [];
     if (cost?.attributes?.budget_reached) warnings.push(ui.budgetReached);
@@ -704,7 +731,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
             .join("")}
         </div>
       </div>`;
-    return `<div class="grid">${status}${areas}${ai}${info}${glance}</div>`;
+    return `<div class="grid">${status}${areas}${ai}${heatCard}${info}${glance}</div>`;
   }
 
   _missingEntities() {

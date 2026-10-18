@@ -55,6 +55,7 @@ ENTITY_KEYS = {
     "ai_last_check": "sensor",
     "ai_next_check": "sensor",
     "ai_cost_month": "sensor",
+    "heat_today": "sensor",
     "ai_enabled": "switch",
     "heating_day_override": "select",
 }

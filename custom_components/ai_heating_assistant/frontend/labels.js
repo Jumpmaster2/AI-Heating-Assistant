@@ -22,6 +22,10 @@ export const LABELS = {
     "PV-Prognosesensor",
     "Optional, nur zusammen mit dem PV-Leistungssensor. Erwartete PV-Energie der nächsten Stunde (Wh oder kWh, z. B. Forecast.Solar) oder erwartete Leistung in einer Stunde (W oder kW). Ohne diesen Sensor wird die Sonne aus der stündlichen Wettervorhersage und dem Sonnenstand geschätzt."
    ],
+   "heat_meter": [
+    "Wärmezähler",
+    "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem."
+   ],
    "season_start": [
     "Beginn der Heizperiode (TT.MM.)",
     "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt."
@@ -382,6 +386,10 @@ export const LABELS = {
    "pv_forecast": [
     "PV forecast sensor",
     "Optional, only together with the PV power sensor. Expected PV energy of the next hour (Wh or kWh, e.g. Forecast.Solar) or expected power in one hour (W or kW). Without it the sun is estimated from the hourly weather forecast and the sun position."
+   ],
+   "heat_meter": [
+    "Heat meter",
+    "Optional. Meter reading of the heat meter of the circuits controlled here (Wh, kWh, MWh, MJ or GJ, e.g. total_increasing). The AI then sees the measured heat; it is also shown in the dashboard. Seldom and coarse readings are fine."
    ],
    "season_start": [
     "Heating period start (DD.MM.)",

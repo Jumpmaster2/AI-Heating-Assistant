@@ -10,6 +10,7 @@
           "weather": "Wetter-Entität",
           "pv_power": "PV-Leistungssensor",
           "pv_forecast": "PV-Prognosesensor",
+          "heat_meter": "Wärmezähler",
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
           "frost_temperature": "Frostschutz-Mindesttemperatur"
@@ -20,6 +21,7 @@
           "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt.",
           "pv_power": "Optional. PV-Leistung (W oder kW) als Indikator für Sonne. Daraus wird der Sonneneinfluss je Bereich gelernt.",
           "pv_forecast": "Optional, nur zusammen mit dem PV-Leistungssensor. Erwartete PV-Energie der nächsten Stunde (Wh oder kWh, z. B. Forecast.Solar) oder erwartete Leistung in einer Stunde (W oder kW). Ohne diesen Sensor wird die Sonne aus der stündlichen Wettervorhersage und dem Sonnenstand geschätzt.",
+          "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
           "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat."
@@ -99,6 +101,7 @@
           "weather": "Wetter-Entität",
           "pv_power": "PV-Leistungssensor",
           "pv_forecast": "PV-Prognosesensor",
+          "heat_meter": "Wärmezähler",
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
           "frost_temperature": "Frostschutz-Mindesttemperatur"
@@ -109,6 +112,7 @@
           "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt.",
           "pv_power": "Optional. PV-Leistung (W oder kW) als Indikator für Sonne. Daraus wird der Sonneneinfluss je Bereich gelernt.",
           "pv_forecast": "Optional, nur zusammen mit dem PV-Leistungssensor. Erwartete PV-Energie der nächsten Stunde (Wh oder kWh, z. B. Forecast.Solar) oder erwartete Leistung in einer Stunde (W oder kW). Ohne diesen Sensor wird die Sonne aus der stündlichen Wettervorhersage und dem Sonnenstand geschätzt.",
+          "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
           "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat."
@@ -570,6 +574,23 @@
       },
       "ai_cost_month": {
         "name": "KI-Kosten im Monat"
+      },
+      "heat_today": {
+        "name": "Wärme heute",
+        "state_attributes": {
+          "yesterday": {
+            "name": "Gestern"
+          },
+          "month": {
+            "name": "Diesen Monat"
+          },
+          "last_month": {
+            "name": "Letzter Monat"
+          },
+          "meter_reading_at": {
+            "name": "Letzter Zählerwert"
+          }
+        }
       }
     },
     "binary_sensor": {

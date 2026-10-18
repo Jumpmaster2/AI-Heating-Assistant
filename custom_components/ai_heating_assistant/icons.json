@@ -18,7 +18,8 @@
       "decision_phase": { "default": "mdi:account-switch-outline" },
       "ai_last_check": { "default": "mdi:robot-outline" },
       "ai_next_check": { "default": "mdi:robot-confused-outline" },
-      "ai_cost_month": { "default": "mdi:cash" }
+      "ai_cost_month": { "default": "mdi:cash" },
+      "heat_today": { "default": "mdi:heat-wave" }
     },
     "switch": {
       "ai_enabled": { "default": "mdi:robot", "state": { "off": "mdi:robot-off" } }

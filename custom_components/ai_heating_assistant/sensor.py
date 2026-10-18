@@ -13,11 +13,18 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTemperature, UnitOfTime
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfEnergy,
+    UnitOfTemperature,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from .const import CONF_HEAT_METER
 from .coordinator import AiHeatingConfigEntry, Area, HeatingCoordinator
 from .entity import AreaEntity, GlobalEntity
 from .logic.controller import AreaStatus
@@ -159,6 +166,8 @@ async def async_setup_entry(
             AiCostSensor(coordinator),
         ]
     )
+    if coordinator.opt(CONF_HEAT_METER):
+        async_add_entities([HeatTodaySensor(coordinator)])
     for area in coordinator.areas.values():
         async_add_entities(
             [
@@ -270,4 +279,33 @@ class AiCostSensor(GlobalEntity, SensorEntity):
             "output_tokens": budget.output_tokens,
             "budget": float(self.coordinator.opt("monthly_budget")),
             "budget_reached": budget.blocked,
+        }
+
+
+class HeatTodaySensor(GlobalEntity, SensorEntity):
+    """Heat measured by the heat meter today (between meter readings), more in attributes.
+
+    No state class: the meter itself already feeds the long-term statistics.
+    """
+
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, coordinator: HeatingCoordinator) -> None:
+        super().__init__(coordinator, "heat_today")
+
+    @property
+    def native_value(self) -> float | None:
+        return self.coordinator.meter.kwh_since("today")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        meter = self.coordinator.meter
+        last = meter.last
+        return {
+            "yesterday": meter.closed.get("yesterday"),
+            "month": meter.kwh_since("month"),
+            "last_month": meter.closed.get("last_month"),
+            "meter_reading_at": dt_util.utc_from_timestamp(last.ts).isoformat() if last else None,
         }
