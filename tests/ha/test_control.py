@@ -265,6 +265,45 @@ async def test_overheating_is_counted_and_shown_to_the_ai(
     assert all("a1" not in h["areas"] for h in coordinator.ai_state["check_history"])
 
 
+async def test_heat_meter_feeds_check_and_dashboard(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.heat_meter", "12.500", {"unit_of_measurement": "MWh"})
+    nightly = (
+        {"heating_day": True, "confidence": 90, "reason": "Cold.", "critical_area": ""},
+        USAGE,
+    )
+    check = ({"adjustments": [], "summary": "", "confidence": 60}, USAGE)
+    with patch(STRUCTURED, side_effect=[nightly, check]) as mock:
+        await _setup(hass, make_entry(api_key="test-key", heat_meter="sensor.heat_meter"))
+        coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+        await _advance(hass, freezer, 120)
+        hass.states.async_set("sensor.heat_meter", "12.520", {"unit_of_measurement": "MWh"})
+        await _advance(hass, freezer, 1)
+        await coordinator.async_run_ai_check("manual")
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert mock.call_count == 2
+        payload = json.loads(mock.call_args.args[1])
+    heat = payload["heat"]
+    assert heat["kwh"] == pytest.approx(20.0)
+    assert heat["hours"] == pytest.approx(2.0, abs=0.1)
+    # demand: target 21 °C, outdoor 5 °C for about two hours
+    assert heat["kwh_per_kh"] == pytest.approx(20 / 32, rel=0.05)
+    assert coordinator.ai_state["check_history"][-1]["kwh_per_kh"] == heat["kwh_per_kh"]
+    today = hass.states.get("sensor.ai_heating_assistant_heat_today")
+    assert float(today.state) == pytest.approx(20.0)
+    assert today.attributes["month"] == pytest.approx(20.0)
+
+
+async def test_no_heat_sensor_without_meter(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    assert hass.states.get("sensor.ai_heating_assistant_heat_today") is None
+
+
 async def test_budget_blocks_calls(
     hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
 ) -> None:

@@ -46,6 +46,7 @@ from .const import (
     CONF_EMERGENCY_QUIET,
     CONF_FALLBACK_ERRORS,
     CONF_FROST_TEMP,
+    CONF_HEAT_METER,
     CONF_HUMIDITY_SENSOR,
     CONF_LIMITS,
     CONF_MAX_OUTPUT_TOKENS,
@@ -137,6 +138,7 @@ from .logic.controller import (
     preheat_start,
     step,
 )
+from .logic.energy import HeatMeter, to_kwh
 from .logic.learning import DEAD_TIME_BOUNDS, P_START, RECOVERY_BOUNDS, AreaLearner, Sample
 from .logic.physics import clamp, in_season, parse_day_month
 from .logic.prompts import check_messages, nightly_messages, r
@@ -278,6 +280,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.day_state: dict[str, Any] = {}
         self.ai_state: dict[str, Any] = {}
         self.budget = Budget()
+        self.meter = HeatMeter()
         self.client: ClaudeClient | None = None
         self.global_device_id: str | None = None
         self.outdoor_temp: float | None = None
@@ -401,6 +404,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.day_state = stored.get("day", {})
         self.ai_state = stored.get("ai", {})
         self.budget = Budget.from_dict(self.ai_state.get("budget"))
+        self.meter = HeatMeter.from_dict(stored.get("meter"))
         scale = (stored.get("sun") or {}).get("scale")
         self.sun_scale = SunScale(float(scale) if isinstance(scale, int | float) else None)
         stored_areas: dict[str, Any] = stored.get("areas", {})
@@ -677,6 +681,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "day": self.day_state,
             "ai": self.ai_state,
             "sun": {"scale": self.sun_scale.value},
+            "meter": self.meter.as_dict(),
         }
 
     def diagnostics(self) -> dict[str, Any]:
@@ -708,6 +713,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
         for area in self.areas.values():
             await self._tick_area(area, ts, minutes, heating_day, return_ts)
+        self._update_meter(ts, minutes)
 
         # Missing or expired decision (first start, HA was down at the nightly run).
         # Started after the areas were read so the decision sees current values.
@@ -720,6 +726,55 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if self._tick_count % SAVE_EVERY_TICKS == 0:
             self._save()
         return self._tick_count
+
+    def _update_meter(self, ts: float, minutes: float) -> None:
+        """Heating demand of this tick and the latest heat meter reading."""
+        entity_id = self.opt(CONF_HEAT_METER)
+        if not entity_id:
+            return
+        if self.meter.entity != entity_id:
+            self.meter = HeatMeter(entity=entity_id)  # readings of another meter do not compare
+        controlled = [a for a in self.areas.values() if a.has_circuit and a.hvac_on]
+        if self.season_active and controlled and self.outdoor_temp is not None and minutes > 0:
+            # The meter covers all circuits: the demand is the mean over the areas.
+            diff = sum(
+                max(0.0, (a.effective_target or a.target) - self.outdoor_temp) for a in controlled
+            ) / len(controlled)
+            self.meter.add_demand(diff * minutes / 60)
+        value = self._float(entity_id)
+        state = self._state(entity_id)
+        unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
+        kwh = None if value is None else to_kwh(value, unit)
+        if kwh is not None:
+            self.meter.update(kwh, ts)
+            for name in ("check", "day"):  # periods start with the first reading
+                if name not in self.meter.baselines:
+                    self.meter.rebase(name)
+        now = dt_util.now()
+        today = now.date()
+        self.meter.roll(
+            "today", today.isoformat(), "yesterday", (today - timedelta(days=1)).isoformat()
+        )
+        first = today.replace(day=1)
+        self.meter.roll(
+            "month",
+            first.strftime("%Y-%m"),
+            "last_month",
+            (first - timedelta(days=1)).strftime("%Y-%m"),
+        )
+
+    def _heat_payload(self) -> dict[str, Any] | None:
+        """Measured heat since the last check, between two meter readings."""
+        if not self.opt(CONF_HEAT_METER):
+            return None
+        span = self.meter.since("check")
+        if span is None:
+            return None
+        return {
+            "kwh": r(span.kwh, 1),
+            "hours": r(span.hours, 1),
+            "kwh_per_kh": r(span.kwh_per_kh, 3),
+        }
 
     def _decision_expired(self, now: datetime) -> bool:
         current = self.current_day
@@ -1193,6 +1248,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if new_day and current is not None and not current.get("evaluated"):
             self._evaluate(current)
         if new_day:
+            self.meter.rebase("day")
             # A manual override only applies to the day it was set on; one set after
             # midnight for the day about to be decided stays.
             if self.day_state.get("override_date") != local_today:
@@ -1336,6 +1392,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "on_min": round(sum(s.relay_min for s in stats.values())),
             "over_kh": round(sum(s.over_kh for s in stats.values()), 2),
         }
+        if self.opt(CONF_HEAT_METER) and (kwh := self.meter.kwh_since("day")) is not None:
+            record.extra["kwh"] = kwh
         record.err_final = hd.error_of(record.final, need)
         record.err_rule = hd.error_of(record.rule, need)
         record.err_ai = hd.error_of(record.ai, need)
@@ -1430,7 +1488,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     **{
                         k: v
                         for k, v in (h.get("extra") or {}).items()
-                        if k in ("on_min", "over_kh")
+                        if k in ("on_min", "over_kh", "kwh")
                     },
                 }
                 for h in history
@@ -1595,6 +1653,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "forecast_12h": _hourly_compact(hourly, 12),
             "theta": self.theta,
             "areas": areas_payload,
+            "heat": self._heat_payload(),
             "history": self.ai_state.get("check_history", []),
             "limits": {k: [v["min"], v["max"], v["step"]] for k, v in limits.items()},
         }
@@ -1653,21 +1712,29 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     summary=result.summary,
                     hours=round(hours, 1),
                 )
-                self._add_check_history(areas_payload, result.applied)
+                self._add_check_history(areas_payload, result.applied, payload["heat"])
+                self.meter.rebase("check")
                 for area in controlled:
                     area.check = _new_check_stats()
                 return
         # failure or no answer: try again after the base interval
         self._schedule_check(now + timedelta(hours=float(self.opt(CONF_CHECK_INTERVAL))))
 
-    def _add_check_history(self, areas_payload: list[dict[str, Any]], applied: list[Any]) -> None:
+    def _add_check_history(
+        self,
+        areas_payload: list[dict[str, Any]],
+        applied: list[Any],
+        heat: dict[str, Any] | None,
+    ) -> None:
         """Keep the key figures of this check and its changes for the next checks."""
         keys = ("cold_min", "over_kh", "sun_over_kh", "on_per_kh", "cycles")
-        entry = {
+        entry: dict[str, Any] = {
             "t": dt_util.now().strftime("%m-%d %H:%M"),
             "areas": {a["id"]: {k: a["stats"].get(k) for k in keys} for a in areas_payload},
             "changes": [f"{a.area} {a.parameter} {a.old:g}>{a.new:g}" for a in applied],
         }
+        if heat is not None:
+            entry["kwh_per_kh"] = heat["kwh_per_kh"]
         history = [*self.ai_state.get("check_history", []), entry]
         self.ai_state["check_history"] = history[-CHECK_HISTORY:]
 

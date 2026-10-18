@@ -10,6 +10,7 @@
           "weather": "Weather entity",
           "pv_power": "PV power sensor",
           "pv_forecast": "PV forecast sensor",
+          "heat_meter": "Heat meter",
           "season_start": "Heating period start (DD.MM.)",
           "season_end": "Heating period end (DD.MM.)",
           "frost_temperature": "Frost protection temperature"
@@ -20,6 +21,7 @@
           "weather": "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun.",
           "pv_power": "Optional. PV power (W or kW) as an indicator for sunshine. The solar gain per area is learned from it.",
           "pv_forecast": "Optional, only together with the PV power sensor. Expected PV energy of the next hour (Wh or kWh, e.g. Forecast.Solar) or expected power in one hour (W or kW). Without it the sun is estimated from the hourly weather forecast and the sun position.",
+          "heat_meter": "Optional. Meter reading of the heat meter of the circuits controlled here (Wh, kWh, MWh, MJ or GJ, e.g. total_increasing). The AI then sees the measured heat; it is also shown in the dashboard. Seldom and coarse readings are fine.",
           "season_start": "Outside the heating period all circuits stay off (frost protection only) and the AI is not asked.",
           "season_end": "Last day of the heating period, may be in the next year (e.g. 31.03.).",
           "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat."
@@ -99,6 +101,7 @@
           "weather": "Weather entity",
           "pv_power": "PV power sensor",
           "pv_forecast": "PV forecast sensor",
+          "heat_meter": "Heat meter",
           "season_start": "Heating period start (DD.MM.)",
           "season_end": "Heating period end (DD.MM.)",
           "frost_temperature": "Frost protection temperature"
@@ -109,6 +112,7 @@
           "weather": "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun.",
           "pv_power": "Optional. PV power (W or kW) as an indicator for sunshine. The solar gain per area is learned from it.",
           "pv_forecast": "Optional, only together with the PV power sensor. Expected PV energy of the next hour (Wh or kWh, e.g. Forecast.Solar) or expected power in one hour (W or kW). Without it the sun is estimated from the hourly weather forecast and the sun position.",
+          "heat_meter": "Optional. Meter reading of the heat meter of the circuits controlled here (Wh, kWh, MWh, MJ or GJ, e.g. total_increasing). The AI then sees the measured heat; it is also shown in the dashboard. Seldom and coarse readings are fine.",
           "season_start": "Outside the heating period all circuits stay off (frost protection only) and the AI is not asked.",
           "season_end": "Last day of the heating period, may be in the next year (e.g. 31.03.).",
           "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat."
@@ -570,6 +574,23 @@
       },
       "ai_cost_month": {
         "name": "AI costs this month"
+      },
+      "heat_today": {
+        "name": "Heat today",
+        "state_attributes": {
+          "yesterday": {
+            "name": "Yesterday"
+          },
+          "month": {
+            "name": "This month"
+          },
+          "last_month": {
+            "name": "Last month"
+          },
+          "meter_reading_at": {
+            "name": "Last meter reading"
+          }
+        }
       }
     },
     "binary_sensor": {

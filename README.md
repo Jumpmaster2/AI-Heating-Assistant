@@ -55,6 +55,16 @@ Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionale
 * **Kosten:** aus der Token-Nutzung mal den eingetragenen Preisen. Vor jeder Abfrage wird geschätzt; ist das Monatsbudget erreicht, gibt es bis zum Monatswechsel keine Abfragen.
 * **Ausfall:** Bei Fehlern, Zeitüberschreitung oder ungültiger Antwort läuft die Regelung mit den zuletzt gelernten Werten weiter. Der API-Key erscheint nie im Log und wird in der Diagnose geschwärzt.
 
+### Wärmezähler
+
+Optional. Mit einem Wärmezähler sieht die KI die tatsächlich verbrauchte Wärme statt nur der Laufzeit der Kreise.
+
+* Verbrauch wird immer **zwischen zwei Zählerwerten** gerechnet, nicht zwischen beliebigen Zeitpunkten. Zusammen mit jedem Zählerwert merkt sich die Integration den bis dahin aufgelaufenen Heizbedarf (Kelvinstunden Sollwert minus Außentemperatur, Mittel über die Bereiche). Verbrauch und Bedarf decken so genau denselben Zeitraum ab, auch wenn der Zähler nur alle paar Stunden und in groben Schritten meldet.
+* **KI-Prüfung:** `heat` mit kWh, Stunden und `kwh_per_kh` (kWh je Kelvinstunde Bedarf, das beste Maß für die Effizienz) seit der letzten Prüfung; Zeiträume unter einer Stunde werden nicht gemeldet. `kwh_per_kh` steht auch im Prüfverlauf.
+* **Nachtlauf:** kWh je vergangenem Heiztag in der Historie.
+* **Dashboard:** Karte **Wärme** mit heute, gestern, diesem Monat und dem Zeitpunkt des letzten Zählerwerts. Ein Tag zählt vom letzten Zählerwert vor Mitternacht bis zum letzten vor der nächsten Mitternacht, „gestern“ fehlt nach einem ausgelassenen Tag.
+* Sinkt der Zählerstand (Zählertausch) oder wird ein anderer Zähler gewählt, beginnt die Zählung neu.
+
 ### Lüftungsempfehlung
 
 Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder eines Referenzraums):
@@ -91,6 +101,7 @@ Die Einrichtung selbst läuft weiterhin als Dialog.
 | Wetter-Entität | | optional, Vorhersage für den Nachtlauf und die Sonnenprognose |
 | PV-Leistungssensor | | optional, Sonnenindikator (W oder kW) |
 | PV-Prognosesensor | | optional, nur mit PV-Leistungssensor: Energie der nächsten Stunde (Wh oder kWh) oder Leistung in einer Stunde (W oder kW); ohne ihn wird die Wettervorhersage genutzt |
+| Wärmezähler | | optional, Zählerstand der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ); seltene und grobe Werte sind kein Problem, siehe [Wärmezähler](#wärmezähler) |
 | Heizperiode | 01.10. bis 31.03. | Format TT.MM. |
 | Frostschutz | 7 °C | gilt immer |
 | Urlaubs-Entitäten | | "an" = Urlaub |
@@ -136,6 +147,7 @@ Global (Gerät "AI Heating Assistant"):
 
 * Binärsensor **Heiztag** (mit Quelle, Begründung, Konfidenz, Phase, Zeitpunkt der Entscheidung `decided_at` und nächstem Nachtlauf `next_decision`)
 * Sensoren **Entscheidungsphase**, **Letzte KI-Prüfung** (mit Zusammenfassung und letztem Fehler), **Nächste KI-Prüfung**, **KI-Kosten im Monat**
+* Sensor **Wärme heute** (nur mit Wärmezähler, kWh; Attribute `yesterday`, `month`, `last_month`, `meter_reading_at`)
 * Schalter **KI aktiv**
 * Auswahl **Heiztag manuell** (Automatik, Heute heizen, Heute nicht heizen)
 
