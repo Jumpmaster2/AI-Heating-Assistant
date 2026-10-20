@@ -340,3 +340,46 @@ async def test_options_edit_learned_theta(hass: HomeAssistant, base_states) -> N
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert "theta" not in entry.options
     assert entry.runtime_data.theta == 13.5
+
+
+async def test_switch_of_another_area_is_rejected(hass: HomeAssistant, base_states) -> None:
+    """Two areas must not switch the same circuit (audit F-07)."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_AREA), context={"source": SOURCE_USER}
+    )
+    user_input = {
+        "name": "Kitchen",
+        "sensors": {"temperature_sensor": "sensor.storage_temperature", "window_sensors": []},
+        "heating": {
+            "heater_switch": "input_boolean.heating_circuit_1",
+            "default_target": 21.0,
+            "min_target": 16.0,
+            "max_target": 24.0,
+            "min_on_time": 10,
+            "min_off_time": 10,
+        },
+        "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 30, "puffer": 0.7},
+        "ventilation": {"ventilation_rh_threshold": 60},
+    }
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
+    assert result["errors"] == {"base": "switch_in_use"}
+
+    # the area that owns the switch keeps it when it is changed
+    living = next(s for s in entry.subentries.values() if s.title == "Living room")
+    result = await entry.start_subentry_reconfigure_flow(hass, living.subentry_id)
+    learned = result["data_schema"].schema["learned_values"].schema.schema
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            **{k: v for k, v in user_input.items() if k != "start_values"},
+            "name": "Living room",
+            "sensors": {"temperature_sensor": "sensor.living_room_temperature"},
+            "learned_values": {str(k): k.default() for k in learned},
+        },
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["reason"] == "reconfigure_successful"

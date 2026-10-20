@@ -413,7 +413,7 @@
                 "ventilation_rh_threshold": "Relative Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder).",
                 "reference_temperature": "Optional, für Räume, die über einen anderen Raum gelüftet werden.",
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
-                "ventilation_block_entity": "Optional. Solange aktiv (z. B. Klimaanlage läuft, Beschattung geschlossen) wird kein Lüften empfohlen."
+                "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
               }
             }
           }
@@ -488,7 +488,7 @@
                 "ventilation_rh_threshold": "Relative Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder).",
                 "reference_temperature": "Optional, für Räume, die über einen anderen Raum gelüftet werden.",
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
-                "ventilation_block_entity": "Optional. Solange aktiv (z. B. Klimaanlage läuft, Beschattung geschlossen) wird kein Lüften empfohlen."
+                "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
               }
             }
           }
@@ -496,6 +496,7 @@
       },
       "error": {
         "name_required": "Bitte einen Namen angeben.",
+        "switch_in_use": "Dieser Schalter steuert bereits einen anderen Heizbereich. Jeder Heizkreis gehört zu genau einem Bereich: wähle einen anderen Schalter oder entferne ihn zuerst aus dem anderen Bereich.",
         "min_above_max": "Der kleinste Sollwert muss unter dem größten liegen.",
         "target_out_of_range": "Der Start-Sollwert muss zwischen kleinstem und größtem Sollwert liegen.",
         "reference_incomplete": "Referenz-Temperatur und Referenz-Feuchte gehen nur zusammen."

@@ -702,17 +702,32 @@ def keep_start_values(data: Any) -> dict[str, Any]:
     return {k: data[k] for k in START_KEYS if k in data}
 
 
-def _validate_area(data: dict[str, Any]) -> dict[str, str]:
+def _used_switches(entry: ConfigEntry, exclude: str | None = None) -> set[str]:
+    """Heating circuit switches of the areas of an entry, except one area."""
+    return {
+        sub.data[CONF_SWITCH]
+        for sub in entry.subentries.values()
+        if sub.subentry_type == SUBENTRY_AREA
+        and sub.subentry_id != exclude
+        and sub.data.get(CONF_SWITCH)
+    }
+
+
+def _validate_area(data: dict[str, Any], used_switches: set[str] | None = None) -> dict[str, str]:
+    """Errors of an area form; the first problem found is the one reported."""
     errors: dict[str, str] = {}
     if not data.get(CONF_AREA_NAME):
         errors[CONF_AREA_NAME] = "name_required"
+    if data.get(CONF_SWITCH) and data[CONF_SWITCH] in (used_switches or set()):
+        # two areas switching one circuit would work against each other
+        errors.setdefault("base", "switch_in_use")
     low, high = float(data.get(CONF_MIN_TARGET, 16)), float(data.get(CONF_MAX_TARGET, 24))
     if low >= high:
-        errors["base"] = "min_above_max"
+        errors.setdefault("base", "min_above_max")
     elif not low <= float(data.get(CONF_DEFAULT_TARGET, 21)) <= high:
-        errors["base"] = "target_out_of_range"
+        errors.setdefault("base", "target_out_of_range")
     if bool(data.get(CONF_REF_TEMP)) != bool(data.get(CONF_REF_HUMIDITY)):
-        errors["base"] = "reference_incomplete"
+        errors.setdefault("base", "reference_incomplete")
     return errors
 
 
@@ -724,7 +739,7 @@ class AreaSubentryFlow(ConfigSubentryFlow):
         values: dict[str, Any] = {}
         if user_input is not None:
             values = _flatten(user_input)
-            errors = _validate_area(values)
+            errors = _validate_area(values, _used_switches(self._get_entry()))
             if not errors:
                 return self.async_create_entry(title=values[CONF_AREA_NAME], data=values)
         return self.async_show_form(step_id="user", data_schema=_area_schema(values), errors=errors)
@@ -746,7 +761,7 @@ class AreaSubentryFlow(ConfigSubentryFlow):
             edited = user_input.pop(SECTION_LEARNED, None) or {}
             # the start values were set when the area was created and stay as they are
             values = {**_flatten(user_input), **keep_start_values(subentry.data)}
-            errors = _validate_area(values)
+            errors = _validate_area(values, _used_switches(entry, subentry.subentry_id))
             if not errors:
                 if coordinator is not None and edited:
                     coordinator.set_learned(subentry.subentry_id, edited)

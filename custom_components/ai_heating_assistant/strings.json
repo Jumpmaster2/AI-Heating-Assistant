@@ -413,7 +413,7 @@
                 "ventilation_rh_threshold": "Relative humidity from which ventilating is recommended (e.g. 65 % for bathrooms).",
                 "reference_temperature": "Optional, for rooms aired via another room.",
                 "reference_humidity": "Required together with the reference temperature.",
-                "ventilation_block_entity": "Optional. While active (e.g. air conditioner running, sun protection closed) no ventilation is recommended."
+                "ventilation_block_entity": "Optional. While it blocks, no ventilation is recommended: a cover while closed (e.g. sun protection down), a climate entity or water heater while not off (e.g. air conditioner running), a switch, binary sensor, fan or similar while on."
               }
             }
           }
@@ -488,7 +488,7 @@
                 "ventilation_rh_threshold": "Relative humidity from which ventilating is recommended (e.g. 65 % for bathrooms).",
                 "reference_temperature": "Optional, for rooms aired via another room.",
                 "reference_humidity": "Required together with the reference temperature.",
-                "ventilation_block_entity": "Optional. While active (e.g. air conditioner running, sun protection closed) no ventilation is recommended."
+                "ventilation_block_entity": "Optional. While it blocks, no ventilation is recommended: a cover while closed (e.g. sun protection down), a climate entity or water heater while not off (e.g. air conditioner running), a switch, binary sensor, fan or similar while on."
               }
             }
           }
@@ -496,6 +496,7 @@
       },
       "error": {
         "name_required": "Please enter a name.",
+        "switch_in_use": "This switch already controls another heating area. Each circuit can belong to one area only: choose another switch, or remove it from the other area first.",
         "min_above_max": "The minimum target must be below the maximum target.",
         "target_out_of_range": "The initial target must be between minimum and maximum.",
         "reference_incomplete": "Reference temperature and reference humidity are only possible together."

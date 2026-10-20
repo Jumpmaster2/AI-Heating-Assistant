@@ -272,7 +272,7 @@ export const LABELS = {
    ],
    "ventilation_block_entity": [
     "Lüftungs-Sperr-Entität",
-    "Optional. Solange aktiv (z. B. Klimaanlage läuft, Beschattung geschlossen) wird kein Lüften empfohlen."
+    "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
    ]
   },
   "learned": {
@@ -340,6 +340,7 @@ export const LABELS = {
   },
   "area_errors": {
    "name_required": "Bitte einen Namen angeben.",
+   "switch_in_use": "Dieser Schalter steuert bereits einen anderen Heizbereich. Jeder Heizkreis gehört zu genau einem Bereich: wähle einen anderen Schalter oder entferne ihn zuerst aus dem anderen Bereich.",
    "min_above_max": "Der kleinste Sollwert muss unter dem größten liegen.",
    "target_out_of_range": "Der Start-Sollwert muss zwischen kleinstem und größtem Sollwert liegen.",
    "reference_incomplete": "Referenz-Temperatur und Referenz-Feuchte gehen nur zusammen."
@@ -660,7 +661,7 @@ export const LABELS = {
    ],
    "ventilation_block_entity": [
     "Ventilation block entity",
-    "Optional. While active (e.g. air conditioner running, sun protection closed) no ventilation is recommended."
+    "Optional. While it blocks, no ventilation is recommended: a cover while closed (e.g. sun protection down), a climate entity or water heater while not off (e.g. air conditioner running), a switch, binary sensor, fan or similar while on."
    ]
   },
   "learned": {
@@ -728,6 +729,7 @@ export const LABELS = {
   },
   "area_errors": {
    "name_required": "Please enter a name.",
+   "switch_in_use": "This switch already controls another heating area. Each circuit can belong to one area only: choose another switch, or remove it from the other area first.",
    "min_above_max": "The minimum target must be below the maximum target.",
    "target_out_of_range": "The initial target must be between minimum and maximum.",
    "reference_incomplete": "Reference temperature and reference humidity are only possible together."

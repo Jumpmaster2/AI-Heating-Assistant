@@ -196,6 +196,11 @@ async def test_areas(hass: HomeAssistant, base_states, hass_ws_client) -> None:
             "reference_incomplete",
         ),
         ("X", {"temperature_sensor": "binary_sensor.x"}, "invalid_value:temperature_sensor"),
+        (
+            "X",
+            {"temperature_sensor": "sensor.x", "heater_switch": "input_boolean.heating_circuit_1"},
+            "switch_in_use",
+        ),
     ):
         msg = await _send(client, type=f"{DOMAIN}/save_area", title=title, data=data)
         assert not msg["success"], data

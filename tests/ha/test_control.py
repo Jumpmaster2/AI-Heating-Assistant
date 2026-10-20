@@ -21,7 +21,7 @@ from custom_components.ai_heating_assistant.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 
-from .conftest import IN_SEASON, make_entry
+from .conftest import AREA_DATA, IN_SEASON, VENT_ONLY_DATA, make_entry
 
 STRUCTURED = "custom_components.ai_heating_assistant.ai_client.ClaudeClient.structured"
 USAGE = {"input_tokens": 1500, "output_tokens": 500}
@@ -618,3 +618,18 @@ async def test_temperature_with_unknown_unit_is_ignored(
     await _advance(hass, freezer, 1)
     assert hass.states.get("sensor.living_room_status").state == "sensor_error"
     assert "sensor.living_room_temperature reports the unit '%'" in caplog.text
+
+
+async def test_open_sun_protection_does_not_block_ventilation(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """A cover blocks the recommendation only while it is closed (audit F-06)."""
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("cover.storage_shade", "open")
+    area = {**VENT_ONLY_DATA, "ventilation_block_entity": "cover.storage_shade"}
+    await _setup(hass, make_entry(areas=[AREA_DATA, area]))
+    state = "sensor.storage_room_ventilation_recommendation"
+    assert hass.states.get(state).state == "ventilate_now"
+    hass.states.async_set("cover.storage_shade", "closed")
+    await _advance(hass, freezer, 1)
+    assert hass.states.get(state).state == "blocked"

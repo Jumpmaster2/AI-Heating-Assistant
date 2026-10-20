@@ -168,7 +168,13 @@ from .logic.sun import (
     solar_elevation,
     weather_points,
 )
-from .logic.ventilation import VentilationInput, VentilationResult, VentilationSettings, recommend
+from .logic.ventilation import (
+    VentilationInput,
+    VentilationResult,
+    VentilationSettings,
+    is_blocking,
+    recommend,
+)
 from .messages import text
 
 SAVE_DELAY = 30
@@ -185,7 +191,6 @@ VIRTUAL_MIN_COOL_UPDATES = 24  # model updates without heating before the virtua
 TWILIGHT_INDEX = 0.05  # clear sky index (about 5 degrees elevation) below which PV counts as 0
 PV_NEGLIGIBLE_KW = 0.05  # expected PV power below which a missing PV value counts as 0
 PV_MISSING_WARN_MIN = 60.0  # daytime minutes without a PV value before a warning
-INACTIVE_STATES = {"off", "idle", STATE_UNAVAILABLE, STATE_UNKNOWN, "none", ""}
 OUTAGE_ISSUE_S = 15 * 60  # s a sensor or switch may be missing before a repair issue
 CMD_RETRY_MIN = (1, 2, 4, 8, 15)  # min before a switch command without effect is repeated
 CMD_ISSUE_ATTEMPTS = 3  # commands without effect before a repair issue
@@ -749,10 +754,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         state = self._state(entity_id)
         return state is not None and state.state == STATE_ON
 
-    def _is_active(self, entity_id: str | None) -> bool:
-        """True for 'on' and any running state (e.g. an air conditioner in cool mode)."""
+    def _is_blocking(self, entity_id: str | None) -> bool:
+        """Does the ventilation block entity block right now (see ``is_blocking``)?"""
         state = self._state(entity_id)
-        return state is not None and state.state not in INACTIVE_STATES
+        return state is not None and is_blocking(state.domain, state.state)
 
     def _pv_kw(self) -> float | None:
         """Current PV power in kW. None if the sensor is configured but has no value."""
@@ -1291,7 +1296,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 ref_humidity=ref_hum,
                 window_open=area.window_open,
                 heating_active=heating_active,
-                blocked=self._is_active(cfg.get(CONF_VENT_BLOCK)),
+                blocked=self._is_blocking(cfg.get(CONF_VENT_BLOCK)),
                 reference_is_indoor=indoor_ref,
                 is_night=is_night,
                 target=area.effective_target or area.target,

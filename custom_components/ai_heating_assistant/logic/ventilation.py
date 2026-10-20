@@ -34,6 +34,28 @@ class VentilationState(StrEnum):
 
 RECOMMENDED_STATES = {VentilationState.VENTILATE_NOW, VentilationState.VENTILATION_USEFUL}
 
+# Domains whose entity blocks the ventilation recommendation while it is "on".
+ON_OFF_DOMAINS = {"binary_sensor", "input_boolean", "switch", "fan", "humidifier", "light"}
+NO_STATE = {"unavailable", "unknown", "none", ""}
+
+
+def is_blocking(domain: str, state: str) -> bool:
+    """Does an entity in this state block the recommendation?
+
+    A cover blocks while closed (sun protection down), a climate entity or water heater
+    while not off (e.g. an air conditioner running), on/off entities while on; any
+    other entity while it is active (not off or idle).
+    """
+    if state in NO_STATE:
+        return False
+    if domain == "cover":
+        return state in ("closed", "closing")
+    if domain in ("climate", "water_heater"):
+        return state != "off"
+    if domain in ON_OFF_DOMAINS:
+        return state == "on"
+    return state not in ("off", "idle")
+
 
 @dataclass(slots=True)
 class VentilationSettings:

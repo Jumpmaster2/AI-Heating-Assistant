@@ -25,6 +25,7 @@ from .config_flow import (
     _general_schema,
     _learned_fields,
     _rules_schema,
+    _used_switches,
     _vacation_schema,
     _validate_area,
     _ventilation_schema,
@@ -230,8 +231,11 @@ def apply_options(current: dict[str, Any], changes: dict[str, Any]) -> dict[str,
     return options
 
 
-def area_data(title: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Validated data of a heating area; raises PanelError."""
+def area_data(
+    title: str, data: dict[str, Any], used_switches: set[str] | None = None
+) -> dict[str, Any]:
+    """Validated data of a heating area; raises PanelError. ``used_switches`` are the
+    circuit switches of the other areas."""
     fields = area_fields()
     title = title.strip()
     values: dict[str, Any] = {}
@@ -248,7 +252,7 @@ def area_data(title: str, data: dict[str, Any]) -> dict[str, Any]:
     values = {**AREA_DEFAULTS, CONF_AREA_NAME: title, **values}
     if not values.get(CONF_TEMP_SENSOR):
         raise PanelError("required", CONF_TEMP_SENSOR)
-    errors = _validate_area(values)
+    errors = _validate_area(values, used_switches)
     if error := errors.get(CONF_AREA_NAME):
         raise PanelError(error)
     if error := errors.get("base"):
@@ -417,7 +421,7 @@ def ws_save_area(
         return
     coordinator = _coordinator(entry)
     try:
-        data = area_data(msg["title"], msg["data"])
+        data = area_data(msg["title"], msg["data"], _used_switches(entry, sub_id))
         learned = (
             _learned(coordinator, msg["learned"])
             if subentry is not None and coordinator is not None and "learned" in msg
