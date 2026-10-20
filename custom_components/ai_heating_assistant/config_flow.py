@@ -566,6 +566,7 @@ class AiHeatingOptionsFlow(OptionsFlow):
                 return self._save(
                     _clean(user_input),
                     remove=(
+                        CONF_OUTDOOR_TEMP,
                         CONF_OUTDOOR_HUMIDITY,
                         CONF_WEATHER,
                         CONF_PV_POWER,

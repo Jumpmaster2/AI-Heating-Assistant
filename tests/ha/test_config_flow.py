@@ -426,3 +426,29 @@ async def test_heating_period_suggested_by_hemisphere(
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
     defaults = {str(k): k.default() for k in result["data_schema"].schema if callable(k.default)}
     assert (defaults["season_start"], defaults["season_end"]) == (start, end)
+
+
+async def test_options_can_switch_to_the_weather_temperature(
+    hass: HomeAssistant, base_states
+) -> None:
+    """Clearing the outdoor sensor with a weather entity set removes it from the options."""
+    entry = make_entry(weather="weather.home")
+    hass.states.async_set("weather.home", "cloudy", {"temperature": 5, "temperature_unit": "°C"})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "general"}
+    )
+    values = {
+        "weather": "weather.home",
+        "season_start": "01.10.",
+        "season_end": "31.03.",
+        "frost_temperature": 7.0,
+        "forecast_trust": 70,
+    }
+    result = await hass.config_entries.options.async_configure(result["flow_id"], values)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert "outdoor_temperature" not in entry.options

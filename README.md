@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.4. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.5. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
