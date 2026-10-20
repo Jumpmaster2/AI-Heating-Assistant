@@ -36,6 +36,8 @@ RECOMMENDED_STATES = {VentilationState.VENTILATE_NOW, VentilationState.VENTILATI
 
 # Domains whose entity blocks the ventilation recommendation while it is "on".
 ON_OFF_DOMAINS = {"binary_sensor", "input_boolean", "switch", "fan", "humidifier", "light"}
+# domains with a defined blocking state (offered in the dialog; others still work)
+BLOCK_DOMAINS = (*sorted(ON_OFF_DOMAINS), "climate", "cover", "water_heater")
 NO_STATE = {"unavailable", "unknown", "none", ""}
 
 

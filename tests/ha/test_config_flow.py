@@ -452,3 +452,21 @@ async def test_options_can_switch_to_the_weather_temperature(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert "outdoor_temperature" not in entry.options
+
+
+def test_entity_fields_offer_matching_entities_but_accept_others() -> None:
+    """Filters narrow the choice in the dialog; saving still checks the domain only."""
+    from custom_components.ai_heating_assistant.config_flow import _area_schema
+
+    fields = {}
+    for key, value in _area_schema({}).schema.items():
+        inner = getattr(value, "schema", None)
+        fields.update(inner.schema if inner is not None else {str(key): value})
+    by_name = {str(k): v for k, v in fields.items()}
+    temp = by_name["temperature_sensor"]
+    assert {"domain": ["sensor"], "device_class": ["temperature"]} in temp.config["filter"]
+    assert temp("sensor.without_device_class") == "sensor.without_device_class"
+    windows = by_name["window_sensors"]
+    assert windows(["input_boolean.window"]) == ["input_boolean.window"]
+    block = by_name["ventilation_block_entity"]
+    assert block("sensor.anything") == "sensor.anything"  # existing values stay valid

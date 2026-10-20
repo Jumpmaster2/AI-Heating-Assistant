@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.6. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.7. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -83,6 +83,8 @@ Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder ei
 Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von Anthropic (optional, ohne Key läuft nur die lokale Regelung).
 
 ## Konfiguration
+
+Die Auswahlfelder zeigen nur passende Entitäten (z. B. Temperatursensoren mit Geräteklasse Temperatur oder Einheit °C/°F/K, Fenster- und Türkontakte). Bereits gewählte Entitäten außerhalb dieser Auswahl bleiben gültig.
 
 ### Dashboard
 
