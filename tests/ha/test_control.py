@@ -888,6 +888,9 @@ async def test_pv_and_meter_units_are_checked(
     assert "sensor.heat_meter reports the unit 'm³'" in caplog.text
     hass.states.async_set("sensor.pv_power", "500", {"unit_of_measurement": "%"})
     assert coordinator._pv_kw() is None
+    for value in ("inf", "nan"):  # no range check here: only the finite check applies
+        hass.states.async_set("sensor.pv_power", value, {"unit_of_measurement": "W"})
+        assert coordinator._pv_kw() is None
     hass.states.async_set("sensor.pv_power", "2", {"unit_of_measurement": "kW"})
     assert coordinator._pv_kw() == 2.0
 
@@ -900,7 +903,9 @@ async def test_budget_month_changes_in_the_tick_and_reload_unblocks(
     await _setup(hass, entry)
     budget = entry.runtime_data.budget
     budget.month, budget.spent, budget.blocked = "2026-10", 4.5, True
-    await _advance(hass, freezer, 1)
+    # the cost sensor no longer rolls the month when it is read: only the tick does
+    with patch("custom_components.ai_heating_assistant.sensor.AiCostSensor.native_value", 0.0):
+        await _advance(hass, freezer, 1)
     assert (budget.month, budget.spent, budget.blocked) == ("2026-11", 0.0, False)
 
     budget.spent, budget.blocked = 4.9, True
@@ -936,9 +941,14 @@ async def test_heat_today_heats_outside_the_heating_period(
     await _setup(hass, entry)
     await _advance(hass, freezer, 11)
     assert hass.states.get("sensor.living_room_status").state == "out_of_season"
-    await entry.runtime_data.async_set_override("heat_today")
-    await _advance(hass, freezer, 1)
+    from custom_components.ai_heating_assistant import coordinator as module
+
+    with patch.object(module, "recommend", wraps=module.recommend) as recommend:
+        await entry.runtime_data.async_set_override("heat_today")
+        await _advance(hass, freezer, 1)
     assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+    # the ventilation advice also knows that the area is heated
+    assert recommend.call_args_list[-1].args[0].heating_active
     assert hass.states.get("sensor.living_room_status").state != "out_of_season"
     # the next nightly decision ends it
     freezer.move_to("2026-05-11 03:05:00+02:00")
@@ -965,3 +975,40 @@ async def test_tiny_changes_do_not_write_new_states(
         assert state.attributes[key] == round(state.attributes[key], 1)
     entity = hass.data["entity_components"]["climate"].get_entity("climate.living_room")
     assert "predicted_temperature" in entity._Entity__combined_unrecorded_attributes
+
+
+async def test_heat_today_of_a_past_day_ends_after_a_missed_nightly_run(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to("2026-05-10 10:00:00+02:00")
+    entry = make_entry()
+    await _setup(hass, entry)
+    await entry.runtime_data.async_set_override("heat_today")
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    # Home Assistant was down at the nightly time
+    freezer.move_to("2026-05-11 04:00:00+02:00")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    await _advance(hass, freezer, 2)
+    assert entry.runtime_data.day_state["override"] == "auto"
+    assert hass.states.get("sensor.living_room_status").state == "out_of_season"
+
+
+async def test_start_values_are_clamped_into_the_limits(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from custom_components.ai_heating_assistant.logic.ai_schema import default_limits
+
+    freezer.move_to(IN_SEASON)
+    limits = default_limits()
+    limits["theta"]["max"] = 15.0
+    entry = make_entry(areas=[{**AREA_DATA, "window_delay": 30}], theta_start=16.0, limits=limits)
+    await _setup(hass, entry)
+    coordinator = entry.runtime_data
+    assert coordinator.theta == 15.0  # the start value, nothing learned yet
+    area = next(iter(coordinator.areas.values()))
+    window_max = limits["window_delay_min"]["max"]
+    assert area.params.window_delay_min == window_max
+    # a reset brings back the start values, again within the limits
+    coordinator.reset_learned([area.area_id], include_parameters=True)
+    assert area.params.window_delay_min == window_max

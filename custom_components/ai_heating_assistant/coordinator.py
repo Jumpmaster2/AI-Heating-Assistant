@@ -578,12 +578,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 if new != old:
                     setattr(area.params, key, new)
                     self._log("limit_clamp", area, parameter=key, old=f"{old:g}", new=f"{new:g}")
-        if "theta" in self.day_state:
-            old = float(self.day_state["theta"])
-            new = clamp(old, limits["theta"]["min"], limits["theta"]["max"])
-            if new != old:
-                self.day_state["theta"] = new
-                self._log("limit_clamp", parameter="theta", old=f"{old:g}", new=f"{new:g}")
+        # also the configured start value, as long as nothing was learned
+        old = self.theta
+        new = clamp(old, limits["theta"]["min"], limits["theta"]["max"])
+        if new != old:
+            self.day_state["theta"] = new
+            self._log("limit_clamp", parameter="theta", old=f"{old:g}", new=f"{new:g}")
 
     @callback
     def _release_circuits(self, stored: Any, pending: Any) -> None:
@@ -969,9 +969,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._update_meter(ts, minutes)
 
         # Missing or expired decision (first start, HA was down at the nightly run).
-        # Started after the areas were read so the decision sees current values.
+        # Started after the areas were read so the decision sees current values. Outside
+        # the heating period only to end a manual override of a past day, which would
+        # otherwise keep heating until the next nightly run.
         if (
-            self.season_active
+            (
+                self.season_active
+                or self.day_state.get("override", hd.Override.AUTO) != hd.Override.AUTO
+            )
             and not self._deciding
             and (self._decide_failed_at is None or ts - self._decide_failed_at >= DECIDE_RETRY_S)
             and self._decision_expired(now)
@@ -2175,6 +2180,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             area.start = start  # the configuration is in effect again
             self._forget_check_history(area)
             self._log("reset", area)
+        if include_parameters:
+            self._clamp_to_limits()  # start values may lie outside narrowed limits
         self._config_changed()
 
     # --------------------------------------------------------- learned values (user edits)
