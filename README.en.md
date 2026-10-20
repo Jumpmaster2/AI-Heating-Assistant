@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.0. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.1. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -107,7 +107,7 @@ Temperature sensors may report °C, °F or K; without a unit the unit system of 
 | PV power sensor | | optional, sunshine indicator (W or kW; without a unit W applies, another unit is ignored with a warning) |
 | PV forecast sensor | | optional, only with the PV power sensor: energy of the next hour (Wh or kWh) or power in one hour (W or kW); without it the weather forecast is used |
 | Heat meter | | optional, meter reading of the circuits controlled here (Wh, kWh, MWh, MJ or GJ); seldom and coarse readings are fine, see [Heat meter](#heat-meter) |
-| Heating period | 01.10. to 31.03. | format DD.MM. |
+| Heating period | 01.10. to 31.03. (southern hemisphere: 01.05. to 30.09.) | format DD.MM.; the suggestion at setup follows the latitude of Home Assistant |
 | Frost protection | 7 °C | always applies |
 | Vacation entities | | "on" = vacation |
 | Vacation temperature | 18 °C | for all areas |

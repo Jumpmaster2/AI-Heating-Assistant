@@ -122,6 +122,7 @@ from .const import (
     SECTION_SENSORS,
     SECTION_START,
     SECTION_VENTILATION,
+    SOUTHERN_SEASON,
     SUBENTRY_AREA,
 )
 from .logic.ai_schema import PARAMS, default_limits
@@ -407,6 +408,8 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
             if not errors:
                 self._options.update(_clean(user_input))
                 return await self.async_step_vacation()
+        if user_input is None and self.hass.config.latitude < 0:
+            user_input = dict(SOUTHERN_SEASON)  # winter is in the middle of the year
         return self.async_show_form(
             step_id="user", data_schema=_general_schema(user_input or {}), errors=errors
         )

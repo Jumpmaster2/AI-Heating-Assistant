@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.1. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -107,7 +107,7 @@ Temperatursensoren dürfen in °C, °F oder K melden; ohne Einheit gilt das Einh
 | PV-Leistungssensor | | optional, Sonnenindikator (W oder kW; ohne Einheit gilt W, eine andere Einheit wird mit Warnung ignoriert) |
 | PV-Prognosesensor | | optional, nur mit PV-Leistungssensor: Energie der nächsten Stunde (Wh oder kWh) oder Leistung in einer Stunde (W oder kW); ohne ihn wird die Wettervorhersage genutzt |
 | Wärmezähler | | optional, Zählerstand der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ); seltene und grobe Werte sind kein Problem, siehe [Wärmezähler](#wärmezähler) |
-| Heizperiode | 01.10. bis 31.03. | Format TT.MM. |
+| Heizperiode | 01.10. bis 31.03. (Südhalbkugel: 01.05. bis 30.09.) | Format TT.MM.; der Vorschlag richtet sich bei der Einrichtung nach dem Breitengrad von Home Assistant |
 | Frostschutz | 7 °C | gilt immer |
 | Urlaubs-Entitäten | | "an" = Urlaub |
 | Urlaubstemperatur | 18 °C | für alle Bereiche |

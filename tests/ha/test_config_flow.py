@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from homeassistant.config_entries import SOURCE_USER, FlowType
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -407,3 +408,15 @@ async def test_reauth_flow_replaces_the_key(hass: HomeAssistant, base_states) ->
         )
     assert result["type"] is FlowResultType.ABORT and result["reason"] == "reauth_successful"
     assert entry.data["api_key"] == "new-key"
+
+
+@pytest.mark.parametrize(
+    ("latitude", "start", "end"), [(52.5, "01.10.", "31.03."), (-33.9, "01.05.", "30.09.")]
+)
+async def test_heating_period_suggested_by_hemisphere(
+    hass: HomeAssistant, latitude: float, start: str, end: str
+) -> None:
+    hass.config.latitude = latitude
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    defaults = {str(k): k.default() for k in result["data_schema"].schema if callable(k.default)}
+    assert (defaults["season_start"], defaults["season_end"]) == (start, end)

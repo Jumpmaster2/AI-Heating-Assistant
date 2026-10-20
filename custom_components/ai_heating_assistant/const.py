@@ -124,6 +124,8 @@ FALLBACK_MODELS: Final = {"claude-opus-5-5", "claude-sonnet-5-5"}
 FALLBACK_BETA: Final = "server-side-fallback-2026-07-01"
 
 DEFAULT_MODEL: Final = "claude-opus-5-5"
+# Heating period suggested south of the equator (the defaults below are northern).
+SOUTHERN_SEASON: Final = {"season_start": "01.05.", "season_end": "30.09."}
 
 DEFAULTS: Final[dict[str, object]] = {
     CONF_SEASON_START: "01.10.",
