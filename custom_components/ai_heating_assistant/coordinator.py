@@ -334,6 +334,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._deciding = False
         self._checking = False
         self._tick_count = 0
+        self._shut_down = False
         self._unit_warned: set[str] = set()  # entities already warned about an odd unit
         self._missing_since: dict[str, float] = {}  # repair issue id -> start of the outage
         self._issues: set[str] = set()  # repair issues raised by this coordinator
@@ -635,6 +636,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.hass.async_create_task(self.async_request_refresh(), eager_start=True)
 
     async def async_shutdown(self) -> None:
+        if self._shut_down:  # also registered with the entry: runs once only
+            return
+        self._shut_down = True
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()

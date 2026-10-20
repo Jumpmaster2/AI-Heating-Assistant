@@ -73,13 +73,14 @@ async def _async_update_listener(hass: HomeAssistant, entry: AiHeatingConfigEntr
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> bool:
-    """Unload a config entry."""
-    if entry.disabled_by is not None:
-        # Disabled (not a reload): nothing controls the circuits any more.
-        await _async_switch_off_circuits(hass, entry, "disabled")
+    """Unload a config entry. The coordinator shuts itself down afterwards (it registers
+    its shutdown with the entry)."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded:
+    if unloaded and entry.disabled_by is not None:
+        # Disabled (not a reload): stop the control first, so no tick switches a
+        # circuit on again, then nothing controls the circuits any more.
         await entry.runtime_data.async_shutdown()
+        await _async_switch_off_circuits(hass, entry, "disabled")
     return unloaded
 
 

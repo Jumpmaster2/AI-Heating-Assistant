@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import patch
 
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.config_entries import ConfigEntryDisabler
+from homeassistant.config_entries import ConfigEntryDisabler, ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import (
     async_capture_events,
     async_fire_time_changed,
 )
 
 from custom_components.ai_heating_assistant.const import EVENT_LOGBOOK
+from custom_components.ai_heating_assistant.coordinator import HeatingCoordinator
 
 from .conftest import IN_SEASON, make_entry
 
@@ -71,3 +74,35 @@ async def test_circuit_of_a_deleted_area_is_switched_off(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.get(CIRCUIT).state == "off"
     assert any(CIRCUIT in e.data["message"] for e in events)
+
+
+async def test_unload_saves_and_shuts_down_once(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await _setup_heating(hass, freezer)
+    store = entry.runtime_data.store
+    with patch.object(store, "async_save", wraps=store.async_save) as save:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+    assert save.call_count == 1
+
+
+async def test_failed_first_refresh_leaves_no_listeners(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """A setup retry must not leave a second control loop behind (audit F-08)."""
+    freezer.move_to(IN_SEASON)
+    started: list[HeatingCoordinator] = []
+
+    async def fail(self: HeatingCoordinator) -> int:
+        started.append(self)
+        raise UpdateFailed("sensor platform not ready")
+
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    with patch.object(HeatingCoordinator, "_async_update_data", fail):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+    failed = started[0]
+    assert failed._unsubs == [] and failed._unsub_check is None
