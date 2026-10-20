@@ -44,8 +44,11 @@ def _usage(message: Any) -> dict[str, Any]:
 class ClaudeClient:
     """Structured JSON calls to Claude."""
 
-    def __init__(self, client: anthropic.AsyncAnthropic, model: str, effort: str) -> None:
+    def __init__(
+        self, client: anthropic.AsyncAnthropic, model: str, effort: str, *, owned: bool = False
+    ) -> None:
         self._client = client
+        self._owned = owned  # own HTTP client (not the shared one of Home Assistant)
         self.model = model
         self.effort = effort
 
@@ -55,8 +58,10 @@ class ClaudeClient:
     ) -> ClaudeClient:
         """Create the SDK client outside the event loop (it loads certificates).
 
-        SDK 0.x accepts the shared httpx client of Home Assistant. SDK 1.x uses
-        httpx2 and rejects it, then the SDK creates its own client.
+        The manifest pins the SDK version of Home Assistant's own Anthropic
+        integration, which accepts the shared httpx client. Should another version be
+        installed that rejects it (SDK 1.x requires httpx2), the SDK creates its own
+        client, which ``close`` releases.
         """
         try:
             client = await hass.async_add_executor_job(
@@ -71,7 +76,13 @@ class ClaudeClient:
             client = await hass.async_add_executor_job(
                 partial(anthropic.AsyncAnthropic, api_key=api_key, max_retries=2)
             )
+            return cls(client, model, effort, owned=True)
         return cls(client, model, effort)
+
+    async def close(self) -> None:
+        """Release an own HTTP client; the shared one stays open for others."""
+        if self._owned:
+            await self._client.close()
 
     async def validate(self) -> None:
         """Check the API key with a free request."""

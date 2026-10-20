@@ -342,13 +342,15 @@ def _validate_limits(user_input: dict[str, Any]) -> tuple[dict[str, Any], dict[s
 
 async def _check_api_key(hass: Any, api_key: str, model: str) -> str | None:
     """Return an error key or None."""
+    client = await ClaudeClient.create(hass, api_key, model, "auto")
     try:
-        client = await ClaudeClient.create(hass, api_key, model, "auto")
         await client.validate()
     except AiAuthError:
         return "invalid_auth"
     except AiError:
         return "cannot_connect"
+    finally:
+        await client.close()
     return None
 
 

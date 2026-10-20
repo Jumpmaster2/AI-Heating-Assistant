@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.11.7. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.11.8. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -56,6 +56,7 @@ Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionale
 * **Kosten:** aus der Token-Nutzung mal den eingetragenen Preisen. Vor jeder Abfrage wird geschätzt; ist das Monatsbudget erreicht, gibt es bis zum Monatswechsel keine Abfragen.
 * **Ausfall:** Bei Fehlern, Zeitüberschreitung oder ungültiger Antwort läuft die Regelung mit den zuletzt gelernten Werten weiter. Der API-Key erscheint nie im Log und wird in der Diagnose geschwärzt.
 * **Abgelehnter API-Key:** Lehnt Anthropic den Key ab (z. B. widerrufen), fragt Home Assistant unter Einstellungen > Geräte & Dienste nach einem neuen Key (erneute Authentifizierung). Bis dahin läuft die lokale Regelung ohne KI weiter; ein leeres Feld schaltet die KI ab.
+* **Wetterdienst antwortet nicht:** Die Wetterprognose wird höchstens 10 Sekunden lang abgewartet; danach entscheidet die Heiztag-Regel ohne Prognose, und die Regelung läuft weiter. Schlägt die Heiztag-Entscheidung fehl, wird sie nach 15 Minuten erneut versucht (Fehler im Log).
 
 ### Wärmezähler
 

@@ -674,3 +674,57 @@ async def test_thermostat_in_fahrenheit_moves_by_tenths_and_accepts_its_limits(
     assert await set_temp(60.8) == 60.8
     area = hass.config_entries.async_entries(DOMAIN)[0].runtime_data.areas
     assert next(a.target for a in area.values() if a.has_circuit) == 16.0
+
+
+async def test_hanging_weather_service_does_not_stop_the_control(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    import asyncio
+
+    hass.states.async_set("weather.home", "cloudy", {"temperature": 5, "temperature_unit": "°C"})
+    release = asyncio.Event()
+
+    async def hang(call: ServiceCall) -> dict:
+        await release.wait()  # Home Assistant lets the handler run on after the timeout
+        return {}
+
+    hass.services.async_register(
+        "weather", "get_forecasts", hang, supports_response=SupportsResponse.ONLY
+    )
+    entry = make_entry(weather="weather.home")
+    entry.add_to_hass(hass)
+    # the clock is frozen: a timeout of 0 expires at once
+    with patch("custom_components.ai_heating_assistant.coordinator.FORECAST_TIMEOUT", 0):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        coordinator = entry.runtime_data
+        assert await coordinator._forecast("daily") == []
+        for _ in range(20):  # let the startup decision run without a forecast
+            await asyncio.sleep(0)
+            if coordinator.current_day:
+                break
+    assert coordinator.current_day is not None
+    assert coordinator.current_day["rule"]["tmax"] is None
+    release.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def test_failed_decision_is_retried_after_a_pause(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory, caplog
+) -> None:
+    from homeassistant.exceptions import HomeAssistantError
+
+    from custom_components.ai_heating_assistant.coordinator import HeatingCoordinator
+
+    freezer.move_to(IN_SEASON)
+    with patch.object(HeatingCoordinator, "_decide", side_effect=RuntimeError("broken")) as decide:
+        await _setup(hass, make_entry())
+        await _advance(hass, freezer, 14)
+        assert decide.call_count == 1  # not once a minute
+        assert "Heating day decision (startup) failed" in caplog.text
+        await _advance(hass, freezer, 2)
+        assert decide.call_count == 2
+        # a manual run reports the error to the caller
+        with pytest.raises((RuntimeError, HomeAssistantError)):
+            await hass.services.async_call(
+                DOMAIN, "decide_heating_day", {"use_ai": False}, blocking=True
+            )

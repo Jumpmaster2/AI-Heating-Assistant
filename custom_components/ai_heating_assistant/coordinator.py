@@ -197,6 +197,8 @@ CMD_RETRY_MIN = (1, 2, 4, 8, 15)  # min before a switch command without effect i
 CMD_ISSUE_ATTEMPTS = 3  # commands without effect before a repair issue
 # Repair issues of this integration (translation keys; the issue id adds the area id).
 SWITCH_OFF_TIMEOUT = 10  # s to wait for a circuit to switch off when control ends
+FORECAST_TIMEOUT = 10  # s to wait for the weather service
+DECIDE_RETRY_S = 15 * 60  # pause after a failed heating day decision before the next try
 ISSUE_KEYS = (
     "sensor_unavailable",
     "actuator_unavailable",
@@ -338,6 +340,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._unsubs: list[Callable[[], None]] = []
         self._unsub_check: Callable[[], None] | None = None
         self._deciding = False
+        self._decide_failed_at: float | None = None
         self._checking = False
         self._tick_count = 0
         self._shut_down = False
@@ -664,6 +667,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if self._unsub_check:
             self._unsub_check()
             self._unsub_check = None
+        if self.client:
+            await self.client.close()
         await self.store.async_save(self._data_to_save())
         await super().async_shutdown()
 
@@ -900,7 +905,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
         # Missing or expired decision (first start, HA was down at the nightly run).
         # Started after the areas were read so the decision sees current values.
-        if self.season_active and not self._deciding and self._decision_expired(now):
+        if (
+            self.season_active
+            and not self._deciding
+            and (self._decide_failed_at is None or ts - self._decide_failed_at >= DECIDE_RETRY_S)
+            and self._decision_expired(now)
+        ):
             self.config_entry.async_create_background_task(
                 self.hass, self.async_decide_heating_day("startup"), f"{DOMAIN} heating day"
             )
@@ -989,9 +999,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if self.sun_scale.value is None:
             return
         if self._hourly_ts is None or ts - self._hourly_ts >= WEATHER_PV_REFRESH_S:
+            # In the background: a slow weather service must not hold up the control.
+            # The time stamp keeps a second refresh from starting meanwhile.
             self._hourly_ts = ts
-            self._hourly = await self._forecast("hourly")
+            self.config_entry.async_create_background_task(
+                self.hass, self._refresh_hourly(), f"{DOMAIN} hourly forecast"
+            )
         self._pv_points = weather_points(self._hourly, self.sun_scale.value, lat, lon)
+
+    async def _refresh_hourly(self) -> None:
+        self._hourly = await self._forecast("hourly")
 
     def _sun_index(self, ts: float) -> float:
         """Clear sky index at the configured location (0 while the sun is down)."""
@@ -1414,16 +1431,20 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if not weather or self._state(weather) is None:
             return []
         try:
-            response = await self.hass.services.async_call(
-                "weather",
-                "get_forecasts",
-                {"type": kind},
-                target={ATTR_ENTITY_ID: weather},
-                blocking=True,
-                return_response=True,
-            )
+            async with asyncio.timeout(FORECAST_TIMEOUT):
+                response = await self.hass.services.async_call(
+                    "weather",
+                    "get_forecasts",
+                    {"type": kind},
+                    target={ATTR_ENTITY_ID: weather},
+                    blocking=True,
+                    return_response=True,
+                )
         except (HomeAssistantError, ValueError) as err:
             LOGGER.debug("No %s forecast from %s: %s", kind, weather, err)
+            return []
+        except TimeoutError:
+            LOGGER.debug("No %s forecast from %s within %s s", kind, weather, FORECAST_TIMEOUT)
             return []
         data = (response or {}).get(weather, {})
         forecast = data.get("forecast") if isinstance(data, dict) else None
@@ -1453,6 +1474,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._deciding = True
         try:
             await self._decide(trigger, use_ai)
+            self._decide_failed_at = None
+        except Exception:
+            # Otherwise the next tick would start the same failing decision again,
+            # every minute. A manual run shows the error to the caller.
+            self._decide_failed_at = dt_util.utcnow().timestamp()
+            if trigger == "manual":
+                raise
+            LOGGER.exception("Heating day decision (%s) failed", trigger)
         finally:
             self._deciding = False
             self._save()

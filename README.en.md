@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.7. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.8. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -56,6 +56,7 @@ On a no-heating day all circuits stay off except frost protection and the option
 * **Costs:** token usage times the configured prices. Every call is estimated beforehand; once the monthly budget is reached there are no calls until the month changes.
 * **Failures:** on errors, timeouts or invalid answers the control continues with the last learned values. The API key never appears in the log and is redacted in diagnostics.
 * **Rejected API key:** if Anthropic rejects the key (e.g. revoked), Home Assistant asks for a new one under Settings > Devices & services (re-authentication). Until then the local control runs without the AI; an empty field turns the AI off.
+* **Weather service does not answer:** the forecast is awaited for at most 10 seconds; after that the heating day rule decides without a forecast and the control goes on. If the heating day decision fails, it is tried again after 15 minutes (error in the log).
 
 ### Heat meter
 
