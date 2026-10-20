@@ -78,6 +78,16 @@
         "data_description": {
           "api_key": "Optional. Ohne Key läuft nur die lokale Regelung. Der Key wird nur in Home Assistant gespeichert und nie protokolliert."
         }
+      },
+      "reauth_confirm": {
+        "title": "API-Key abgelehnt",
+        "description": "Anthropic hat den gespeicherten API-Key abgelehnt. Die KI-Prüfungen und der KI-Teil der Heiztag-Entscheidung ruhen daher. Die lokale Regelung läuft mit den gelernten Werten weiter.\n\nGib einen gültigen Key aus console.anthropic.com (API Keys) ohne Leerzeichen ein. Lässt du das Feld leer, geht es ohne KI weiter.",
+        "data": {
+          "api_key": "Anthropic API-Key"
+        },
+        "data_description": {
+          "api_key": "Wird vor dem Speichern bei Anthropic geprüft. Der Key wird nur in Home Assistant gespeichert und nie protokolliert."
+        }
       }
     },
     "error": {

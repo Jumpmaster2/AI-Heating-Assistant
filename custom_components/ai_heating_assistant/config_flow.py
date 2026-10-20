@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -454,6 +455,34 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
         )
         result["next_flow"] = (FlowType.CONFIG_SUBENTRIES_FLOW, sub["flow_id"])
         return result
+
+    async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
+        """The API key was rejected by Anthropic."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Enter a new API key, or none to go on without the AI."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            api_key = str(user_input.get(CONF_API_KEY, "") or "").strip()
+            if api_key:
+                model = str(entry.options.get(CONF_AI_MODEL, DEFAULTS[CONF_AI_MODEL]))
+                if error := await _check_api_key(self.hass, api_key, model):
+                    errors["base"] = error
+            if not errors:
+                # the update listener reloads the entry
+                return self.async_update_and_abort(entry, data_updates={CONF_API_KEY: api_key})
+        schema = vol.Schema(
+            {
+                vol.Optional(CONF_API_KEY): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                )
+            }
+        )
+        return self.async_show_form(step_id="reauth_confirm", data_schema=schema, errors=errors)
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None

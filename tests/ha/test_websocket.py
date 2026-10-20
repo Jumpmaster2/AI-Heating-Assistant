@@ -137,6 +137,15 @@ async def test_save_api_key(hass: HomeAssistant, base_states, hass_ws_client) ->
     assert entry.data["api_key"] == "good-key"
     assert entry.runtime_data.ai_configured
 
+    # a key saved in the panel ends a reauth flow that asked for one
+    await entry.start_reauth_flow(hass)
+    assert hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    with patch(target):
+        msg = await _send(client, type=f"{DOMAIN}/save_api_key", api_key="other-key")
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert msg["success"], msg
+    assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+
     msg = await _send(client, type=f"{DOMAIN}/save_api_key", remove=True)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert msg["success"]

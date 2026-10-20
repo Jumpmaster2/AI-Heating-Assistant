@@ -633,3 +633,17 @@ async def test_open_sun_protection_does_not_block_ventilation(
     hass.states.async_set("cover.storage_shade", "closed")
     await _advance(hass, freezer, 1)
     assert hass.states.get(state).state == "blocked"
+
+
+async def test_rejected_api_key_starts_reauth_and_control_goes_on(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from custom_components.ai_heating_assistant.ai_client import AiAuthError
+
+    freezer.move_to(IN_SEASON)
+    with patch(STRUCTURED, side_effect=AiAuthError("authentication failed")):
+        await _setup(hass, make_entry(api_key="revoked-key"))
+    flows = hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    assert [f["context"]["source"] for f in flows] == ["reauth"]
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"

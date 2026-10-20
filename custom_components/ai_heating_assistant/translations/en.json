@@ -78,6 +78,16 @@
         "data_description": {
           "api_key": "Optional. Without a key the local control runs alone. The key is only stored in Home Assistant and never logged."
         }
+      },
+      "reauth_confirm": {
+        "title": "API key rejected",
+        "description": "Anthropic rejected the stored API key, so the AI checks and the AI part of the heating day decision are paused. The local control keeps running with the learned values.\n\nEnter a valid key from console.anthropic.com (API keys), without spaces. Leave the field empty to go on without the AI.",
+        "data": {
+          "api_key": "Anthropic API key"
+        },
+        "data_description": {
+          "api_key": "Checked with Anthropic before it is saved. The key is only stored in Home Assistant and never logged."
+        }
       }
     },
     "error": {

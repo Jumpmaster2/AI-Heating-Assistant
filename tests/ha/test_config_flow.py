@@ -383,3 +383,22 @@ async def test_switch_of_another_area_is_rejected(hass: HomeAssistant, base_stat
     )
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["reason"] == "reconfigure_successful"
+
+
+async def test_reauth_flow_replaces_the_key(hass: HomeAssistant, base_states) -> None:
+    entry = make_entry(api_key="old-key")
+    entry.add_to_hass(hass)
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM and result["step_id"] == "reauth_confirm"
+    target = "custom_components.ai_heating_assistant.config_flow.ClaudeClient.validate"
+    with patch(target, side_effect=AiAuthError("authentication failed")):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_key": "still-wrong"}
+        )
+    assert result["errors"] == {"base": "invalid_auth"}
+    with patch(target):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_key": " new-key "}
+        )
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "reauth_successful"
+    assert entry.data["api_key"] == "new-key"

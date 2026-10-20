@@ -35,7 +35,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_conversion import TemperatureConverter
 
-from .ai_client import AiError, ClaudeClient
+from .ai_client import AiAuthError, AiError, ClaudeClient
 from .const import (
     CONF_AI_CHECK_DAYS,
     CONF_AI_EFFORT,
@@ -1738,6 +1738,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             usage = err.usage
             self._ai_failed(kind, str(err))
             data = None
+            if isinstance(err, AiAuthError):
+                # The key was rejected: ask for a new one; the local control goes on.
+                self.config_entry.async_start_reauth(self.hass)
         finally:
             if usage:
                 self.budget.add(cost_eur(usage, self.prices), usage)

@@ -8,7 +8,12 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState, ConfigSubentry
+from homeassistant.config_entries import (
+    SOURCE_REAUTH,
+    ConfigEntry,
+    ConfigEntryState,
+    ConfigSubentry,
+)
 from homeassistant.const import CONF_API_KEY
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import section
@@ -393,6 +398,9 @@ async def ws_save_api_key(
             connection.send_error(msg["id"], "invalid", error)
             return
     hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_API_KEY: api_key})
+    # a reauth flow started for the old key has nothing left to do
+    for flow in list(entry.async_get_active_flows(hass, {SOURCE_REAUTH})):
+        hass.config_entries.flow.async_abort(flow["flow_id"])
     connection.send_result(msg["id"], config_payload(hass, entry))
 
 

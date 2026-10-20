@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.5. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.6. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -55,6 +55,7 @@ On a no-heating day all circuits stay off except frost protection and the option
 * **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, an area was clearly overheated (more than 0.5 Kelvin hours per day, pro rata), the AI changed something significant, or you change the target or settings. A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
 * **Costs:** token usage times the configured prices. Every call is estimated beforehand; once the monthly budget is reached there are no calls until the month changes.
 * **Failures:** on errors, timeouts or invalid answers the control continues with the last learned values. The API key never appears in the log and is redacted in diagnostics.
+* **Rejected API key:** if Anthropic rejects the key (e.g. revoked), Home Assistant asks for a new one under Settings > Devices & services (re-authentication). Until then the local control runs without the AI; an empty field turns the AI off.
 
 ### Heat meter
 
