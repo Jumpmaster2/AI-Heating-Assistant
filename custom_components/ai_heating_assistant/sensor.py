@@ -59,9 +59,9 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
         native_unit_of_measurement="K/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
-        value_fn=lambda a: round(a.learned_values.heat_rate_kph, 3),
+        value_fn=lambda a: round(a.learned_values.heat_rate_kph, 2),
         attrs_fn=lambda a: {
-            "heat_effect_kph": round(a.learner.model.a, 4),
+            "heat_effect_kph": round(a.learner.model.a, 3),
             "samples": a.learner.model.n_heat,
         },
     ),
@@ -70,7 +70,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
         native_unit_of_measurement="K/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=3,
-        value_fn=lambda a: round(a.learned_values.cool_rate_kph, 4),
+        value_fn=lambda a: round(a.learned_values.cool_rate_kph, 3),
         attrs_fn=lambda a: {"samples": a.learner.model.n_cool},
     ),
     AreaSensorDescription(
@@ -111,14 +111,14 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
         native_unit_of_measurement="1/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=4,
-        value_fn=lambda a: round(a.learner.model.k, 5),
+        value_fn=lambda a: round(a.learner.model.k, 4),
     ),
     AreaSensorDescription(
         key="sun_influence",
         native_unit_of_measurement="K/h/kW",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=3,
-        value_fn=lambda a: round(a.learner.model.s, 4),
+        value_fn=lambda a: round(a.learner.model.s, 3),
     ),
     AreaSensorDescription(
         key="learning_progress",
@@ -183,6 +183,9 @@ class AreaSensor(AreaEntity, SensorEntity):
     """Sensor of one area."""
 
     entity_description: AreaSensorDescription
+    # Values change with every model update; rounded to what is shown, so the recorder
+    # writes a row only when the shown value changes. Large attributes are not recorded.
+    _unrecorded_attributes = frozenset({"parameters", "heat_effect_kph"})
 
     def __init__(
         self, coordinator: HeatingCoordinator, area_id: str, description: AreaSensorDescription
@@ -208,6 +211,7 @@ class HeatingDayPhaseSensor(GlobalEntity, SensorEntity):
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [p.value for p in Phase]
+    _unrecorded_attributes = frozenset({"last_days"})
 
     def __init__(self, coordinator: HeatingCoordinator) -> None:
         super().__init__(coordinator, "decision_phase")
@@ -230,6 +234,7 @@ class AiTimestampSensor(GlobalEntity, SensorEntity):
     """Last or next AI check."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _unrecorded_attributes = frozenset({"summary", "rejected"})
 
     def __init__(self, coordinator: HeatingCoordinator, key: str, state_key: str) -> None:
         super().__init__(coordinator, key)

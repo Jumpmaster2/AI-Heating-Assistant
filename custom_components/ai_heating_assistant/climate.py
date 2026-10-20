@@ -28,6 +28,10 @@ _NATIVE = hasattr(ClimateEntity, "native_current_temperature")
 _LIMIT_SLACK = 0.01
 
 
+def _tenth(value: float | None) -> float | None:
+    return None if value is None else round(value, 1)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: AiHeatingConfigEntry,
@@ -54,6 +58,9 @@ class AreaClimate(AreaEntity, ClimateEntity):
     _attr_target_temperature_step = 0.1
     # Tenths also in °F, otherwise +/- by 0.1 would not move the rounded target.
     _attr_precision = PRECISION_TENTHS
+    # Forecast values change almost every minute: not recorded, and rounded so that the
+    # state (and its row in the recorder) changes only when the shown value does.
+    _unrecorded_attributes = frozenset({"predicted_temperature", "expected_peak", "expected_pv_kw"})
 
     if _NATIVE:
         _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
@@ -109,9 +116,9 @@ class AreaClimate(AreaEntity, ClimateEntity):
             "status": area.status,
             "effective_target": area.effective_target,
             "heating_day": self.coordinator.heating_day,
-            "predicted_temperature": decision.predicted_temp if decision else None,
-            "expected_peak": decision.expected_peak if decision else None,
-            "expected_pv_kw": area.learned_values.pv_plan_kw if area.has_circuit else None,
+            "predicted_temperature": _tenth(decision.predicted_temp) if decision else None,
+            "expected_peak": _tenth(decision.expected_peak) if decision else None,
+            "expected_pv_kw": _tenth(area.learned_values.pv_plan_kw) if area.has_circuit else None,
         }
 
     async def async_set_temperature(self, **kwargs: Any) -> None:

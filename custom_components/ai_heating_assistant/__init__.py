@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
@@ -75,9 +77,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) ->
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _async_remove_stale_entities(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await async_register_panel(hass, entry.entry_id)
     return True
+
+
+@callback
+def _async_remove_stale_entities(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
+    """Remove entities this entry no longer creates (heat meter removed, circuit removed
+    from an area); they would stay as "unavailable". Disabled entities are never added,
+    so only enabled ones of a platform that was set up are judged."""
+    created: dict[str, set[str]] = {}
+    for platform in async_get_platforms(hass, DOMAIN):
+        if platform.config_entry is entry:
+            created.setdefault(platform.domain, set()).update(platform.entities)
+    registry = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            not reg_entry.disabled
+            and reg_entry.domain in created
+            and reg_entry.entity_id not in created[reg_entry.domain]
+        ):
+            LOGGER.info("Removing %s: no longer provided", reg_entry.entity_id)
+            registry.async_remove(reg_entry.entity_id)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:

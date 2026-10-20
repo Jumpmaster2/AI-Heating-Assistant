@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.10. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.11. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -148,6 +148,8 @@ In the dashboard under **Heating areas** (or under the integration with **Add he
 Start values (including `theta`) are only set during setup or when an area is created and apply until something has been learned. They cannot be changed afterwards; instead an area shows the values the control currently uses under **Learned values** (window delay, recovery time, dead time, puffer), and the learned `theta` is under **Heating day decision**. A change there replaces the learned or AI-adjusted value, learning continues from there, and the logbook records it.
 
 ## Entities
+
+Entities no longer provided after a change (e.g. "Heat today" after removing the heat meter) are removed from the entity registry at the next load. Fast changing forecast values (`predicted_temperature`, `expected_peak`, `expected_pv_kw`) and large attributes (parameter list, last days, rule, AI summary) are not recorded; values are rounded to the shown precision so that not every minute creates a new state.
 
 Global (device "AI Heating Assistant"):
 

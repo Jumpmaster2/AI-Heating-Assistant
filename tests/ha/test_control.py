@@ -944,3 +944,24 @@ async def test_heat_today_heats_outside_the_heating_period(
     freezer.move_to("2026-05-11 03:05:00+02:00")
     await _advance(hass, freezer, 15)
     assert hass.states.get("sensor.living_room_status").state == "out_of_season"
+
+
+async def test_tiny_changes_do_not_write_new_states(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """Forecast attributes are rounded and not recorded (recorder load, F-10)."""
+    from homeassistant.const import EVENT_STATE_CHANGED
+
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    await _advance(hass, freezer, 3)
+    changes = async_capture_events(hass, EVENT_STATE_CHANGED)
+    hass.states.async_set("sensor.outdoor_temperature", "5.01", {"unit_of_measurement": "°C"})
+    await _advance(hass, freezer, 1)
+    assert not [e for e in changes if e.data["entity_id"] == "climate.living_room"]
+
+    state = hass.states.get("climate.living_room")
+    for key in ("predicted_temperature", "expected_peak"):
+        assert state.attributes[key] == round(state.attributes[key], 1)
+    entity = hass.data["entity_components"]["climate"].get_entity("climate.living_room")
+    assert "predicted_temperature" in entity._Entity__combined_unrecorded_attributes

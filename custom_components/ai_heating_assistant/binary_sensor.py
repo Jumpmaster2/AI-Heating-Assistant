@@ -30,6 +30,8 @@ async def async_setup_entry(
 class HeatingDaySensor(GlobalEntity, BinarySensorEntity):
     """Is today a heating day?"""
 
+    _unrecorded_attributes = frozenset({"rule"})
+
     def __init__(self, coordinator: HeatingCoordinator) -> None:
         super().__init__(coordinator, "heating_day")
 

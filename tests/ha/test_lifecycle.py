@@ -124,3 +124,31 @@ async def test_released_circuit_not_reachable_is_tried_again(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert hass.states.get(CIRCUIT).state == "off"
     assert entry.runtime_data._data_to_save()["release"] == []
+
+
+async def test_entities_no_longer_provided_are_removed(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """Removing the heat meter leaves no "unavailable" heat sensor behind (F-15)."""
+    from homeassistant.helpers import entity_registry as er
+
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.heat_meter", "12.5", {"unit_of_measurement": "MWh"})
+    entry = make_entry(heat_meter="sensor.heat_meter")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    registry = er.async_get(hass)
+    heat = "sensor.ai_heating_assistant_heat_today"
+    assert registry.async_get(heat) is not None
+    # a diagnostic entity disabled by the user stays in the registry
+    registry.async_update_entity(
+        "sensor.living_room_dead_time", disabled_by=er.RegistryEntryDisabler.USER
+    )
+
+    options = {k: v for k, v in entry.options.items() if k != "heat_meter"}
+    hass.config_entries.async_update_entry(entry, options=options)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert registry.async_get(heat) is None
+    assert registry.async_get("sensor.living_room_dead_time") is not None
+    assert registry.async_get("climate.living_room") is not None

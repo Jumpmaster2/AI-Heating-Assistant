@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.11.10. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.11.11. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -148,6 +148,8 @@ Im Dashboard unter **Heizbereiche** (oder unter der Integration **Heizbereich hi
 Startwerte (auch `theta`) werden nur beim Einrichten bzw. Anlegen gesetzt und gelten, bis etwas gelernt wurde. Danach lassen sie sich nicht mehr ändern; stattdessen zeigt der Bereich unter **Gelernte Werte** die Werte, mit denen gerade geregelt wird (Fensterverzögerung, Erholungszeit, Totzeit, puffer), und das gelernte `theta` steht unter **Heiztag-Entscheidung**. Eine Änderung dort ersetzt den gelernten bzw. von der KI angepassten Wert, das Lernen geht von dort aus weiter, und das Logbuch vermerkt es.
 
 ## Entitäten
+
+Entitäten, die nach einer Änderung nicht mehr entstehen (z. B. „Wärme heute“ nach dem Entfernen des Wärmezählers), werden beim nächsten Laden aus der Entitätsregistrierung entfernt. Schnell wechselnde Prognosewerte (`predicted_temperature`, `expected_peak`, `expected_pv_kw`) und große Attribute (Parameterliste, letzte Tage, Regel, KI-Zusammenfassung) zeichnet der Recorder nicht auf; die Werte sind auf die angezeigte Genauigkeit gerundet, damit nicht jede Minute ein neuer Zustand entsteht.
 
 Global (Gerät "AI Heating Assistant"):
 
