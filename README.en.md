@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.20. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.21. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -81,6 +81,11 @@ Per area (also without heating circuit) from the absolute humidity inside and ou
 4. **Settings > Devices & services > Add integration > AI Heating Assistant**.
 
 Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (optional, without a key only the local control runs). During setup the AI step only asks for the key and the time of the nightly run; model and monthly budget follow only once a key was entered and accepted.
+
+### Manual installation
+
+1. Copy the folder `custom_components/ai_heating_assistant` of this repository to `config/custom_components/` of Home Assistant.
+2. Restart Home Assistant and add the integration as in step 4 above.
 
 ## Configuration
 
@@ -200,6 +205,52 @@ data:
           loss_per_h: 0.004
         params:
           hysteresis_on: 0.2
+```
+
+## Troubleshooting
+
+* **Status *Sensor error*:** the temperature sensor reports no value, an impossible one or a unit that is no temperature (warning in the log). The circuit stays off; after 15 minutes a repair appears.
+* **Status *Actuator unavailable*:** the switch is `unavailable`. If it does not follow commands, it is asked again with growing pauses; after three attempts a repair appears.
+* **The AI is no longer asked:** budget reached (notice in the dashboard, sensor *AI costs this month* with `budget_reached`) or the API key was rejected (re-authentication under Settings > Devices & services).
+* **Debug log:** choose *Enable debug logging* in the integration, or in `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.ai_heating_assistant: debug
+    anthropic: debug
+```
+
+## Privacy
+
+Without an API key nothing leaves the house. With a key Anthropic receives: the area names, temperatures, targets and learned values, statistics since the last check, outdoor temperature, PV power, a compact weather forecast, heat meter values and the history of heating day decisions. Entity ids, location and the API key itself are not part of the requests.
+
+## Known limitations
+
+* All temperatures in the settings are entered in °C (sensors and thermostats may use °F).
+* Only on/off switches per heating circuit, no modulating valves.
+* One instance per Home Assistant.
+
+## Automation example
+
+No heating on a bridge day. The choice applies to the day it is set on; set after midnight and before the nightly run, it applies to the new day:
+
+```yaml
+automation:
+  - alias: "No heating on bridge days"
+    triggers:
+      - trigger: time
+        at: "00:30:00"
+    conditions:
+      - condition: state
+        entity_id: calendar.bridge_days
+        state: "on"
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.ai_heating_assistant_heating_day_override
+        data:
+          option: off_today
 ```
 
 ## Disabling and uninstalling

@@ -85,7 +85,7 @@ Schweregrad: **Kritisch / Hoch / Mittel / Niedrig**. „zu prüfen“ heißt: De
 | F-28 | Lebenszyklus | Niedrig, **zu prüfen** | `__init__.py:66-71` | `async_shutdown` läuft ggf. doppelt: explizit und automatisch durch den Coordinator. | Es wird doppelt gespeichert (harmlos). | Nur einmal aufrufen (zusammen mit F-08). |
 | F-29 | Robustheit | Niedrig | `coordinator.py:980-981,1035-1047` | Reagiert ein Aktor nicht, wird jede Minute erneut geschaltet. | Last auf dem Funkbus, keine Rückmeldung an die Nutzer. | Wiederholung mit Backoff, nach N Versuchen Warnung/Repair (mit F-03). |
 | F-30 | Konformität | Niedrig | `coordinator.py:554,591` | `hass.async_create_task` statt `config_entry.async_create_task`. | Die Tasks sind nicht an den Lebenszyklus des Eintrags gebunden. | Auf `config_entry.async_create_task` umstellen. |
-| F-31 | Übersetzung | Niedrig | `strings.json` (`config.abort`, `config_subentries.heating_area.abort` fehlen) | `single_instance_allowed` und `reconfigure_successful` haben keine Texte. | Die UI zeigt Rohschlüssel. | `abort`-Abschnitte in strings/de/en ergänzen. |
+| F-31 | Übersetzung | **widerlegt** (war: Niedrig) | `strings.json` (`config.abort`, `config_subentries.heating_area.abort` fehlen) | `single_instance_allowed` und `reconfigure_successful` haben keine Texte. | Die UI zeigt Rohschlüssel. | `abort`-Abschnitte in strings/de/en ergänzen. |
 | F-32 | UI | Niedrig | `messages.py:8-21`, `coordinator.py:1351-1357,1443-1450,1705-1713` | Das Logbuch zeigt interne Schlüssel: `rule_fallback`, `ai_leads`, `unclear`, Fehler „A/B“, `hysteresis_on`. | Für Laien unverständlich. | Übersetzte Bezeichnungen verwenden (siehe UI-10). |
 | F-33 | Konformität | Niedrig | `manifest.json` | `loggers: ["anthropic"]` fehlt. `iot_class: calculated` trotz Cloud-API ist **zu prüfen**. | Debug-Logging des SDK lässt sich nicht über die UI aktivieren. | `loggers` ergänzen und die iot_class bewerten. |
 | F-34 | CI / Lieferkette | Niedrig | `.github/workflows/validate.yml:16,21`, `tests.yml:23-26` | Die Actions stehen auf `@master`/`@main` statt fester Versionen. CI prüft weder `ruff format --check` noch mypy. | Ungeprüfte Fremdänderungen in der CI. | Versionen oder SHAs pinnen und die fehlenden Checks ergänzen. |
@@ -230,3 +230,50 @@ Die Startwerte haben sinnvolle Defaults. Die Einrichtung ist mit den Vorbelegung
 13. Dienste **F-21** / **F-22**, Lebenszyklus **F-27** / **F-30**.
 14. Rest: **F-33**, **F-34**, **F-35**, **F-38**.
 15. README und Tests laufend in jedem Schritt; Abschluss-Review der Doku (F-13).
+
+## 7. Umsetzungsstand (Branch `ccr-739e6cae-60cxas`)
+
+Jeder Schritt hat Tests, ruff (Prüfung und Format) sowie Übersetzungen de/en und eine höhere Version. Nach jedem Schritt lief ein Review mit unabhängiger Gegenprüfung; bestätigte Review-Funde sind in eigenen Commits behoben.
+
+| Fund | Stand | Commit(s) |
+|---|---|---|
+| F-01 Temperatureinheiten | behoben | `f9227b3`, `cf7cc33` (Thermostat in °F) |
+| F-02 Kreise beim Deaktivieren/Entfernen aus | behoben | `efa3744`, `cf7cc33` (Wiederholung beim nächsten Start) |
+| F-03 Ausfall Sensor/Aktor, Repairs | behoben | `b8a6770`, `cf7cc33` (ignorierte Meldungen bleiben). Ein Notbetrieb bei Sensorausfall ist **nicht** eingebaut (zu prüfen, ob gewünscht). |
+| F-04 Reauth | behoben | `9df0cfc` |
+| F-05 USD | behoben | `2fd4f72` |
+| F-06 Sperr-Entität | behoben | `d3143c4` |
+| F-07 doppelter Schalter | behoben | `d3143c4` |
+| F-08 Listener-Leck | widerlegt (Beleg in der Tabelle), Regressionstest | `f00e892` |
+| F-09 Heizungsart | behoben | `db474b9` |
+| F-10 Recorder-Last | behoben | `21c24f9` |
+| F-11 SDK-Version, eigener Client | behoben | `74fa3fd` |
+| F-12 Prognose-Timeout | behoben | `74fa3fd`, `2fd4f72` (Test) |
+| F-13 Doku | behoben | laufend, Abschluss in Schritt 15 |
+| F-14 Selektoren | behoben | `09a81dc`, `b2d928d` |
+| F-15 verwaiste Entitäten | behoben | `21c24f9`, `9158fe8` (konfigurationsbasiert) |
+| F-16 bis F-20 | behoben | `8f01541`, `0b83c26` |
+| F-21 Admin-Dienste | behoben | `2ffc385`, `54bc982` (auch `decide_heating_day`) |
+| F-22 Fehlerbehandlung Import | behoben | `2ffc385`, `54bc982` (Daten vorab geprüft) |
+| F-23 Backoff Heiztag | behoben | `74fa3fd` |
+| F-24 bis F-26 Kosten | behoben | `2fd4f72`, `8f01541` (Timeout, Rundung) |
+| F-27 Panel beim Deaktivieren | behoben | `2ffc385` |
+| F-28 doppelter Shutdown | behoben | `f00e892` |
+| F-29 Backoff Aktor | behoben | `b8a6770` |
+| F-30 Tasks am Eintrag | behoben | `2ffc385` |
+| F-31 Abbruchgründe | widerlegt: HA übersetzt `single_instance_allowed`, `reconfigure_successful` und `reauth_successful` selbst | – |
+| F-32 Logbuch | behoben | `c5102f5` |
+| F-33 loggers, iot_class | behoben; `iot_class` bleibt `calculated`, weil die Regelung lokal arbeitet und die KI optional ist | `54bc982` |
+| F-34 CI | teilweise: Format- und Label-Prüfung ergänzt. Pinnen der Actions per Commit-SHA **offen** (die SHAs ließen sich aus dieser Sitzung nicht verifizieren) | `54bc982` |
+| F-35 Codequalität | behoben (öffentliche Schema-Helfer, Optionen einmal je Lauf, Typen, ungenutzte Übersetzung); mypy nicht eingeführt | `54bc982` |
+| F-36 eindeutige Namen | behoben | `8f01541` |
+| F-37 Heute heizen außerhalb der Saison | behoben | `8f01541`, `0b83c26` |
+| F-38 Panel-Last | behoben | `54bc982` |
+| F-39 relative PV-Schwellen | behoben | `c60ee33` |
+| F-40 (neu) `probatio` statt `voluptuous`-Alias | behoben | `54bc982` |
+| Neue Optionen aus Abschnitt 3 | umgesetzt: Heizungsart, Hemisphäre, Außentemperatur aus Wetter, Prognosevertrauen, Zwangsheizen | `db474b9`, `74ac782`, `6fb1bed`, `a99e1a8`, `281ed43`, `f4a336d` |
+| UI-1 bis UI-7, UI-9, UI-10, UI-12 | umgesetzt | `09a81dc`, `e21b84d`, `5a792a6`, `d6e31c0`, `73b8b2b`, `12e5bec`, `c5102f5`, `d7db976` |
+| UI-8 | entfällt (F-31 widerlegt) | – |
+| UI-11 Panel | `ha-selector` für Entitätsfelder umgesetzt (im Browser mit nachgebildetem Element geprüft, **in einem laufenden HA-Frontend noch zu prüfen**). HA-Dialog statt `confirm()` **offen**. | `694b204`, `54bc982` |
+| UI-13 Repairs | für Sensor, Aktor, Außentemperatur und abgelehnten API-Key (Reauth) umgesetzt; eine unbekannte Einheit erzeugt nur eine Warnung im Protokoll, kein Repair (**offen**) | `b8a6770`, `9df0cfc` |
+

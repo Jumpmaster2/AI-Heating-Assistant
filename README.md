@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.20. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.21. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -81,6 +81,11 @@ Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder ei
 4. **Einstellungen > Geräte & Dienste > Integration hinzufügen > AI Heating Assistant**.
 
 Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von Anthropic (optional, ohne Key läuft nur die lokale Regelung). Bei der Einrichtung fragt der KI-Schritt nur den Key und die Uhrzeit des Nachtlaufs; Modell und Monatsbudget folgen erst, wenn ein Key eingegeben und angenommen wurde.
+
+### Manuelle Installation
+
+1. Den Ordner `custom_components/ai_heating_assistant` aus diesem Repository nach `config/custom_components/` von Home Assistant kopieren.
+2. Home Assistant neu starten und die Integration wie oben unter Schritt 4 hinzufügen.
 
 ## Konfiguration
 
@@ -200,6 +205,52 @@ data:
           loss_per_h: 0.004
         params:
           hysteresis_on: 0.2
+```
+
+## Fehlerbehebung
+
+* **Status *Sensorfehler*:** Der Temperatursensor liefert keinen, einen unmöglichen Wert oder eine Einheit, die keine Temperatur ist (Warnung im Protokoll). Der Kreis bleibt aus; nach 15 Minuten erscheint eine Reparaturmeldung.
+* **Status *Aktor nicht erreichbar*:** Der Schalter ist `unavailable`. Folgt er Befehlen nicht, wird mit wachsendem Abstand erneut geschaltet; nach drei Versuchen erscheint eine Reparaturmeldung.
+* **KI fragt nicht mehr:** Budget erreicht (Hinweis im Dashboard, Sensor *KI-Kosten im Monat* mit `budget_reached`) oder der API-Key wurde abgelehnt (erneute Authentifizierung unter Einstellungen > Geräte & Dienste).
+* **Debug-Protokoll:** In der Integration *Debug-Protokollierung aktivieren* wählen, oder in `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.ai_heating_assistant: debug
+    anthropic: debug
+```
+
+## Datenschutz
+
+Ohne API-Key verlässt nichts das Haus. Mit Key gehen an Anthropic: die Bereichsnamen, Temperaturen, Soll- und Lernwerte, Kennzahlen seit der letzten Prüfung, Außentemperatur, PV-Leistung, eine kompakte Wettervorhersage, Wärmezählerwerte und der Verlauf der Heiztag-Entscheidungen. Entitäts-IDs, Standort und der API-Key selbst sind nicht Teil der Anfragen.
+
+## Bekannte Einschränkungen
+
+* Alle Temperaturen in den Einstellungen werden in °C eingegeben (Sensoren und Thermostate dürfen °F nutzen).
+* Nur Schaltaktoren (an/aus) je Heizkreis, keine stetigen Ventile.
+* Eine Instanz je Home Assistant.
+
+## Beispiel für eine Automation
+
+An einem Brückentag nicht heizen. Die Auswahl gilt für den Tag, an dem sie gesetzt wird; nach Mitternacht und vor dem Nachtlauf gesetzt, gilt sie für den neuen Tag:
+
+```yaml
+automation:
+  - alias: "Kein Heizen am Brückentag"
+    triggers:
+      - trigger: time
+        at: "00:30:00"
+    conditions:
+      - condition: state
+        entity_id: calendar.brueckentage
+        state: "on"
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.ai_heating_assistant_heating_day_override
+        data:
+          option: off_today
 ```
 
 ## Deaktivieren und Deinstallation
