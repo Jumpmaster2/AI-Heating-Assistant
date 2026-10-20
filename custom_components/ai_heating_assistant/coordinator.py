@@ -22,6 +22,7 @@ from homeassistant.const import (
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import (
     async_track_point_in_utc_time,
@@ -184,6 +185,16 @@ TWILIGHT_INDEX = 0.05  # clear sky index (about 5 degrees elevation) below which
 PV_NEGLIGIBLE_KW = 0.05  # expected PV power below which a missing PV value counts as 0
 PV_MISSING_WARN_MIN = 60.0  # daytime minutes without a PV value before a warning
 INACTIVE_STATES = {"off", "idle", STATE_UNAVAILABLE, STATE_UNKNOWN, "none", ""}
+OUTAGE_ISSUE_S = 15 * 60  # s a sensor or switch may be missing before a repair issue
+CMD_RETRY_MIN = (1, 2, 4, 8, 15)  # min before a switch command without effect is repeated
+CMD_ISSUE_ATTEMPTS = 3  # commands without effect before a repair issue
+# Repair issues of this integration (translation keys; the issue id adds the area id).
+ISSUE_KEYS = (
+    "sensor_unavailable",
+    "actuator_unavailable",
+    "actuator_not_responding",
+    "outdoor_unavailable",
+)
 
 
 @dataclass
@@ -211,6 +222,8 @@ class Area:
     on_since: float | None = None
     off_at: float | None = None  # last real switch-off seen (not restored after a restart)
     commanded: tuple[bool, float] | None = None
+    cmd_attempts: int = 0  # commands sent that the switch has not followed yet
+    next_cmd_at: float | None = None  # earliest time to repeat such a command
     effective_target: float | None = None
     vacation: bool = False
     preheat: bool = False
@@ -320,6 +333,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._checking = False
         self._tick_count = 0
         self._unit_warned: set[str] = set()  # entities already warned about an odd unit
+        self._missing_since: dict[str, float] = {}  # repair issue id -> start of the outage
+        self._issues: set[str] = set()  # repair issues raised by this coordinator
 
     # ------------------------------------------------------------------ config
 
@@ -419,6 +434,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     async def _async_setup(self) -> None:
         """Load stored state, build areas, start timers and listeners."""
+        # Outages are judged afresh: issues of an earlier run (or of an area that no
+        # longer exists) would otherwise stay.
+        self._clear_issues()
         stored = await self.store.async_load() or {}
         self.day_state = stored.get("day", {})
         self.ai_state = stored.get("ai", {})
@@ -576,6 +594,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             area.learner.on_switch(ts, area.temp, turned_on, run_hours)
         area.on_since = ts if turned_on else None
         area.off_at = None if turned_on else ts
+        self._command_done(area)
         if turned_on:
             area.check["cycles"] = area.check.get("cycles", 0) + 1
         own = (
@@ -600,10 +619,65 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if self._unsub_check:
             self._unsub_check()
             self._unsub_check = None
+        self._clear_issues()
         await self.store.async_save(self._data_to_save())
         await super().async_shutdown()
 
     # ------------------------------------------------------------------ helpers
+
+    @callback
+    def _track_outage(
+        self, key: str, area: Area | None, entity_id: str, missing: bool, ts: float
+    ) -> None:
+        """Raise a repair issue once a source has been missing for a while and remove
+        it again as soon as the source is back."""
+        issue_id = f"{key}_{area.area_id}" if area else key
+        if not missing:
+            self._missing_since.pop(issue_id, None)
+            self._clear_issue(issue_id)
+            return
+        since = self._missing_since.setdefault(issue_id, ts)
+        if ts - since >= OUTAGE_ISSUE_S:
+            self._raise_issue(key, area, entity_id)
+
+    @callback
+    def _raise_issue(self, key: str, area: Area | None, entity_id: str) -> None:
+        issue_id = f"{key}_{area.area_id}" if area else key
+        if issue_id in self._issues:
+            return
+        self._issues.add(issue_id)
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=key,
+            translation_placeholders={"area": area.name if area else NAME, "entity_id": entity_id},
+        )
+        self._log(key, area, entity_id=entity_id)
+
+    @callback
+    def _clear_issue(self, issue_id: str) -> None:
+        if issue_id in self._issues:
+            self._issues.discard(issue_id)
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    @callback
+    def _clear_issues(self) -> None:
+        """Remove every repair issue of this integration."""
+        for domain, issue_id in list(ir.async_get(self.hass).issues):
+            if domain == DOMAIN and issue_id.startswith(ISSUE_KEYS):
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        self._issues.clear()
+        self._missing_since.clear()
+
+    @callback
+    def _command_done(self, area: Area) -> None:
+        """The switch follows the commands (again)."""
+        area.cmd_attempts = 0
+        area.next_cmd_at = None
+        self._clear_issue(f"actuator_not_responding_{area.area_id}")
 
     def _state(self, entity_id: str | None) -> State | None:
         return self.hass.states.get(entity_id) if entity_id else None
@@ -743,6 +817,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._last_tick = ts
 
         self.outdoor_temp = self._temp(self.opt(CONF_OUTDOOR_TEMP))
+        if outdoor_id := self.opt(CONF_OUTDOOR_TEMP):
+            self._track_outage(
+                "outdoor_unavailable", None, outdoor_id, self.outdoor_temp is None, ts
+            )
         self.pv_kw = self._pv_kw()
         self._pv_measured = self.pv_kw is not None
         await self._update_pv_forecast(ts)
@@ -945,6 +1023,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             )
             if area.switch_on and area.on_since is None:
                 area.on_since = area.last_switch_change
+            sensor_id, switch_id = cfg[CONF_TEMP_SENSOR], cfg[CONF_SWITCH]
+            self._track_outage("sensor_unavailable", area, sensor_id, area.temp is None, ts)
+            self._track_outage(
+                "actuator_unavailable", area, switch_id, not area.switch_available, ts
+            )
             await self._control_area(area, ts, minutes, heating_day, return_ts)
         else:
             area.status = AreaStatus.NO_CIRCUIT
@@ -1006,9 +1089,17 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         )
         area.decision = decision
         area.status = decision.status
+        if not area.switch_available:
+            area.status = AreaStatus.ACTUATOR_UNAVAILABLE
         self._handle_events(area, ts, window_open_since, temp_before)
 
-        if area.switch_available and decision.want_on != area.switch_on and decision.may_switch:
+        if area.switch_available and decision.want_on == area.switch_on:
+            self._command_done(area)
+        elif (
+            area.switch_available
+            and decision.may_switch
+            and (area.next_cmd_at is None or ts >= area.next_cmd_at)
+        ):
             await self._switch(area, decision.want_on, ts)
 
         area.learner.add_sample(
@@ -1067,6 +1158,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         entity_id = area.cfg[CONF_SWITCH]
         domain = entity_id.split(".", 1)[0]
         area.commanded = (turn_on, ts)
+        # A switch that does not follow is asked again with growing pauses.
+        area.cmd_attempts += 1
+        wait_min = CMD_RETRY_MIN[min(area.cmd_attempts, len(CMD_RETRY_MIN)) - 1]
+        area.next_cmd_at = ts + wait_min * 60
+        if area.cmd_attempts >= CMD_ISSUE_ATTEMPTS:
+            self._raise_issue("actuator_not_responding", area, entity_id)
         try:
             await self.hass.services.async_call(
                 domain,

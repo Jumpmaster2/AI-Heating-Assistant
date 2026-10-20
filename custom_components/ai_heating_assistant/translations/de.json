@@ -529,6 +529,7 @@
           "preheat": "Vorheizen zur Rückkehr",
           "emergency": "Notfallregel",
           "sensor_error": "Sensorfehler",
+          "actuator_unavailable": "Aktor nicht erreichbar",
           "no_circuit": "Kein Heizkreis"
         }
       },
@@ -699,6 +700,24 @@
     },
     "ai_disabled": {
       "message": "Die KI ist ausgeschaltet oder nicht eingerichtet."
+    }
+  },
+  "issues": {
+    "sensor_unavailable": {
+      "title": "Temperatursensor von {area} nicht verfügbar",
+      "description": "Der Temperatursensor {entity_id} des Heizbereichs {area} liefert seit mindestens 15 Minuten keinen gültigen Wert. Ohne Raumtemperatur bleibt der Heizkreis aus, und auch der Frostschutz kann nicht greifen.\n\nPrüfe den Sensor (Batterie, Funkverbindung, zugehörige Integration) oder wähle in den Einstellungen des Heizbereichs einen anderen Temperatursensor. Die Meldung verschwindet von selbst, sobald der Sensor wieder Werte liefert."
+    },
+    "actuator_unavailable": {
+      "title": "Schalter von {area} nicht erreichbar",
+      "description": "Der Schalter {entity_id} des Heizbereichs {area} ist seit mindestens 15 Minuten nicht erreichbar. Der Heizkreis kann nicht geschaltet werden und bleibt im letzten Zustand.\n\nPrüfe das Gerät (Stromversorgung, Funkverbindung, zugehörige Integration) oder wähle in den Einstellungen des Heizbereichs einen anderen Schalter. Die Meldung verschwindet von selbst, sobald der Schalter wieder erreichbar ist."
+    },
+    "actuator_not_responding": {
+      "title": "Schalter von {area} reagiert nicht",
+      "description": "Der Schalter {entity_id} des Heizbereichs {area} hat nach mehreren Schaltbefehlen seinen Zustand nicht geändert. Die Integration versucht es weiter, mit wachsendem Abstand (bis 15 Minuten).\n\nPrüfe, ob das Gerät reagiert, wenn du es in Home Assistant von Hand schaltest, und ob eine andere Automation es zurückschaltet. Die Meldung verschwindet, sobald der Schalter den Befehlen wieder folgt."
+    },
+    "outdoor_unavailable": {
+      "title": "Außentemperatursensor nicht verfügbar",
+      "description": "Der Außentemperatursensor {entity_id} liefert seit mindestens 15 Minuten keinen gültigen Wert. Die Regelung läuft weiter, aber die Vorhersage ist ungenauer, und das thermische Modell lernt in dieser Zeit nichts.\n\nPrüfe den Sensor oder wähle in den Einstellungen von AI Heating Assistant (Allgemein) einen anderen. Die Meldung verschwindet von selbst, sobald der Sensor wieder Werte liefert."
     }
   }
 }

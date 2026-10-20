@@ -33,6 +33,7 @@ class AreaStatus(StrEnum):
     PREHEAT = "preheat"
     EMERGENCY = "emergency"
     SENSOR_ERROR = "sensor_error"
+    ACTUATOR_UNAVAILABLE = "actuator_unavailable"
     NO_CIRCUIT = "no_circuit"
 
 

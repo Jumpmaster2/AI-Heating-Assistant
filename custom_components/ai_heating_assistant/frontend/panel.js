@@ -337,6 +337,7 @@ const STATUS_PILL = {
   window_open: "muted",
   recovery: "muted",
   sensor_error: "bad",
+  actuator_unavailable: "bad",
   idle: "ok",
 };
 const VENT_PILL = { ventilate_now: "warn", close_window: "warn", ventilation_useful: "ok" };

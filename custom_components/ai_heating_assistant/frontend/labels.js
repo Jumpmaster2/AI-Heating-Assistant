@@ -358,6 +358,7 @@ export const LABELS = {
     "preheat": "Vorheizen zur Rückkehr",
     "emergency": "Notfallregel",
     "sensor_error": "Sensorfehler",
+    "actuator_unavailable": "Aktor nicht erreichbar",
     "no_circuit": "Kein Heizkreis"
    },
    "ventilation": {
@@ -745,6 +746,7 @@ export const LABELS = {
     "preheat": "Preheating for return",
     "emergency": "Emergency rule",
     "sensor_error": "Sensor error",
+    "actuator_unavailable": "Actuator unavailable",
     "no_circuit": "No heating circuit"
    },
    "ventilation": {

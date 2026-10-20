@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.11.1. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.11.2. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -22,6 +22,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 * **Kurzlüften:** Solange ein Fenster offen ist, schaltet ein ausgeschalteter Kreis nicht ein, auch vor Ablauf der Fensterverzögerung. Ein laufender Kreis wird dabei nicht unterbrochen. War das Fenster mindestens 2 Minuten, aber kürzer als die Fensterverzögerung offen, folgt eine verkürzte Erholung: der Anteil der Fensterverzögerung, den das Fenster offen war, von der gelernten Erholungszeit (3 von 5 Minuten ergibt 60 %). Auch sie endet sofort, wenn die Temperatur vor dem Lüften wieder erreicht ist.
 * **Mindest-Ein- und -Ausschaltzeit** werden immer eingehalten.
 * **Frostschutz** gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.
+* **Ausfälle:** Liefert der Temperatursensor keinen Wert, bleibt der Kreis aus (Status *Sensorfehler*), auch der Frostschutz kann dann nicht greifen. Ist der Schalter nicht erreichbar, zeigt der Status *Aktor nicht erreichbar*. Dauert ein solcher Ausfall (oder der des Außentemperatursensors) länger als 15 Minuten, erscheint eine Reparaturmeldung unter Einstellungen > System > Reparaturen; sie verschwindet von selbst, sobald der Wert zurück ist. Folgt ein Schalter den Befehlen nicht, wird er nach 1, 2, 4, 8 und dann alle 15 Minuten erneut geschaltet statt jede Minute; nach drei Versuchen erscheint ebenfalls eine Meldung.
 * **Heizperiode:** Außerhalb (z. B. 01.04. bis 30.09.) bleiben alle Kreise aus, es gibt keine KI-Abfragen.
 * **Urlaub:** Frei wählbare Entitäten zeigen Urlaub an (z. B. `input_boolean.vacation_mode` oder ein Kalender). Dann gilt die Urlaubstemperatur für alle Bereiche. Mit einer optionalen Rückkehr-Entität (z. B. `input_datetime.vacation_end`) wird anhand der gelernten Aufheizrate so rechtzeitig vorgeheizt, dass bei Rückkehr der normale Sollwert erreicht ist. Liegt das Rückkehrdatum in der Vergangenheit (z. B. Urlaub manuell eingeschaltet), wird es ignoriert und die Urlaubstemperatur gilt.
 

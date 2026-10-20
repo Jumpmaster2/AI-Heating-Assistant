@@ -529,6 +529,7 @@
           "preheat": "Preheating for return",
           "emergency": "Emergency rule",
           "sensor_error": "Sensor error",
+          "actuator_unavailable": "Actuator unavailable",
           "no_circuit": "No heating circuit"
         }
       },
@@ -699,6 +700,24 @@
     },
     "ai_disabled": {
       "message": "The AI is disabled or not configured."
+    }
+  },
+  "issues": {
+    "sensor_unavailable": {
+      "title": "Temperature sensor of {area} unavailable",
+      "description": "The temperature sensor {entity_id} of the heating area {area} has not delivered a valid value for at least 15 minutes. Without the room temperature the heating circuit stays off, and frost protection cannot work either.\n\nCheck the sensor (battery, radio connection, its integration) or choose another temperature sensor in the settings of the heating area. This message disappears by itself as soon as the sensor delivers values again."
+    },
+    "actuator_unavailable": {
+      "title": "Switch of {area} unavailable",
+      "description": "The switch {entity_id} of the heating area {area} has been unavailable for at least 15 minutes, so the heating circuit cannot be switched and stays in its last state.\n\nCheck the device (power supply, radio connection, its integration) or choose another switch in the settings of the heating area. This message disappears by itself as soon as the switch is available again."
+    },
+    "actuator_not_responding": {
+      "title": "Switch of {area} does not respond",
+      "description": "The switch {entity_id} of the heating area {area} did not change its state after several switching commands. The integration keeps trying with growing pauses (up to 15 minutes).\n\nCheck whether the device reacts when you switch it by hand in Home Assistant, and whether another automation switches it back. This message disappears as soon as the switch follows the commands again."
+    },
+    "outdoor_unavailable": {
+      "title": "Outdoor temperature sensor unavailable",
+      "description": "The outdoor temperature sensor {entity_id} has not delivered a valid value for at least 15 minutes. The control keeps running, but the prediction is less accurate and the thermal model learns nothing meanwhile.\n\nCheck the sensor or choose another one in the settings of AI Heating Assistant (General). This message disappears by itself as soon as the sensor delivers values again."
     }
   }
 }

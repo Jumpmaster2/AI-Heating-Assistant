@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.1. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.2. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -22,6 +22,7 @@ The overview, the learned values and all settings are in the **AI Heating Assist
 * **Short airing:** while a window is open, a circuit that is off does not switch on, even before the window delay is over. A running circuit is not interrupted. If the window was open for at least 2 minutes but shorter than the window delay, a shortened recovery follows: the share of the window delay the window was open, applied to the learned recovery time (3 of 5 minutes gives 60 %). It also ends early once the temperature before airing is reached again.
 * **Minimum on and off times** are always respected.
 * **Frost protection** always applies, also outside the heating period and with the thermostat switched off.
+* **Outages:** if the temperature sensor has no value, the circuit stays off (status *Sensor error*) and frost protection cannot work either. If the switch is unavailable, the status shows *Actuator unavailable*. If such an outage (or one of the outdoor temperature sensor) lasts longer than 15 minutes, a repair appears under Settings > System > Repairs; it disappears by itself once the value is back. A switch that does not follow its commands is asked again after 1, 2, 4, 8 and then every 15 minutes instead of every minute; after three attempts a repair appears as well.
 * **Heating period:** outside (e.g. 01.04. to 30.09.) all circuits stay off and the AI is not called.
 * **Vacation:** freely selectable entities indicate vacation (e.g. `input_boolean.vacation_mode` or a calendar). Then the vacation temperature applies to all areas. With an optional return entity (e.g. `input_datetime.vacation_end`) preheating starts early enough, based on the learned heat-up rate, to reach the normal target on return. A return time in the past (e.g. vacation switched on manually) is ignored and the vacation temperature applies.
 
