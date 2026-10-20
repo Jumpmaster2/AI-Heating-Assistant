@@ -23,11 +23,11 @@ from homeassistant.helpers.selector import EntitySelector, Selector, TimeSelecto
 
 from .config_flow import (
     START_KEYS,
-    _advanced_schema,
     _ai_schema,
     _area_schema,
     _check_api_key,
     _coordinator,
+    _decision_schema_expert,
     _general_schema,
     _learned_fields,
     _other_areas,
@@ -132,7 +132,7 @@ def option_fields() -> dict[str, Selector]:
         _rules_schema(values),
         _ventilation_schema(values),
         _ai_schema(values),
-        _advanced_schema(values),
+        _decision_schema_expert(values),
     ):
         fields.update(_fields(schema))
     return fields

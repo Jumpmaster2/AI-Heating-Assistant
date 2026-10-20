@@ -347,20 +347,31 @@ async def test_options_edit_learned_theta(hass: HomeAssistant, base_states) -> N
     entry.runtime_data.day_state["theta"] = 14.0
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "advanced"}
+        result["flow_id"], {"next_step_id": "decision"}
     )
     schema = result["data_schema"].schema
     keys = {str(k): k for k in schema}
     assert "theta_start" not in keys
     assert keys["theta"].default() == 14.0
-    values = {str(k): k.default() for k in schema}
+    # expert values sit in collapsed sections and come back nested
+    values = {str(k): k.default() for k in schema if callable(k.default)}
+    phases = {str(k): k.default() for k in schema["phases"].schema.schema}
+    learning = {str(k): k.default() for k in schema["learning_steps"].schema.schema}
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {**values, "theta": 13.5}
+        result["flow_id"],
+        {
+            **values,
+            "theta": 13.5,
+            "phases": {**phases, "phase_shared_min_days": 21},
+            "learning_steps": learning,
+        },
     )
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert "theta" not in entry.options
     assert entry.runtime_data.theta == 13.5
+    assert entry.options["phase_shared_min_days"] == 21  # flattened again
+    assert "phases" not in entry.options
 
 
 async def test_switch_of_another_area_is_rejected(hass: HomeAssistant, base_states) -> None:

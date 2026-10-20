@@ -125,8 +125,8 @@
           "rules": "Emergency rule",
           "ventilation": "Ventilation",
           "ai": "AI",
-          "advanced": "Heating day decision",
-          "ai_limits": "AI limits"
+          "decision": "Heating day decision (experts)",
+          "ai_limits": "AI limits (experts)"
         }
       },
       "general": {
@@ -249,40 +249,58 @@
           "max_output_tokens": "Upper limit per answer, thinking included (too low cuts answers off, they are paid but discarded). Also the upper bound of the cost estimate before a call."
         }
       },
-      "advanced": {
-        "title": "Heating day decision",
+      "decision": {
+        "title": "Heating day decision (experts)",
         "description": "Learned threshold, evaluation, learning steps and phase changes of the heating day decision.",
         "data": {
           "theta": "Heating threshold theta (learned)",
           "too_cold_margin": "Too cold below target by",
-          "too_cold_minutes": "Too cold minutes for heating need",
-          "theta_step_up": "Heating threshold: step up",
-          "theta_step_down": "Heating threshold: step down",
-          "puffer_step_up": "Margin above target: step up",
-          "puffer_step_down": "Margin above target: step down",
-          "phase_shared_min_days": "Days until shared decision",
-          "phase_shared_min_agreement": "Agreement for shared decision",
-          "phase_rule_min_days": "Days until rule leads",
-          "phase_rule_min_agreement": "Agreement for rule leads",
-          "phase_max_rule_errors": "Allowed rule errors",
-          "phase_fallback_errors_7d": "Rule errors in 7 days for fallback",
-          "phase_ai_check_every_days": "AI control check every"
+          "too_cold_minutes": "Too cold minutes for heating need"
         },
         "data_description": {
           "theta": "Current threshold of the heating day rule: if the forecast maximum is below it, heating is needed. A change replaces the learned value; learning continues from there.",
           "too_cold_margin": "Evaluation: an area counts as too cold below target minus this (airing excluded).",
-          "too_cold_minutes": "Evaluation: this many minutes too cold mean heating was needed.",
-          "theta_step_up": "After error A, i.e. it got too cold on a day without heating (e.g. 1.0 K).",
-          "theta_step_down": "After error B, i.e. heating ran although it was not needed (e.g. 1.0 K).",
-          "puffer_step_up": "After error A for the cold area.",
-          "puffer_step_down": "After error B.",
-          "phase_shared_min_days": "Who decides the heating day: first the AI leads, then AI and rule decide together, finally the rule leads. 'AI leads' -> 'shared' after this many evaluated days (e.g. 14).",
-          "phase_shared_min_agreement": "Minimum agreement of rule and AI.",
-          "phase_rule_min_days": "Phase 'shared' -> 'rule leads' after this many days in phase 'shared'.",
-          "phase_rule_min_agreement": "Minimum agreement of rule and AI.",
-          "phase_max_rule_errors": "Maximum rule errors within the period for a phase change.",
-          "phase_fallback_errors_7d": "This many rule errors within 7 days move back one phase.",
-          "phase_ai_check_every_days": "When the rule leads and is sure, the AI is still asked every this many days."
+          "too_cold_minutes": "Evaluation: this many minutes too cold mean heating was needed."
+        },
+        "sections": {
+          "learning_steps": {
+            "name": "Learning steps",
+            "description": "How much theta and the margin change after an evaluated error.",
+            "data": {
+              "theta_step_up": "Heating threshold: step up",
+              "theta_step_down": "Heating threshold: step down",
+              "puffer_step_up": "Margin above target: step up",
+              "puffer_step_down": "Margin above target: step down"
+            },
+            "data_description": {
+              "theta_step_up": "After error A, i.e. it got too cold on a day without heating (e.g. 1.0 K).",
+              "theta_step_down": "After error B, i.e. heating ran although it was not needed (e.g. 1.0 K).",
+              "puffer_step_up": "After error A for the cold area.",
+              "puffer_step_down": "After error B."
+            }
+          },
+          "phases": {
+            "name": "Decision phases",
+            "description": "When the heating day decision moves between AI leads, shared and rule leads.",
+            "data": {
+              "phase_shared_min_days": "Days until shared decision",
+              "phase_shared_min_agreement": "Agreement for shared decision",
+              "phase_rule_min_days": "Days until rule leads",
+              "phase_rule_min_agreement": "Agreement for rule leads",
+              "phase_max_rule_errors": "Allowed rule errors",
+              "phase_fallback_errors_7d": "Rule errors in 7 days for fallback",
+              "phase_ai_check_every_days": "AI control check every"
+            },
+            "data_description": {
+              "phase_shared_min_days": "Who decides the heating day: first the AI leads, then AI and rule decide together, finally the rule leads. 'AI leads' -> 'shared' after this many evaluated days (e.g. 14).",
+              "phase_shared_min_agreement": "Minimum agreement of rule and AI.",
+              "phase_rule_min_days": "Phase 'shared' -> 'rule leads' after this many days in phase 'shared'.",
+              "phase_rule_min_agreement": "Minimum agreement of rule and AI.",
+              "phase_max_rule_errors": "Maximum rule errors within the period for a phase change.",
+              "phase_fallback_errors_7d": "This many rule errors within 7 days move back one phase.",
+              "phase_ai_check_every_days": "When the rule leads and is sure, the AI is still asked every this many days."
+            }
+          }
         }
       },
       "ai_limits": {

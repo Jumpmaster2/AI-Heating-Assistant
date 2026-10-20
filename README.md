@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.14. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.15. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -121,6 +121,8 @@ Temperatursensoren dürfen in °C, °F oder K melden; ohne Einheit gilt das Einh
 | Monatsbudget | 5 USD | |
 
 ### Einstellungen
+
+Reihenfolge im Optionsmenü: Allgemein, Urlaub, Notfallregel, Lüftung, KI, Heiztag-Entscheidung (Experten), KI-Grenzen (Experten). Lernschritte und Entscheidungsphasen liegen in einklappbaren Abschnitten.
 
 * **Allgemein:** Sensoren, Heizperiode und Frostschutz, Urlaub wie oben.
 * **Notfallregel:** an, 1 K unter Sollwert (voraussichtlich nach der Vorlaufzeit, mindestens die Einschalthysterese), 45 min, Fenster 30 min unverändert.

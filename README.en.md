@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.14. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.15. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -121,6 +121,8 @@ Temperature sensors may report °C, °F or K; without a unit the unit system of 
 | Monthly budget | 5 USD | |
 
 ### Settings
+
+Order of the options menu: general, vacation, emergency rule, ventilation, AI, heating day decision (experts), AI limits (experts). Learning steps and decision phases sit in collapsible sections.
 
 * **General:** sensors, heating period and frost protection, vacation as above.
 * **Emergency rule:** on, 1 K below target (expected after the lead time, at least the switch-on hysteresis), 45 min, windows unchanged for 30 min.

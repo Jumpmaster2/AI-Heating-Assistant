@@ -384,22 +384,41 @@ def _learned_fields(values: dict[str, float], ranges: dict[str, tuple[float, flo
     }
 
 
-def _advanced_schema(v: dict[str, Any]) -> vol.Schema:
+SECTION_LEARNING = "learning_steps"
+SECTION_PHASES = "phases"
+
+
+def _decision_schema_expert(v: dict[str, Any]) -> vol.Schema:
+    """Evaluation of the heating day, with the expert values in collapsed sections."""
     return vol.Schema(
         {
             _req(CONF_TOO_COLD_MARGIN, v): _number(0, 3, 0.1, "K"),
             _req(CONF_TOO_COLD_MINUTES, v): _number(0, 600, 5, "min"),
-            _req(CONF_THETA_UP, v): _number(0, 5, 0.1, "K"),
-            _req(CONF_THETA_DOWN, v): _number(0, 5, 0.1, "K"),
-            _req(CONF_PUFFER_UP, v): _number(0, 2, 0.05, "K"),
-            _req(CONF_PUFFER_DOWN, v): _number(0, 2, 0.05, "K"),
-            _req(CONF_SHARED_DAYS, v): _number(1, 120, 1, "d"),
-            _req(CONF_SHARED_AGREEMENT, v): _number(0, 100, 1, "%"),
-            _req(CONF_RULE_DAYS, v): _number(1, 180, 1, "d"),
-            _req(CONF_RULE_AGREEMENT, v): _number(0, 100, 1, "%"),
-            _req(CONF_PHASE_MAX_ERRORS, v): _number(0, 30, 1),
-            _req(CONF_FALLBACK_ERRORS, v): _number(1, 7, 1),
-            _req(CONF_AI_CHECK_DAYS, v): _number(1, 60, 1, "d"),
+            vol.Required(SECTION_LEARNING): section(
+                vol.Schema(
+                    {
+                        _req(CONF_THETA_UP, v): _number(0, 5, 0.1, "K"),
+                        _req(CONF_THETA_DOWN, v): _number(0, 5, 0.1, "K"),
+                        _req(CONF_PUFFER_UP, v): _number(0, 2, 0.05, "K"),
+                        _req(CONF_PUFFER_DOWN, v): _number(0, 2, 0.05, "K"),
+                    }
+                ),
+                {"collapsed": True},
+            ),
+            vol.Required(SECTION_PHASES): section(
+                vol.Schema(
+                    {
+                        _req(CONF_SHARED_DAYS, v): _number(1, 120, 1, "d"),
+                        _req(CONF_SHARED_AGREEMENT, v): _number(0, 100, 1, "%"),
+                        _req(CONF_RULE_DAYS, v): _number(1, 180, 1, "d"),
+                        _req(CONF_RULE_AGREEMENT, v): _number(0, 100, 1, "%"),
+                        _req(CONF_PHASE_MAX_ERRORS, v): _number(0, 30, 1),
+                        _req(CONF_FALLBACK_ERRORS, v): _number(1, 7, 1),
+                        _req(CONF_AI_CHECK_DAYS, v): _number(1, 60, 1, "d"),
+                    }
+                ),
+                {"collapsed": True},
+            ),
         }
     )
 
@@ -654,8 +673,8 @@ class AiHeatingOptionsFlow(OptionsFlow):
                 "rules",
                 "ventilation",
                 "ai",
+                "decision",
                 "ai_limits",
-                "advanced",
             ],
         )
 
@@ -728,23 +747,25 @@ class AiHeatingOptionsFlow(OptionsFlow):
             step_id="ai_limits", data_schema=_limits_schema(self._values), errors=errors
         )
 
-    async def async_step_advanced(
+    async def async_step_decision(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         coordinator = _coordinator(self.config_entry)
         if user_input is not None:
+            for key in (SECTION_LEARNING, SECTION_PHASES):
+                user_input.update(user_input.pop(key, None) or {})
             theta = user_input.pop(LEARNED_THETA, None)
             if coordinator is not None and theta is not None:
                 coordinator.set_theta(theta)
             return self._save(user_input)
-        schema = _advanced_schema(self._values)
+        schema = _decision_schema_expert(self._values)
         if coordinator is not None:
             # The start value is set once at setup; afterwards the learned value is edited.
             learned = _learned_fields(
                 {LEARNED_THETA: round(coordinator.theta, 2)}, coordinator.learned_ranges()
             )
             schema = vol.Schema({**learned, **schema.schema})
-        return self.async_show_form(step_id="advanced", data_schema=schema)
+        return self.async_show_form(step_id="decision", data_schema=schema)
 
 
 # ---------------------------------------------------------------- heating area subentry

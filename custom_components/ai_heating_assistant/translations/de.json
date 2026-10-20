@@ -125,8 +125,8 @@
           "rules": "Notfallregel",
           "ventilation": "Lüftung",
           "ai": "KI",
-          "advanced": "Heiztag-Entscheidung",
-          "ai_limits": "KI-Grenzen"
+          "decision": "Heiztag-Entscheidung (Experten)",
+          "ai_limits": "KI-Grenzen (Experten)"
         }
       },
       "general": {
@@ -249,40 +249,58 @@
           "max_output_tokens": "Obergrenze je Antwort, Denken eingeschlossen (zu niedrig schneidet Antworten ab; sie sind bezahlt, werden aber verworfen). Auch Obergrenze der Kostenschätzung vor einer Abfrage."
         }
       },
-      "advanced": {
-        "title": "Heiztag-Entscheidung",
+      "decision": {
+        "title": "Heiztag-Entscheidung (Experten)",
         "description": "Gelernte Schwelle, Bewertung, Lernschritte und Phasenwechsel der Heiztag-Entscheidung.",
         "data": {
           "theta": "Heizgrenze theta (gelernt)",
           "too_cold_margin": "Zu kalt unter Sollwert um",
-          "too_cold_minutes": "Minuten zu kalt für Heizbedarf",
-          "theta_step_up": "Heizgrenze: Schritt nach oben",
-          "theta_step_down": "Heizgrenze: Schritt nach unten",
-          "puffer_step_up": "Reserve über Sollwert: Schritt nach oben",
-          "puffer_step_down": "Reserve über Sollwert: Schritt nach unten",
-          "phase_shared_min_days": "Tage bis gemeinsame Entscheidung",
-          "phase_shared_min_agreement": "Übereinstimmung für gemeinsam",
-          "phase_rule_min_days": "Tage bis Regel führt",
-          "phase_rule_min_agreement": "Übereinstimmung für Regel führt",
-          "phase_max_rule_errors": "Erlaubte Regelfehler",
-          "phase_fallback_errors_7d": "Regelfehler in 7 Tagen für Rückfall",
-          "phase_ai_check_every_days": "KI-Kontrolle alle"
+          "too_cold_minutes": "Minuten zu kalt für Heizbedarf"
         },
         "data_description": {
           "theta": "Aktuelle Schwelle der Heiztag-Regel: liegt die Prognose-Höchsttemperatur darunter, wird geheizt. Eine Änderung ersetzt den gelernten Wert; danach wird von hier aus weiter gelernt.",
           "too_cold_margin": "Bewertung: ein Bereich gilt als zu kalt unter Sollwert minus diesem Wert (Lüften ausgenommen).",
-          "too_cold_minutes": "Bewertung: so viele Minuten zu kalt bedeuten Heizbedarf.",
-          "theta_step_up": "Nach Fehler A, also wenn es an einem Tag ohne Heizen zu kalt wurde (z. B. 1,0 K).",
-          "theta_step_down": "Nach Fehler B, also wenn geheizt wurde, obwohl es nicht nötig war (z. B. 1,0 K).",
-          "puffer_step_up": "Nach Fehler A für den kalten Bereich.",
-          "puffer_step_down": "Nach Fehler B.",
-          "phase_shared_min_days": "Wer über den Heiztag entscheidet: zuerst führt die KI, dann entscheiden KI und Regel gemeinsam, zuletzt führt die Regel. 'KI führt' -> 'gemeinsam' nach so vielen bewerteten Tagen (z. B. 14).",
-          "phase_shared_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
-          "phase_rule_min_days": "Phase 'gemeinsam' -> 'Regel führt' nach so vielen Tagen in 'gemeinsam'.",
-          "phase_rule_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
-          "phase_max_rule_errors": "Höchstens so viele Regelfehler im Zeitraum für einen Phasenwechsel.",
-          "phase_fallback_errors_7d": "So viele Regelfehler in 7 Tagen führen eine Phase zurück.",
-          "phase_ai_check_every_days": "Wenn die Regel führt und sicher ist, wird die KI trotzdem alle so viele Tage gefragt."
+          "too_cold_minutes": "Bewertung: so viele Minuten zu kalt bedeuten Heizbedarf."
+        },
+        "sections": {
+          "learning_steps": {
+            "name": "Lernschritte",
+            "description": "Wie stark sich Heizgrenze und Reserve nach einem bewerteten Fehler ändern.",
+            "data": {
+              "theta_step_up": "Heizgrenze: Schritt nach oben",
+              "theta_step_down": "Heizgrenze: Schritt nach unten",
+              "puffer_step_up": "Reserve über Sollwert: Schritt nach oben",
+              "puffer_step_down": "Reserve über Sollwert: Schritt nach unten"
+            },
+            "data_description": {
+              "theta_step_up": "Nach Fehler A, also wenn es an einem Tag ohne Heizen zu kalt wurde (z. B. 1,0 K).",
+              "theta_step_down": "Nach Fehler B, also wenn geheizt wurde, obwohl es nicht nötig war (z. B. 1,0 K).",
+              "puffer_step_up": "Nach Fehler A für den kalten Bereich.",
+              "puffer_step_down": "Nach Fehler B."
+            }
+          },
+          "phases": {
+            "name": "Entscheidungsphasen",
+            "description": "Wann die Heiztag-Entscheidung zwischen KI führt, gemeinsam und Regel führt wechselt.",
+            "data": {
+              "phase_shared_min_days": "Tage bis gemeinsame Entscheidung",
+              "phase_shared_min_agreement": "Übereinstimmung für gemeinsam",
+              "phase_rule_min_days": "Tage bis Regel führt",
+              "phase_rule_min_agreement": "Übereinstimmung für Regel führt",
+              "phase_max_rule_errors": "Erlaubte Regelfehler",
+              "phase_fallback_errors_7d": "Regelfehler in 7 Tagen für Rückfall",
+              "phase_ai_check_every_days": "KI-Kontrolle alle"
+            },
+            "data_description": {
+              "phase_shared_min_days": "Wer über den Heiztag entscheidet: zuerst führt die KI, dann entscheiden KI und Regel gemeinsam, zuletzt führt die Regel. 'KI führt' -> 'gemeinsam' nach so vielen bewerteten Tagen (z. B. 14).",
+              "phase_shared_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
+              "phase_rule_min_days": "Phase 'gemeinsam' -> 'Regel führt' nach so vielen Tagen in 'gemeinsam'.",
+              "phase_rule_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
+              "phase_max_rule_errors": "Höchstens so viele Regelfehler im Zeitraum für einen Phasenwechsel.",
+              "phase_fallback_errors_7d": "So viele Regelfehler in 7 Tagen führen eine Phase zurück.",
+              "phase_ai_check_every_days": "Wenn die Regel führt und sicher ist, wird die KI trotzdem alle so viele Tage gefragt."
+            }
+          }
         }
       },
       "ai_limits": {
