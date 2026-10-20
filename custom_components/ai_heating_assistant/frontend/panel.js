@@ -365,6 +365,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     this.shadowRoot.addEventListener("input", (ev) => this._onInput(ev));
     this.shadowRoot.addEventListener("change", (ev) => this._onInput(ev, true));
     this.shadowRoot.addEventListener("keydown", (ev) => this._onKey(ev));
+    this.shadowRoot.addEventListener("value-changed", (ev) => this._onSelector(ev));
   }
 
   set hass(hass) {
@@ -381,6 +382,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
       this._count = count;
       if (this._cfg) this._load(true);
     }
+    for (const el of this.shadowRoot.querySelectorAll("ha-selector[data-k]")) el.hass = hass;
     this._live();
   }
 
@@ -502,6 +504,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
       <div class="content">${this._content()}</div>
       <div class="datalists">${this._datalists()}</div>
       <div class="toast" hidden></div>`;
+    this._upgradeSelectors();
     this._sig = this._signature();
   }
 
@@ -1030,6 +1033,12 @@ class AiHeatingAssistantPanel extends HTMLElement {
           </select>${helpHtml}</label>`;
       }
       case "entity": {
+        // Home Assistant's own entity picker (names, areas, filters) when available
+        if (customElements.get("ha-selector")) {
+          this._selectors = this._selectors || new Map();
+          this._selectors.set(`${cardId}|${key}`, { spec, value, name });
+          return `<div class="field"><ha-selector ${attrs("selector")}></ha-selector>${helpHtml}</div>`;
+        }
         if (spec.multiple) {
           const list = Array.isArray(value) ? value : [];
           const chips = list
@@ -1114,6 +1123,32 @@ class AiHeatingAssistantPanel extends HTMLElement {
     this._setValue(cardId, key, value);
   }
 
+  // Configure the ha-selector elements of the rendered content (properties, not attributes).
+  _upgradeSelectors() {
+    for (const el of this.shadowRoot.querySelectorAll("ha-selector[data-k]")) {
+      const { cardId, k: key } = el.dataset;
+      const field = this._selectors?.get(`${cardId}|${key}`);
+      if (!field) continue;
+      const { selector, ...config } = field.spec || {};
+      el.hass = this._hass;
+      el.selector = { [selector || "entity"]: config };
+      el.label = field.name;
+      el.value = field.value ?? (config.multiple ? [] : "");
+      el.required = false;
+    }
+  }
+
+  _onSelector(ev) {
+    const el = ev.target;
+    if (el?.localName !== "ha-selector" || !el.dataset.k) return;
+    ev.stopPropagation();
+    const value = ev.detail?.value;
+    el.value = value;
+    const field = this._selectors?.get(`${el.dataset.cardId}|${el.dataset.k}`);
+    if (field) field.value = value;
+    this._setValue(el.dataset.cardId, el.dataset.k, value === undefined || value === "" ? null : value);
+  }
+
   _onKey(ev) {
     const el = ev.target;
     if (ev.key === "Enter" && el.dataset.add) {
@@ -1148,6 +1183,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     }
     const scroll = content.scrollTop;
     content.innerHTML = this._content();
+    this._upgradeSelectors();
     content.scrollTop = scroll;
     if (focusSelector) content.querySelector(focusSelector)?.focus();
   }
