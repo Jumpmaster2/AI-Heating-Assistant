@@ -2,13 +2,13 @@
 
 [Deutsche Version](README.md)
 
-Custom integration for Home Assistant that controls underfloor heating with one switch per heating circuit (for example a relay that drives the valve actuator) locally, learns the behaviour of every room and lets Claude (Anthropic) review the parameters periodically. Home Assistant makes every switching decision itself. The AI never switches anything; it only adjusts parameters within configurable limits and is asked less often as the local model becomes more reliable.
+Custom integration for Home Assistant that controls underfloor heating (or radiators per area, see heating type) with one switch per heating circuit (for example a relay that drives the valve actuator) locally, learns the behaviour of every room and lets Claude (Anthropic) review the parameters periodically. Home Assistant makes every switching decision itself. The AI never switches anything; it only adjusts parameters within configurable limits and is asked less often as the local model becomes more reliable.
 
 It typically replaces: thermostat helpers (Generic Thermostat), Better Thermostat, automations for setpoint, weather, cold and vacation handling, and a humidity based ventilation recommendation.
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.12. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -140,6 +140,7 @@ In the dashboard under **Heating areas** (or under the integration with **Add he
 | Heating circuit switch | e.g. `switch.heating_circuit_1`; empty = ventilation recommendation only |
 | Initial, minimum and maximum target | 21 / 16 / 24 °C |
 | Minimum on and off time | 10 / 10 min (fixed) |
+| Heating type | underfloor (default), radiators or other; the AI judges inertia and learned values accordingly. The control itself learns the behaviour of each room anyway. |
 | Start values window delay, recovery time, dead time, puffer | 5 min, 30 min, 30 min, 0.7 K; only when the area is created |
 | Humidity threshold | 60 % |
 | Reference temperature and humidity | optional, instead of outdoor (room without its own window) |

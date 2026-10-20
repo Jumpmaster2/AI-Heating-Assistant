@@ -68,6 +68,7 @@ def labels(translation: dict[str, Any]) -> dict[str, Any]:
             "override": entity["select"]["heating_day_override"]["state"],
         },
         "effort": translation["selector"]["effort"]["options"],
+        "heating_type": translation["selector"]["heating_type"]["options"],
     }
 
 

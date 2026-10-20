@@ -165,7 +165,9 @@ async def test_nightly_ai_says_no(
         await _setup(hass, make_entry(api_key="test-key"))
         assert mock.call_count == 1
         system, user = mock.call_args.args[0], mock.call_args.args[1]
-        assert "underfloor" in system and "test-key" not in user
+        assert "radiator" in system and "test-key" not in user
+        # the heating type of each area is part of the data (default: underfloor)
+        assert json.loads(user)["areas"][0]["type"] == "underfloor"
     state = hass.states.get("binary_sensor.ai_heating_assistant_heating_day")
     assert state.state == "off"
     assert state.attributes["source"] == "ai"
@@ -1012,3 +1014,18 @@ async def test_start_values_are_clamped_into_the_limits(
     # a reset brings back the start values, again within the limits
     coordinator.reset_learned([area.area_id], include_parameters=True)
     assert area.params.window_delay_min == window_max
+
+
+async def test_heating_type_reaches_the_ai(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    answer = (
+        {"heating_day": True, "confidence": 80, "reason": "Cold.", "critical_area": ""},
+        USAGE,
+    )
+    with patch(STRUCTURED, return_value=answer) as mock:
+        await _setup(
+            hass, make_entry(api_key="test-key", areas=[{**AREA_DATA, "heating_type": "radiator"}])
+        )
+    assert json.loads(mock.call_args.args[1])["areas"][0]["type"] == "radiator"

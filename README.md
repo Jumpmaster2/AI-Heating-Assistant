@@ -2,13 +2,13 @@
 
 [English version](README.en.md)
 
-Custom Integration für Home Assistant, die eine Fußbodenheizung mit einem Schaltaktor je Heizkreis (z. B. ein Relais, das den Stellantrieb schaltet) lokal regelt, das Verhalten jedes Raums lernt und die Parameter regelmäßig von Claude (Anthropic) prüfen lässt. Home Assistant trifft alle Schaltentscheidungen selbst. Die KI schaltet nie, sie passt nur Parameter innerhalb einstellbarer Grenzen an und wird mit wachsender Sicherheit seltener gefragt.
+Custom Integration für Home Assistant, die eine Fußbodenheizung (oder Heizkörper je Bereich, siehe Heizungsart) mit einem Schaltaktor je Heizkreis (z. B. ein Relais, das den Stellantrieb schaltet) lokal regelt, das Verhalten jedes Raums lernt und die Parameter regelmäßig von Claude (Anthropic) prüfen lässt. Home Assistant trifft alle Schaltentscheidungen selbst. Die KI schaltet nie, sie passt nur Parameter innerhalb einstellbarer Grenzen an und wird mit wachsender Sicherheit seltener gefragt.
 
 Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), Better Thermostat, Automationen für Sollwert, Wetter, Kälte und Urlaub sowie eine Lüftungsempfehlung auf Basis der Luftfeuchte.
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.11.12. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -140,6 +140,7 @@ Im Dashboard unter **Heizbereiche** (oder unter der Integration **Heizbereich hi
 | Heizkreis-Schalter | z. B. `switch.heating_circuit_1`; leer = nur Lüftungsempfehlung |
 | Start-Sollwert, kleinster und größter Sollwert | 21 / 16 / 24 °C |
 | Mindest-Ein- und -Ausschaltzeit | 10 / 10 min (fest) |
+| Heizungsart | Fußbodenheizung (Standard), Heizkörper oder Andere; die KI beurteilt Trägheit und gelernte Werte danach. Die Regelung selbst lernt das Verhalten jedes Raums ohnehin. |
 | Startwerte Fensterverzögerung, Erholungszeit, Totzeit, puffer | 5 min, 30 min, 30 min, 0,7 K; nur beim Anlegen |
 | Feuchte-Schwelle | 60 % |
 | Referenz-Temperatur und -Feuchte | optional, statt außen (Raum ohne eigenes Fenster) |

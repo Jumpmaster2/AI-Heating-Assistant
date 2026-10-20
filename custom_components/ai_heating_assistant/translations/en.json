@@ -384,7 +384,8 @@
                 "min_target": "Minimum target",
                 "max_target": "Maximum target",
                 "min_on_time": "Minimum on time",
-                "min_off_time": "Minimum off time"
+                "min_off_time": "Minimum off time",
+                "heating_type": "Heating type"
               },
               "data_description": {
                 "heater_switch": "Switch of the actuator (e.g. a relay). Leave empty for an area with ventilation recommendation only.",
@@ -392,7 +393,8 @@
                 "min_target": "Lowest value of the thermostat card.",
                 "max_target": "Highest value of the thermostat card.",
                 "min_on_time": "Always respected (protects the actuator). Not learned.",
-                "min_off_time": "Always respected. Not learned."
+                "min_off_time": "Always respected. Not learned.",
+                "heating_type": "How the circuit heats. A floor stores heat for hours, radiators react within minutes; the AI judges the learned values with this in mind."
               }
             },
             "start_values": {
@@ -459,7 +461,8 @@
                 "min_target": "Minimum target",
                 "max_target": "Maximum target",
                 "min_on_time": "Minimum on time",
-                "min_off_time": "Minimum off time"
+                "min_off_time": "Minimum off time",
+                "heating_type": "Heating type"
               },
               "data_description": {
                 "heater_switch": "Switch of the actuator (e.g. a relay). Leave empty for an area with ventilation recommendation only.",
@@ -467,7 +470,8 @@
                 "min_target": "Lowest value of the thermostat card.",
                 "max_target": "Highest value of the thermostat card.",
                 "min_on_time": "Always respected (protects the actuator). Not learned.",
-                "min_off_time": "Always respected. Not learned."
+                "min_off_time": "Always respected. Not learned.",
+                "heating_type": "How the circuit heats. A floor stores heat for hours, radiators react within minutes; the AI judges the learned values with this in mind."
               }
             },
             "learned_values": {
@@ -521,6 +525,13 @@
         "low": "Low",
         "medium": "Medium",
         "high": "High"
+      }
+    },
+    "heating_type": {
+      "options": {
+        "underfloor": "Underfloor heating",
+        "radiator": "Radiators",
+        "other": "Other (e.g. wall heating)"
       }
     }
   },

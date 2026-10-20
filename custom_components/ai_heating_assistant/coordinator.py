@@ -53,6 +53,7 @@ from .const import (
     CONF_FALLBACK_ERRORS,
     CONF_FROST_TEMP,
     CONF_HEAT_METER,
+    CONF_HEATING_TYPE,
     CONF_HUMIDITY_SENSOR,
     CONF_LIMITS,
     CONF_MAX_OUTPUT_TOKENS,
@@ -1794,6 +1795,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 {
                     "id": a.prompt_id,
                     "name": a.name,
+                    "type": a.cfg.get(CONF_HEATING_TYPE, "underfloor"),
                     "temp": r(a.temp),
                     "target": a.effective_target or a.target,
                     "puffer": a.params.puffer,
@@ -1955,6 +1957,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 {
                     "id": area.prompt_id,
                     "name": area.name,
+                    "type": area.cfg.get(CONF_HEATING_TYPE, "underfloor"),
                     "target": area.effective_target or area.target,
                     "temp": r(area.temp),
                     "status": area.status,

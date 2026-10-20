@@ -56,6 +56,7 @@ from .const import (
     CONF_FALLBACK_ERRORS,
     CONF_FROST_TEMP,
     CONF_HEAT_METER,
+    CONF_HEATING_TYPE,
     CONF_HUMIDITY_SENSOR,
     CONF_LIMITS,
     CONF_MAX_OUTPUT_TOKENS,
@@ -111,6 +112,7 @@ from .const import (
     DEFAULTS,
     DOMAIN,
     EFFORT_OPTIONS,
+    HEATING_TYPES,
     LEARNED_THETA,
     MODEL_OPTIONS,
     MODEL_PRICE_SUGGESTIONS,
@@ -670,6 +672,13 @@ def _area_schema(
                         req(CONF_MAX_TARGET): _number(5, 30, 0.5, "°C"),
                         req(CONF_MIN_ON): _number(0, 120, 1, "min"),
                         req(CONF_MIN_OFF): _number(0, 120, 1, "min"),
+                        req(CONF_HEATING_TYPE): SelectSelector(
+                            SelectSelectorConfig(
+                                options=list(HEATING_TYPES),
+                                translation_key="heating_type",
+                                mode=SelectSelectorMode.DROPDOWN,
+                            )
+                        ),
                     }
                 ),
                 {"collapsed": False},

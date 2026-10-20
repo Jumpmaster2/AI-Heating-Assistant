@@ -384,7 +384,8 @@
                 "min_target": "Kleinster Sollwert",
                 "max_target": "Größter Sollwert",
                 "min_on_time": "Mindest-Einschaltzeit",
-                "min_off_time": "Mindest-Ausschaltzeit"
+                "min_off_time": "Mindest-Ausschaltzeit",
+                "heating_type": "Heizungsart"
               },
               "data_description": {
                 "heater_switch": "Schalter des Stellantriebs (z. B. ein Relais). Leer lassen für einen Bereich nur mit Lüftungsempfehlung.",
@@ -392,7 +393,8 @@
                 "min_target": "Kleinster Wert der Thermostatkarte.",
                 "max_target": "Größter Wert der Thermostatkarte.",
                 "min_on_time": "Wird immer eingehalten (schont den Stellantrieb). Wird nicht gelernt.",
-                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt."
+                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt.",
+                "heating_type": "Wie der Kreis heizt. Ein Fußboden speichert Wärme über Stunden, Heizkörper reagieren in Minuten; die KI beurteilt die gelernten Werte entsprechend."
               }
             },
             "start_values": {
@@ -459,7 +461,8 @@
                 "min_target": "Kleinster Sollwert",
                 "max_target": "Größter Sollwert",
                 "min_on_time": "Mindest-Einschaltzeit",
-                "min_off_time": "Mindest-Ausschaltzeit"
+                "min_off_time": "Mindest-Ausschaltzeit",
+                "heating_type": "Heizungsart"
               },
               "data_description": {
                 "heater_switch": "Schalter des Stellantriebs (z. B. ein Relais). Leer lassen für einen Bereich nur mit Lüftungsempfehlung.",
@@ -467,7 +470,8 @@
                 "min_target": "Kleinster Wert der Thermostatkarte.",
                 "max_target": "Größter Wert der Thermostatkarte.",
                 "min_on_time": "Wird immer eingehalten (schont den Stellantrieb). Wird nicht gelernt.",
-                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt."
+                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt.",
+                "heating_type": "Wie der Kreis heizt. Ein Fußboden speichert Wärme über Stunden, Heizkörper reagieren in Minuten; die KI beurteilt die gelernten Werte entsprechend."
               }
             },
             "learned_values": {
@@ -521,6 +525,13 @@
         "low": "Niedrig",
         "medium": "Mittel",
         "high": "Hoch"
+      }
+    },
+    "heating_type": {
+      "options": {
+        "underfloor": "Fußbodenheizung",
+        "radiator": "Heizkörper",
+        "other": "Andere (z. B. Wandheizung)"
       }
     }
   },

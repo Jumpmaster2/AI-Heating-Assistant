@@ -84,6 +84,8 @@ CONF_AI_CHECK_DAYS = "phase_ai_check_every_days"
 # ---------- area (subentry) ----------
 CONF_AREA_NAME = "name"
 CONF_SWITCH = "heater_switch"
+CONF_HEATING_TYPE = "heating_type"
+HEATING_TYPES: Final = ("underfloor", "radiator", "other")
 CONF_TEMP_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_WINDOWS = "window_sensors"
@@ -175,6 +177,7 @@ AREA_DEFAULTS: Final[dict[str, object]] = {
     CONF_MAX_TARGET: 24.0,
     CONF_MIN_ON: 10,
     CONF_MIN_OFF: 10,
+    CONF_HEATING_TYPE: "underfloor",
     CONF_WINDOW_DELAY: 5,
     CONF_RECOVERY: 30,
     CONF_DEAD_TIME: 30,

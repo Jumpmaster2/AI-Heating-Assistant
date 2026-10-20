@@ -242,6 +242,10 @@ export const LABELS = {
     "Mindest-Ausschaltzeit",
     "Wird immer eingehalten. Wird nicht gelernt."
    ],
+   "heating_type": [
+    "Heizungsart",
+    "Wie der Kreis heizt. Ein Fußboden speichert Wärme über Stunden, Heizkörper reagieren in Minuten; die KI beurteilt die gelernten Werte entsprechend."
+   ],
    "window_delay": [
     "Fensterverzögerung (Startwert)",
     "So lange offen pausiert die Heizung. Die KI darf den Wert anpassen."
@@ -388,6 +392,11 @@ export const LABELS = {
    "low": "Niedrig",
    "medium": "Mittel",
    "high": "Hoch"
+  },
+  "heating_type": {
+   "underfloor": "Fußbodenheizung",
+   "radiator": "Heizkörper",
+   "other": "Andere (z. B. Wandheizung)"
   }
  },
  "en": {
@@ -632,6 +641,10 @@ export const LABELS = {
     "Minimum off time",
     "Always respected. Not learned."
    ],
+   "heating_type": [
+    "Heating type",
+    "How the circuit heats. A floor stores heat for hours, radiators react within minutes; the AI judges the learned values with this in mind."
+   ],
    "window_delay": [
     "Window delay (start value)",
     "Window open this long pauses heating. The AI may adjust it."
@@ -778,6 +791,11 @@ export const LABELS = {
    "low": "Low",
    "medium": "Medium",
    "high": "High"
+  },
+  "heating_type": {
+   "underfloor": "Underfloor heating",
+   "radiator": "Radiators",
+   "other": "Other (e.g. wall heating)"
   }
  }
 };

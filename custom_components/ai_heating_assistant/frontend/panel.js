@@ -313,7 +313,7 @@ const SETTINGS = {
 // The start values only when an area is created; an existing one shows its learned values.
 const AREA_GROUPS = [
   ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors"], false],
-  ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time"], false],
+  ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time", "heating_type"], false],
   ["start_values", ["window_delay", "recovery_time", "dead_time", "puffer"], true],
   ["learned_values", ["window_delay", "recovery_time", "dead_time", "puffer"], false],
   ["ventilation", ["ventilation_rh_threshold", "reference_temperature", "reference_humidity", "ventilation_block_entity"], true],
