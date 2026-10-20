@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.19. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.20. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -176,7 +176,7 @@ All important decisions and every AI adjustment with its reason are written to t
 
 ## Services
 
-`import_parameters`, `reset_learned` and `run_ai_check` (costs money) are for administrators; automations and scripts without a user may still call them.
+`import_parameters`, `reset_learned`, `decide_heating_day` and `run_ai_check` (the last two may cause AI costs) are for administrators; automations and scripts without a user may still call them.
 
 | Service | Purpose |
 |---|---|

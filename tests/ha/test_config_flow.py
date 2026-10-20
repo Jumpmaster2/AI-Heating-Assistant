@@ -488,10 +488,10 @@ async def test_options_can_switch_to_the_weather_temperature(
 
 def test_entity_fields_offer_matching_entities_but_accept_others() -> None:
     """Filters narrow the choice in the dialog; saving still checks the domain only."""
-    from custom_components.ai_heating_assistant.config_flow import _area_schema
+    from custom_components.ai_heating_assistant.config_flow import area_schema
 
     fields = {}
-    for key, value in _area_schema({}).schema.items():
+    for key, value in area_schema({}).schema.items():
         inner = getattr(value, "schema", None)
         fields.update(inner.schema if inner is not None else {str(key): value})
     by_name = {str(k): v for k, v in fields.items()}

@@ -711,11 +711,6 @@
           "off_today": "No heating today"
         }
       }
-    },
-    "climate": {
-      "area": {
-        "name": "Thermostat"
-      }
     }
   },
   "services": {

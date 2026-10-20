@@ -351,6 +351,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._unsubs: list[Callable[[], None]] = []
         self._unsub_check: Callable[[], None] | None = None
         self._deciding = False
+        self._opts: dict[str, Any] | None = None
         self._decide_failed_at: float | None = None
         self._checking = False
         self._tick_count = 0
@@ -365,7 +366,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     @property
     def opts(self) -> dict[str, Any]:
-        return {**DEFAULTS, **self.config_entry.options}
+        # Built once per run: a change of the options reloads the entry.
+        if self._opts is None:
+            self._opts = {**DEFAULTS, **self.config_entry.options}
+        return self._opts
 
     def opt(self, key: str) -> Any:
         return self.opts.get(key, DEFAULTS.get(key))
@@ -2198,7 +2202,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     def import_parameters(
         self, data: dict[str, Any], area_ids: list[str] | None = None
     ) -> list[str]:
-        if not isinstance(data, dict) or not isinstance(data.get("areas", {}), dict):
+        if not _valid_import(data):
+            # checked before anything changes: no half applied import
             raise HomeAssistantError("invalid parameter data")
         limits = self.limits
         theta = (data.get("global") or {}).get("theta")
@@ -2321,6 +2326,21 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._log("learned_edit", name="theta", old=f"{round(old, 2):g}", new=f"{new:g}", unit="°C")
         self._config_changed()
         self.async_update_listeners()
+
+
+def _valid_import(data: Any) -> bool:
+    """Shape of exported parameters: the nested parts are objects (or missing)."""
+
+    def obj(value: Any) -> bool:
+        return value is None or isinstance(value, dict)
+
+    if not isinstance(data, dict) or not obj(data.get("global")) or not obj(data.get("areas")):
+        return False
+    return all(
+        not isinstance(values, dict)
+        or all(obj(values.get(k)) for k in ("params", "learned", "counts"))
+        for values in (data.get("areas") or {}).values()
+    )
 
 
 def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[str, Any]) -> None:

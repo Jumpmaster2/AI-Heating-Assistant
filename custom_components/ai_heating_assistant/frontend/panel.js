@@ -372,15 +372,20 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const first = !this._hass;
     this._hass = hass;
     if (first) {
+      this._entitiesRef = hass.entities;
       this._count = this._entityCount();
       this._load();
       return;
     }
-    // new or removed entities (e.g. after adding an area): load the entity ids again
-    const count = this._entityCount();
-    if (count !== this._count) {
-      this._count = count;
-      if (this._cfg) this._load(true);
+    // new or removed entities (e.g. after adding an area): load the entity ids again.
+    // The registry object only changes with the registry, so most updates skip the count.
+    if (hass.entities !== this._entitiesRef) {
+      this._entitiesRef = hass.entities;
+      const count = this._entityCount();
+      if (count !== this._count) {
+        this._count = count;
+        if (this._cfg) this._load(true);
+      }
     }
     for (const el of this.shadowRoot.querySelectorAll("ha-selector[data-k]")) el.hass = hass;
     this._live();
@@ -520,7 +525,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
   }
 
   _datalists() {
-    if (!this._hass) return "";
+    // suggestions for the plain text fields only; ha-selector brings its own picker
+    if (!this._hass || customElements.get("ha-selector")) return "";
     const option = (id) => `<option value="${esc(id)}">${esc(this._name(id))}</option>`;
     const all = Object.keys(this._hass.states).sort();
     let html = `<datalist id="dl-all">${all.map(option).join("")}</datalist>`;
@@ -1088,6 +1094,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
 
   _onInput(ev, isChange = false) {
     const el = ev.target;
+    // typing in the search of a picker is no value; ha-selector reports value-changed
+    if (el.localName === "ha-selector") return;
     if (el.dataset.limit) {
       const draft = (this._drafts.limits = this._drafts.limits || { limits: clone(this._cfg.options.limits) });
       draft.limits[el.dataset.limit] = { ...draft.limits[el.dataset.limit], [el.dataset.part]: el.value === "" ? null : Number(el.value) };

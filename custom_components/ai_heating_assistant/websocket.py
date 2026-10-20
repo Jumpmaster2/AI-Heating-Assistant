@@ -7,7 +7,7 @@ from functools import cache
 from types import MappingProxyType
 from typing import Any
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import (
     SOURCE_REAUTH,
@@ -23,20 +23,20 @@ from homeassistant.helpers.selector import EntitySelector, Selector, TimeSelecto
 
 from .config_flow import (
     START_KEYS,
-    _ai_schema,
-    _area_schema,
-    _check_api_key,
-    _coordinator,
-    _decision_schema_expert,
-    _general_schema,
-    _learned_fields,
-    _other_areas,
-    _rules_schema,
-    _vacation_schema,
-    _validate_area,
-    _ventilation_schema,
-    _with_price_suggestions,
+    ai_schema,
+    area_schema,
+    check_api_key,
+    decision_schema_expert,
+    general_schema,
     keep_start_values,
+    learned_fields,
+    other_areas,
+    rules_schema,
+    running_coordinator,
+    vacation_schema,
+    validate_area,
+    ventilation_schema,
+    with_price_suggestions,
 )
 from .const import (
     AREA_DEFAULTS,
@@ -129,12 +129,12 @@ def option_fields() -> dict[str, Selector]:
     values: dict[str, Any] = dict(DEFAULTS)
     fields: dict[str, Selector] = {}
     for schema in (
-        _general_schema(values, season_text=True),
-        _vacation_schema(values),
-        _rules_schema(values),
-        _ventilation_schema(values),
-        _ai_schema(values),
-        _decision_schema_expert(values),
+        general_schema(values, season_text=True),
+        vacation_schema(values),
+        rules_schema(values),
+        ventilation_schema(values),
+        ai_schema(values),
+        decision_schema_expert(values),
     ):
         fields.update(_fields(schema))
     return fields
@@ -142,7 +142,7 @@ def option_fields() -> dict[str, Selector]:
 
 @cache
 def area_fields() -> dict[str, Selector]:
-    return _fields(_area_schema({}))
+    return _fields(area_schema({}))
 
 
 def _spec(selector: Selector) -> dict[str, Any]:
@@ -226,7 +226,7 @@ def apply_options(current: dict[str, Any], changes: dict[str, Any]) -> dict[str,
             updates[key] = DEFAULTS[key]
         else:
             removed.add(key)
-    updates = _with_price_suggestions({**DEFAULTS, **current}, updates)
+    updates = with_price_suggestions({**DEFAULTS, **current}, updates)
     options = {k: v for k, v in current.items() if k not in removed}
     options.update(updates)
     merged = {**DEFAULTS, **options}
@@ -263,7 +263,7 @@ def area_data(
     values = {**AREA_DEFAULTS, CONF_AREA_NAME: title, **values}
     if not values.get(CONF_TEMP_SENSOR):
         raise PanelError("required", CONF_TEMP_SENSOR)
-    errors = _validate_area(values, others)
+    errors = validate_area(values, others)
     if error := errors.get(CONF_AREA_NAME):
         raise PanelError(error)
     if error := errors.get("base"):
@@ -279,7 +279,7 @@ def _learned(coordinator: Any, values: Any) -> dict[str, float]:
     for key in values:
         if key not in ranges:
             raise PanelError("unknown_option", key)
-    fields = _learned_fields(dict.fromkeys(values, 0.0), ranges)
+    fields = learned_fields(dict.fromkeys(values, 0.0), ranges)
     result = {}
     for marker, selector in fields.items():
         key = str(marker)
@@ -292,7 +292,7 @@ def _learned(coordinator: Any, values: Any) -> dict[str, float]:
 
 def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     registry = er.async_get(hass)
-    coordinator = _coordinator(entry)
+    coordinator = running_coordinator(entry)
     entities: dict[str, str] = {}
     for key, domain in ENTITY_KEYS.items():
         if entity_id := registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{key}"):
@@ -323,7 +323,7 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         keys = dict.fromkeys((LEARNED_THETA, *START_KEYS), 0.0)
         learned_specs = {
             str(k): _spec(sel)
-            for k, sel in _learned_fields(keys, coordinator.learned_ranges()).items()
+            for k, sel in learned_fields(keys, coordinator.learned_ranges()).items()
         }
     return {
         "entry_id": entry.entry_id,
@@ -362,7 +362,7 @@ LEARNED_STATS = (
 @callback
 def ws_learned(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     entry = _entry(hass)
-    coordinator = _coordinator(entry) if entry else None
+    coordinator = running_coordinator(entry) if entry else None
     if coordinator is None:
         connection.send_error(msg["id"], "not_found", "AI Heating Assistant is not running")
         return
@@ -433,7 +433,7 @@ async def ws_save_api_key(
         return
     if api_key:
         model = str(entry.options.get(CONF_AI_MODEL, DEFAULTS[CONF_AI_MODEL]))
-        if error := await _check_api_key(hass, api_key, model):
+        if error := await check_api_key(hass, api_key, model):
             connection.send_error(msg["id"], "invalid", error)
             return
     hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_API_KEY: api_key})
@@ -466,9 +466,9 @@ def ws_save_area(
     if sub_id and (subentry is None or subentry.subentry_type != SUBENTRY_AREA):
         connection.send_error(msg["id"], "not_found", "area not found")
         return
-    coordinator = _coordinator(entry)
+    coordinator = running_coordinator(entry)
     try:
-        data = area_data(msg["title"], msg["data"], _other_areas(entry, sub_id))
+        data = area_data(msg["title"], msg["data"], other_areas(entry, sub_id))
         learned = (
             _learned(coordinator, msg["learned"])
             if subentry is not None and coordinator is not None and "learned" in msg
@@ -506,7 +506,7 @@ def ws_save_theta(
 ) -> None:
     """Change the learned theta (its start value is only set up once)."""
     entry = _entry(hass)
-    coordinator = _coordinator(entry) if entry else None
+    coordinator = running_coordinator(entry) if entry else None
     if entry is None or coordinator is None:
         connection.send_error(msg["id"], "not_found", "AI Heating Assistant is not running")
         return

@@ -22,5 +22,9 @@ jobs:
           pip install -r requirements_test.txt ruff
       - name: Lint
         run: ruff check custom_components tests scripts
+      - name: Format
+        run: ruff format --check custom_components tests scripts
+      - name: Panel texts up to date
+        run: python scripts/build_labels.py --check
       - name: Tests
         run: pytest -q

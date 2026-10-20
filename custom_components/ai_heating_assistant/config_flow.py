@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.config_entries import (
     SOURCE_USER,
     ConfigEntry,
@@ -38,6 +38,10 @@ from homeassistant.helpers.selector import (
 )
 
 from .ai_client import AiAuthError, AiError, ClaudeClient
+
+if TYPE_CHECKING:
+    from .coordinator import HeatingCoordinator
+
 from .const import (
     AREA_DEFAULTS,
     CONF_AI_CHECK_DAYS,
@@ -225,7 +229,7 @@ def _join_season(user_input: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
-def _general_schema(v: dict[str, Any], season_text: bool = False) -> vol.Schema:
+def general_schema(v: dict[str, Any], season_text: bool = False) -> vol.Schema:
     """``season_text``: the period as text fields (the panel); the dialogs use day and
     month fields."""
     season = (
@@ -254,7 +258,7 @@ def _general_schema(v: dict[str, Any], season_text: bool = False) -> vol.Schema:
     )
 
 
-def _vacation_schema(v: dict[str, Any]) -> vol.Schema:
+def vacation_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Optional(
@@ -275,7 +279,7 @@ def _vacation_schema(v: dict[str, Any]) -> vol.Schema:
     )
 
 
-def _rules_schema(v: dict[str, Any]) -> vol.Schema:
+def rules_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             _req(CONF_EMERGENCY_ENABLED, v): BooleanSelector(),
@@ -287,7 +291,7 @@ def _rules_schema(v: dict[str, Any]) -> vol.Schema:
     )
 
 
-def _ventilation_schema(v: dict[str, Any]) -> vol.Schema:
+def ventilation_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             _req(CONF_VENT_MIN_AH, v): _number(0.1, 5, 0.1, "g/m³"),
@@ -313,7 +317,7 @@ def _ai_basic_fields(v: dict[str, Any]) -> dict[Any, Any]:
     }
 
 
-def _ai_schema(v: dict[str, Any]) -> vol.Schema:
+def ai_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             **_ai_basic_fields(v),
@@ -367,14 +371,15 @@ def _decision_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema({_req(CONF_THETA_START, v): _number(5, 25, 0.5, "°C")})
 
 
-def _coordinator(entry: ConfigEntry) -> Any:
+def running_coordinator(entry: ConfigEntry) -> HeatingCoordinator | None:
     """The running coordinator of the entry, or None (learned values need it)."""
     if entry.state is not ConfigEntryState.LOADED:
         return None
-    return getattr(entry, "runtime_data", None)
+    coordinator: HeatingCoordinator | None = getattr(entry, "runtime_data", None)
+    return coordinator
 
 
-def _learned_fields(values: dict[str, float], ranges: dict[str, tuple[float, float]]) -> dict:
+def learned_fields(values: dict[str, float], ranges: dict[str, tuple[float, float]]) -> dict:
     """Fields for learned values that replace the start values once set up."""
     units = {LEARNED_THETA: "°C", CONF_PUFFER: "K"}
     # learned values are not on a step grid
@@ -388,7 +393,7 @@ SECTION_LEARNING = "learning_steps"
 SECTION_PHASES = "phases"
 
 
-def _decision_schema_expert(v: dict[str, Any]) -> vol.Schema:
+def decision_schema_expert(v: dict[str, Any]) -> vol.Schema:
     """Evaluation of the heating day, with the expert values in collapsed sections."""
     return vol.Schema(
         {
@@ -452,7 +457,7 @@ def _validate_limits(user_input: dict[str, Any]) -> tuple[dict[str, Any], dict[s
     return limits, errors
 
 
-async def _check_api_key(hass: Any, api_key: str, model: str) -> str | None:
+async def check_api_key(hass: Any, api_key: str, model: str) -> str | None:
     """Return an error key or None."""
     client = await ClaudeClient.create(hass, api_key, model, "auto")
     try:
@@ -471,7 +476,7 @@ def _clean(data: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in data.items() if v not in (None, "")}
 
 
-def _with_price_suggestions(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+def with_price_suggestions(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
     """When the model changes and prices still match the old model's suggestion, suggest new ones."""
     old_model, new_model = old.get(CONF_AI_MODEL, DEFAULTS[CONF_AI_MODEL]), new.get(CONF_AI_MODEL)
     if new_model == old_model or new_model not in MODEL_PRICE_SUGGESTIONS:
@@ -522,7 +527,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is None and self.hass.config.latitude < 0:
             user_input = dict(SOUTHERN_SEASON)  # winter is in the middle of the year
         return self.async_show_form(
-            step_id="user", data_schema=_general_schema(user_input or {}), errors=errors
+            step_id="user", data_schema=general_schema(user_input or {}), errors=errors
         )
 
     async def async_step_vacation(
@@ -531,7 +536,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._options.update(_clean(user_input))
             return await self.async_step_decision()
-        return self.async_show_form(step_id="vacation", data_schema=_vacation_schema({}))
+        return self.async_show_form(step_id="vacation", data_schema=vacation_schema({}))
 
     async def async_step_decision(
         self, user_input: dict[str, Any] | None = None
@@ -550,7 +555,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
             self._options.update(user_input)
             if not self._api_key:
                 return self._create_entry()
-            error = await _check_api_key(self.hass, self._api_key, str(DEFAULTS[CONF_AI_MODEL]))
+            error = await check_api_key(self.hass, self._api_key, str(DEFAULTS[CONF_AI_MODEL]))
             if error:
                 errors["base"] = error
             else:
@@ -578,7 +583,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def _create_entry(self) -> ConfigFlowResult:
         options = {**DEFAULTS, **self._options}
-        options = _with_price_suggestions({CONF_AI_MODEL: DEFAULTS[CONF_AI_MODEL]}, options)
+        options = with_price_suggestions({CONF_AI_MODEL: DEFAULTS[CONF_AI_MODEL]}, options)
         options[CONF_LIMITS] = default_limits()
         return self.async_create_entry(
             title=NAME, data={CONF_API_KEY: self._api_key}, options=options
@@ -609,7 +614,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
             api_key = str(user_input.get(CONF_API_KEY, "") or "").strip()
             if api_key:
                 model = str(entry.options.get(CONF_AI_MODEL, DEFAULTS[CONF_AI_MODEL]))
-                if error := await _check_api_key(self.hass, api_key, model):
+                if error := await check_api_key(self.hass, api_key, model):
                     errors["base"] = error
             if not errors:
                 # the update listener reloads the entry
@@ -633,7 +638,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
             api_key = str(user_input.get(CONF_API_KEY, "") or "").strip()
             if api_key:
                 model = str(entry.options.get(CONF_AI_MODEL, DEFAULTS[CONF_AI_MODEL]))
-                if error := await _check_api_key(self.hass, api_key, model):
+                if error := await check_api_key(self.hass, api_key, model):
                     errors["base"] = error
             if not errors:
                 return self.async_update_and_abort(entry, data_updates={CONF_API_KEY: api_key})
@@ -699,7 +704,7 @@ class AiHeatingOptionsFlow(OptionsFlow):
                 )
         return self.async_show_form(
             step_id="general",
-            data_schema=_general_schema(user_input or self._values),
+            data_schema=general_schema(user_input or self._values),
             errors=errors,
         )
 
@@ -708,12 +713,12 @@ class AiHeatingOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         if user_input is not None:
             return self._save(_clean(user_input), remove=(CONF_RETURN_ENTITY,))
-        return self.async_show_form(step_id="vacation", data_schema=_vacation_schema(self._values))
+        return self.async_show_form(step_id="vacation", data_schema=vacation_schema(self._values))
 
     async def async_step_rules(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             return self._save(user_input)
-        return self.async_show_form(step_id="rules", data_schema=_rules_schema(self._values))
+        return self.async_show_form(step_id="rules", data_schema=rules_schema(self._values))
 
     async def async_step_ventilation(
         self, user_input: dict[str, Any] | None = None
@@ -721,7 +726,7 @@ class AiHeatingOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self._save(user_input)
         return self.async_show_form(
-            step_id="ventilation", data_schema=_ventilation_schema(self._values)
+            step_id="ventilation", data_schema=ventilation_schema(self._values)
         )
 
     async def async_step_ai(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
@@ -730,9 +735,9 @@ class AiHeatingOptionsFlow(OptionsFlow):
             if float(user_input[CONF_CHECK_MAX_INTERVAL]) < float(user_input[CONF_CHECK_INTERVAL]):
                 errors[CONF_CHECK_MAX_INTERVAL] = "max_below_base"
             else:
-                return self._save(_with_price_suggestions(self._values, user_input))
+                return self._save(with_price_suggestions(self._values, user_input))
         return self.async_show_form(
-            step_id="ai", data_schema=_ai_schema(user_input or self._values), errors=errors
+            step_id="ai", data_schema=ai_schema(user_input or self._values), errors=errors
         )
 
     async def async_step_ai_limits(
@@ -750,7 +755,7 @@ class AiHeatingOptionsFlow(OptionsFlow):
     async def async_step_decision(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        coordinator = _coordinator(self.config_entry)
+        coordinator = running_coordinator(self.config_entry)
         if user_input is not None:
             for key in (SECTION_LEARNING, SECTION_PHASES):
                 user_input.update(user_input.pop(key, None) or {})
@@ -758,10 +763,10 @@ class AiHeatingOptionsFlow(OptionsFlow):
             if coordinator is not None and theta is not None:
                 coordinator.set_theta(theta)
             return self._save(user_input)
-        schema = _decision_schema_expert(self._values)
+        schema = decision_schema_expert(self._values)
         if coordinator is not None:
             # The start value is set once at setup; afterwards the learned value is edited.
-            learned = _learned_fields(
+            learned = learned_fields(
                 {LEARNED_THETA: round(coordinator.theta, 2)}, coordinator.learned_ranges()
             )
             schema = vol.Schema({**learned, **schema.schema})
@@ -771,7 +776,7 @@ class AiHeatingOptionsFlow(OptionsFlow):
 # ---------------------------------------------------------------- heating area subentry
 
 
-def _area_schema(
+def area_schema(
     v: dict[str, Any],
     learned: dict[str, float] | None = None,
     ranges: dict[str, tuple[float, float]] | None = None,
@@ -866,7 +871,7 @@ def _learned_section(
         return {}
     return {
         vol.Required(SECTION_LEARNED): section(
-            vol.Schema(_learned_fields(learned, ranges)), {"collapsed": True}
+            vol.Schema(learned_fields(learned, ranges)), {"collapsed": True}
         )
     }
 
@@ -886,7 +891,7 @@ def keep_start_values(data: Any) -> dict[str, Any]:
     return {k: data[k] for k in START_KEYS if k in data}
 
 
-def _other_areas(entry: ConfigEntry, exclude: str | None = None) -> list[ConfigSubentry]:
+def other_areas(entry: ConfigEntry, exclude: str | None = None) -> list[ConfigSubentry]:
     """The areas of an entry, except one area (the one being changed)."""
     return [
         sub
@@ -899,7 +904,7 @@ def _name_key(name: Any) -> str:
     return str(name or "").strip().casefold()
 
 
-def _validate_area(data: dict[str, Any], others: Sequence[ConfigSubentry] = ()) -> dict[str, str]:
+def validate_area(data: dict[str, Any], others: Sequence[ConfigSubentry] = ()) -> dict[str, str]:
     """Errors of an area form, against the other areas of the entry. One error is
     shown at a time, in this order: name, switch, targets, reference."""
     errors: dict[str, str] = {}
@@ -930,17 +935,17 @@ class AreaSubentryFlow(ConfigSubentryFlow):
         values: dict[str, Any] = {}
         if user_input is not None:
             values = _flatten(user_input)
-            errors = _validate_area(values, _other_areas(self._get_entry()))
+            errors = validate_area(values, other_areas(self._get_entry()))
             if not errors:
                 return self.async_create_entry(title=values[CONF_AREA_NAME], data=values)
-        return self.async_show_form(step_id="user", data_schema=_area_schema(values), errors=errors)
+        return self.async_show_form(step_id="user", data_schema=area_schema(values), errors=errors)
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         entry = self._get_entry()
         subentry = self._get_reconfigure_subentry()
-        coordinator = _coordinator(entry)
+        coordinator = running_coordinator(entry)
         learned: dict[str, float] = {}
         ranges = None
         if coordinator is not None:
@@ -952,7 +957,7 @@ class AreaSubentryFlow(ConfigSubentryFlow):
             edited = user_input.pop(SECTION_LEARNED, None) or {}
             # the start values were set when the area was created and stay as they are
             values = {**_flatten(user_input), **keep_start_values(subentry.data)}
-            errors = _validate_area(values, _other_areas(entry, subentry.subentry_id))
+            errors = validate_area(values, other_areas(entry, subentry.subentry_id))
             if not errors:
                 if coordinator is not None and edited:
                     coordinator.set_learned(subentry.subentry_id, edited)
@@ -961,6 +966,6 @@ class AreaSubentryFlow(ConfigSubentryFlow):
                 )
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_area_schema(values, learned, ranges),
+            data_schema=area_schema(values, learned, ranges),
             errors=errors,
         )

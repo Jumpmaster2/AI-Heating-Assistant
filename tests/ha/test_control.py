@@ -1127,7 +1127,11 @@ async def test_night_hours_of_an_old_entry_become_times(
 
 
 async def test_changing_services_need_an_admin(
-    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory, hass_read_only_user
+    hass: HomeAssistant,
+    base_states,
+    freezer: FrozenDateTimeFactory,
+    hass_read_only_user,
+    hass_admin_user,
 ) -> None:
     from homeassistant.core import Context
     from homeassistant.exceptions import Unauthorized
@@ -1143,6 +1147,28 @@ async def test_changing_services_need_an_admin(
             blocking=True,
             context=Context(user_id=hass_read_only_user.id),
         )
+    for service, data in (
+        ("decide_heating_day", {"use_ai": False}),
+        ("run_ai_check", {}),
+        ("import_parameters", {"data": {}}),
+    ):
+        with pytest.raises(Unauthorized):
+            await hass.services.async_call(
+                DOMAIN,
+                service,
+                data,
+                blocking=True,
+                context=Context(user_id=hass_read_only_user.id),
+                return_response=service == "import_parameters",
+            )
+    # an administrator may
+    await hass.services.async_call(
+        DOMAIN,
+        "reset_learned",
+        {"entity_id": area_entity, "include_parameters": False},
+        blocking=True,
+        context=Context(user_id=hass_admin_user.id),
+    )
     # automations and scripts run without a user
     await hass.services.async_call(
         DOMAIN,
@@ -1165,6 +1191,11 @@ async def test_import_reports_bad_data_but_not_programming_errors(
         await hass.services.async_call(
             DOMAIN, "import_parameters", {"data": {"areas": 5}}, blocking=True, return_response=True
         )
+    for bad in ({"global": 5}, {"areas": {"Living room": {"params": [1]}}}):
+        with pytest.raises(ServiceValidationError):
+            await hass.services.async_call(
+                DOMAIN, "import_parameters", {"data": bad}, blocking=True, return_response=True
+            )
     with (
         patch.object(HeatingCoordinator, "import_parameters", side_effect=AttributeError("bug")),
         pytest.raises(AttributeError),

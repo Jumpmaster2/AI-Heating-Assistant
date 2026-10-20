@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import (
     HomeAssistant,
@@ -124,6 +124,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
         await coordinator.async_run_ai_check("manual")
 
     async def decide_heating_day(call: ServiceCall) -> None:
+        await _require_admin(hass, call)  # changes the day and may ask the paid AI
         await _coordinator(hass).async_decide_heating_day("manual", call.data[ATTR_USE_AI])
 
     hass.services.async_register(

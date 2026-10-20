@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.19. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.20. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -176,7 +176,7 @@ Alle wichtigen Entscheidungen und jede KI-Anpassung mit Begründung stehen im **
 
 ## Dienste
 
-`import_parameters`, `reset_learned` und `run_ai_check` (kostet Geld) dürfen nur Administratoren aufrufen; Automationen und Skripte ohne Benutzer dürfen sie weiter nutzen.
+`import_parameters`, `reset_learned`, `decide_heating_day` und `run_ai_check` (die beiden letzten können KI-Kosten verursachen) dürfen nur Administratoren aufrufen; Automationen und Skripte ohne Benutzer dürfen sie weiter nutzen.
 
 | Dienst | Zweck |
 |---|---|

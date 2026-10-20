@@ -711,11 +711,6 @@
           "off_today": "Heute nicht heizen"
         }
       }
-    },
-    "climate": {
-      "area": {
-        "name": "Thermostat"
-      }
     }
   },
   "services": {
