@@ -162,7 +162,7 @@ def _req(key: str, values: dict[str, Any]) -> vol.Required:
 def _general_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(CONF_OUTDOOR_TEMP, default=v.get(CONF_OUTDOOR_TEMP)): _entity(["sensor"]),
+            _opt_entity(CONF_OUTDOOR_TEMP, v): _entity(["sensor"]),
             _opt_entity(CONF_OUTDOOR_HUMIDITY, v): _entity(["sensor"]),
             _opt_entity(CONF_WEATHER, v): _entity(["weather"]),
             _opt_entity(CONF_PV_POWER, v): _entity(["sensor"]),
@@ -320,6 +320,9 @@ def _advanced_schema(v: dict[str, Any]) -> vol.Schema:
 
 def _validate_general(user_input: dict[str, Any]) -> dict[str, str]:
     errors: dict[str, str] = {}
+    if not user_input.get(CONF_OUTDOOR_TEMP) and not user_input.get(CONF_WEATHER):
+        # the outdoor temperature drives prediction and learning
+        errors[CONF_OUTDOOR_TEMP] = "outdoor_required"
     for key in (CONF_SEASON_START, CONF_SEASON_END):
         try:
             parse_day_month(str(user_input.get(key, "")))

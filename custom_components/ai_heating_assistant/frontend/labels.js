@@ -4,7 +4,7 @@ export const LABELS = {
   "fields": {
    "outdoor_temperature": [
     "Außentemperatursensor",
-    "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst)."
+    "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität."
    ],
    "outdoor_humidity": [
     "Außenfeuchtesensor",
@@ -12,7 +12,7 @@ export const LABELS = {
    ],
    "weather": [
     "Wetter-Entität",
-    "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt."
+    "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt. Ohne Außensensor gilt ihre aktuelle Temperatur als Außentemperatur."
    ],
    "pv_power": [
     "PV-Leistungssensor",
@@ -340,7 +340,8 @@ export const LABELS = {
    "invalid_auth": "Der API-Key wurde abgelehnt.",
    "cannot_connect": "Keine Verbindung zur Anthropic API.",
    "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
-   "min_above_max": "Minimum muss unter dem Maximum liegen."
+   "min_above_max": "Minimum muss unter dem Maximum liegen.",
+   "outdoor_required": "Bitte einen Außentemperatursensor oder eine Wetter-Entität wählen."
   },
   "area_errors": {
    "name_required": "Bitte einen Namen angeben.",
@@ -403,7 +404,7 @@ export const LABELS = {
   "fields": {
    "outdoor_temperature": [
     "Outdoor temperature sensor",
-    "Sensor for the outdoor temperature (e.g. a helper combining several sensors)."
+    "Sensor for the outdoor temperature (e.g. a helper combining several sensors). Without it the current temperature of the weather entity is used."
    ],
    "outdoor_humidity": [
     "Outdoor humidity sensor",
@@ -411,7 +412,7 @@ export const LABELS = {
    ],
    "weather": [
     "Weather entity",
-    "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun."
+    "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun. Without an outdoor sensor its current temperature is the outdoor temperature."
    ],
    "pv_power": [
     "PV power sensor",
@@ -739,7 +740,8 @@ export const LABELS = {
    "invalid_auth": "The API key was rejected.",
    "cannot_connect": "Cannot connect to the Anthropic API.",
    "max_below_base": "The maximum interval must not be smaller than the check interval.",
-   "min_above_max": "Minimum must be below maximum."
+   "min_above_max": "Minimum must be below maximum.",
+   "outdoor_required": "Choose an outdoor temperature sensor or a weather entity."
   },
   "area_errors": {
    "name_required": "Please enter a name.",

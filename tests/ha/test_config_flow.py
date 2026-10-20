@@ -34,6 +34,12 @@ async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> No
         result["flow_id"], {**GENERAL, "season_start": "1.13."}
     )
     assert result["errors"] == {"season_start": "invalid_day_month"}
+    # an outdoor sensor or a weather entity is needed
+    without_outdoor = {
+        k: v for k, v in GENERAL.items() if k not in ("outdoor_temperature", "weather")
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], without_outdoor)
+    assert result["errors"] == {"outdoor_temperature": "outdoor_required"}
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], GENERAL)
     assert result["step_id"] == "vacation"

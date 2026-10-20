@@ -16,9 +16,9 @@
           "frost_temperature": "Frost protection temperature"
         },
         "data_description": {
-          "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors).",
+          "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors). Without it the current temperature of the weather entity is used.",
           "outdoor_humidity": "Optional. Needed for the ventilation recommendation; without it the humidity of the weather entity is used.",
-          "weather": "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun.",
+          "weather": "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun. Without an outdoor sensor its current temperature is the outdoor temperature.",
           "pv_power": "Optional. PV power (W or kW) as an indicator for sunshine. The solar gain per area is learned from it.",
           "pv_forecast": "Optional, only together with the PV power sensor. Expected PV energy of the next hour (Wh or kWh, e.g. Forecast.Solar) or expected power in one hour (W or kW). Without it the sun is estimated from the hourly weather forecast and the sun position.",
           "heat_meter": "Optional. Meter reading of the heat meter of the circuits controlled here (Wh, kWh, MWh, MJ or GJ, e.g. total_increasing). The AI then sees the measured heat; it is also shown in the dashboard. Seldom and coarse readings are fine.",
@@ -95,7 +95,8 @@
       "invalid_auth": "The API key was rejected.",
       "cannot_connect": "Cannot connect to the Anthropic API.",
       "max_below_base": "The maximum interval must not be smaller than the check interval.",
-      "min_above_max": "Minimum must be below maximum."
+      "min_above_max": "Minimum must be below maximum.",
+      "outdoor_required": "Choose an outdoor temperature sensor or a weather entity."
     }
   },
   "options": {
@@ -127,9 +128,9 @@
           "frost_temperature": "Frost protection temperature"
         },
         "data_description": {
-          "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors).",
+          "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors). Without it the current temperature of the weather entity is used.",
           "outdoor_humidity": "Optional. Needed for the ventilation recommendation; without it the humidity of the weather entity is used.",
-          "weather": "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun.",
+          "weather": "Optional but recommended. Its forecast is used for the nightly heating day decision and the expected sun. Without an outdoor sensor its current temperature is the outdoor temperature.",
           "pv_power": "Optional. PV power (W or kW) as an indicator for sunshine. The solar gain per area is learned from it.",
           "pv_forecast": "Optional, only together with the PV power sensor. Expected PV energy of the next hour (Wh or kWh, e.g. Forecast.Solar) or expected power in one hour (W or kW). Without it the sun is estimated from the hourly weather forecast and the sun position.",
           "heat_meter": "Optional. Meter reading of the heat meter of the circuits controlled here (Wh, kWh, MWh, MJ or GJ, e.g. total_increasing). The AI then sees the measured heat; it is also shown in the dashboard. Seldom and coarse readings are fine.",
@@ -342,7 +343,8 @@
       "invalid_auth": "The API key was rejected.",
       "cannot_connect": "Cannot connect to the Anthropic API.",
       "max_below_base": "The maximum interval must not be smaller than the check interval.",
-      "min_above_max": "Minimum must be below maximum."
+      "min_above_max": "Minimum must be below maximum.",
+      "outdoor_required": "Choose an outdoor temperature sensor or a weather entity."
     }
   },
   "config_subentries": {

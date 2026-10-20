@@ -49,6 +49,7 @@ from .const import (
     CONF_SEASON_END,
     CONF_SEASON_START,
     CONF_TEMP_SENSOR,
+    CONF_WEATHER,
     DEFAULTS,
     DOMAIN,
     LEARNED_THETA,
@@ -85,7 +86,7 @@ AREA_ENTITY_KEYS = {
     "outdoor_influence": "sensor",
     "sun_influence": "sensor",
 }
-REQUIRED_OPTIONS = (CONF_OUTDOOR_TEMP,)
+REQUIRED_OPTIONS: tuple[str, ...] = ()
 
 
 @callback
@@ -227,6 +228,8 @@ def apply_options(current: dict[str, Any], changes: dict[str, Any]) -> dict[str,
     options = {k: v for k, v in current.items() if k not in removed}
     options.update(updates)
     merged = {**DEFAULTS, **options}
+    if not merged.get(CONF_OUTDOOR_TEMP) and not merged.get(CONF_WEATHER):
+        raise PanelError("outdoor_required", CONF_OUTDOOR_TEMP)
     for key in (CONF_SEASON_START, CONF_SEASON_END):
         try:
             parse_day_month(str(merged[key]))

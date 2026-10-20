@@ -628,6 +628,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         for key in (CONF_OUTDOOR_TEMP, CONF_RETURN_ENTITY):
             if self.opt(key):
                 watched.add(self.opt(key))
+        if not self.opt(CONF_OUTDOOR_TEMP) and self.opt(CONF_WEATHER):
+            watched.add(self.opt(CONF_WEATHER))  # the outdoor temperature comes from it
         watched.update(self.opt(CONF_VACATION_ENTITIES) or [])
         switches: dict[str, str] = {}
         for area in self.areas.values():
@@ -756,7 +758,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             if area.has_circuit
             for key in ISSUE_KEYS
         }
-        if self.opt(CONF_OUTDOOR_TEMP):
+        if self.opt(CONF_OUTDOOR_TEMP) or self.opt(CONF_WEATHER):
             valid.add("outdoor_unavailable")
         for issue_id in integration_issues(self.hass):
             if issue_id not in valid:
@@ -826,6 +828,24 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 unit,
             )
             return None
+
+    def _weather_temp(self) -> float | None:
+        """Current temperature of the weather entity in °C (in its temperature_unit)."""
+        weather_id = self.opt(CONF_WEATHER)
+        state = self._state(weather_id)
+        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            return None
+        value = state.attributes.get("temperature")
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            return None
+        if not math.isfinite(value):
+            return None
+        celsius = self._to_celsius(
+            float(value), state.attributes.get("temperature_unit"), weather_id
+        )
+        if celsius is not None and not TEMP_RANGE[0] <= celsius <= TEMP_RANGE[1]:
+            return self._implausible(weather_id, value)
+        return celsius
 
     def _is_on(self, entity_id: str | None) -> bool:
         state = self._state(entity_id)
@@ -944,11 +964,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         minutes = 0.0 if self._last_tick is None else clamp((ts - self._last_tick) / 60, 0.0, 5.0)
         self._last_tick = ts
 
-        self.outdoor_temp = self._temp(self.opt(CONF_OUTDOOR_TEMP))
-        if outdoor_id := self.opt(CONF_OUTDOOR_TEMP):
-            self._track_outage(
-                "outdoor_unavailable", None, outdoor_id, self.outdoor_temp is None, ts
-            )
+        # without an outdoor sensor the current temperature of the weather entity
+        outdoor_id = self.opt(CONF_OUTDOOR_TEMP)
+        self.outdoor_temp = self._temp(outdoor_id) if outdoor_id else self._weather_temp()
+        if source := outdoor_id or self.opt(CONF_WEATHER):
+            self._track_outage("outdoor_unavailable", None, source, self.outdoor_temp is None, ts)
         self.pv_kw = self._pv_kw()
         self._pv_measured = self.pv_kw is not None
         await self._update_pv_forecast(ts)

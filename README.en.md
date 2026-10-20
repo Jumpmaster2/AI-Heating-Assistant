@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.1. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.2. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -101,7 +101,7 @@ Temperature sensors may report °C, °F or K; without a unit the unit system of 
 
 | Option | Default | Meaning |
 |---|---|---|
-| Outdoor temperature sensor | | e.g. `sensor.outdoor_temperature` |
+| Outdoor temperature sensor | | e.g. `sensor.outdoor_temperature`; optional if a weather entity is chosen (its current temperature is used then) |
 | Outdoor humidity sensor | | optional, for the ventilation recommendation |
 | Weather entity | | optional, forecast for the nightly run and the expected sun |
 | PV power sensor | | optional, sunshine indicator (W or kW; without a unit W applies, another unit is ignored with a warning) |

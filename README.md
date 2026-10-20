@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.1. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.2. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -101,7 +101,7 @@ Temperatursensoren dürfen in °C, °F oder K melden; ohne Einheit gilt das Einh
 
 | Option | Standard | Bedeutung |
 |---|---|---|
-| Außentemperatursensor | | z. B. `sensor.outdoor_temperature` |
+| Außentemperatursensor | | z. B. `sensor.outdoor_temperature`; optional, wenn eine Wetter-Entität gewählt ist (dann gilt deren aktuelle Temperatur) |
 | Außenfeuchtesensor | | optional, für die Lüftungsempfehlung |
 | Wetter-Entität | | optional, Vorhersage für den Nachtlauf und die Sonnenprognose |
 | PV-Leistungssensor | | optional, Sonnenindikator (W oder kW; ohne Einheit gilt W, eine andere Einheit wird mit Warnung ignoriert) |

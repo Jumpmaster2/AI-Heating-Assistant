@@ -79,7 +79,8 @@ async def test_save_options(hass: HomeAssistant, base_states, hass_ws_client) ->
     assert entry.options["frost_temperature"] == 7.0
 
     for options, error in (
-        ({"outdoor_temperature": ""}, "required:outdoor_temperature"),
+        # no weather entity either (removed above): one of both is needed
+        ({"outdoor_temperature": ""}, "outdoor_required:outdoor_temperature"),
         ({"frost_temperature": 99}, "invalid_value:frost_temperature"),
         ({"weather": "sensor.not_weather"}, "invalid_value:weather"),
         ({"season_start": "31.02."}, "invalid_day_month:season_start"),

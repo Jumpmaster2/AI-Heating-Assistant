@@ -16,9 +16,9 @@
           "frost_temperature": "Frostschutz-Mindesttemperatur"
         },
         "data_description": {
-          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst).",
+          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
           "outdoor_humidity": "Optional. Für die Lüftungsempfehlung; ohne Sensor wird die Luftfeuchte der Wetter-Entität genutzt.",
-          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt.",
+          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt. Ohne Außensensor gilt ihre aktuelle Temperatur als Außentemperatur.",
           "pv_power": "Optional. PV-Leistung (W oder kW) als Indikator für Sonne. Daraus wird der Sonneneinfluss je Bereich gelernt.",
           "pv_forecast": "Optional, nur zusammen mit dem PV-Leistungssensor. Erwartete PV-Energie der nächsten Stunde (Wh oder kWh, z. B. Forecast.Solar) oder erwartete Leistung in einer Stunde (W oder kW). Ohne diesen Sensor wird die Sonne aus der stündlichen Wettervorhersage und dem Sonnenstand geschätzt.",
           "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
@@ -95,7 +95,8 @@
       "invalid_auth": "Der API-Key wurde abgelehnt.",
       "cannot_connect": "Keine Verbindung zur Anthropic API.",
       "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
-      "min_above_max": "Minimum muss unter dem Maximum liegen."
+      "min_above_max": "Minimum muss unter dem Maximum liegen.",
+      "outdoor_required": "Bitte einen Außentemperatursensor oder eine Wetter-Entität wählen."
     }
   },
   "options": {
@@ -127,9 +128,9 @@
           "frost_temperature": "Frostschutz-Mindesttemperatur"
         },
         "data_description": {
-          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst).",
+          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
           "outdoor_humidity": "Optional. Für die Lüftungsempfehlung; ohne Sensor wird die Luftfeuchte der Wetter-Entität genutzt.",
-          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt.",
+          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt. Ohne Außensensor gilt ihre aktuelle Temperatur als Außentemperatur.",
           "pv_power": "Optional. PV-Leistung (W oder kW) als Indikator für Sonne. Daraus wird der Sonneneinfluss je Bereich gelernt.",
           "pv_forecast": "Optional, nur zusammen mit dem PV-Leistungssensor. Erwartete PV-Energie der nächsten Stunde (Wh oder kWh, z. B. Forecast.Solar) oder erwartete Leistung in einer Stunde (W oder kW). Ohne diesen Sensor wird die Sonne aus der stündlichen Wettervorhersage und dem Sonnenstand geschätzt.",
           "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
@@ -342,7 +343,8 @@
       "invalid_auth": "Der API-Key wurde abgelehnt.",
       "cannot_connect": "Keine Verbindung zur Anthropic API.",
       "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
-      "min_above_max": "Minimum muss unter dem Maximum liegen."
+      "min_above_max": "Minimum muss unter dem Maximum liegen.",
+      "outdoor_required": "Bitte einen Außentemperatursensor oder eine Wetter-Entität wählen."
     }
   },
   "config_subentries": {

@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import (
@@ -1029,3 +1030,19 @@ async def test_heating_type_reaches_the_ai(
             hass, make_entry(api_key="test-key", areas=[{**AREA_DATA, "heating_type": "radiator"}])
         )
     assert json.loads(mock.call_args.args[1])["areas"][0]["type"] == "radiator"
+
+
+async def test_outdoor_temperature_from_the_weather_entity(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """Without an outdoor sensor the current temperature of the weather entity counts."""
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("weather.home", "cloudy", {"temperature": 41, "temperature_unit": "°F"})
+    entry = make_entry(weather="weather.home", outdoor_temperature=None)
+    await _setup(hass, entry)
+    await _advance(hass, freezer, 1)
+    assert entry.runtime_data.outdoor_temp == pytest.approx(5.0)
+    hass.states.async_set("weather.home", "unavailable")
+    await _advance(hass, freezer, 16)
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, "outdoor_unavailable")
+    assert issue is not None and issue.translation_placeholders["entity_id"] == "weather.home"

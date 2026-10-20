@@ -550,7 +550,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const ids = [
       ...Object.values(this._cfg.entities || {}),
       ...this._cfg.areas.flatMap((a) => [...Object.values(a.entities || {}), a.data.temperature_sensor]),
-      this._cfg.options.outdoor_temperature,
+      this._cfg.options.outdoor_temperature || this._cfg.options.weather,
     ];
     return ids
       .map((id) => {
@@ -729,11 +729,18 @@ class AiHeatingAssistantPanel extends HTMLElement {
 
     // at a glance
     const g = ui.glanceRows;
+    // without an outdoor sensor the weather entity provides the outdoor temperature
     const outdoor = this._state(o.outdoor_temperature);
+    const weather = o.outdoor_temperature ? null : this._state(o.weather);
+    const outdoorText = this._ok(outdoor)
+      ? `${this._num(outdoor.state)} ${outdoor.attributes.unit_of_measurement || ""}`
+      : weather && typeof weather.attributes.temperature === "number"
+        ? `${this._num(weather.attributes.temperature)} ${weather.attributes.temperature_unit || ""} (${this._name(o.weather)})`
+        : o.outdoor_temperature || ui.none;
     const effort = this.labels.effort[o.effort] || o.effort;
     const glanceRows = [
       ["areas", "mdi:home-thermometer-outline", g.areas, this._cfg.areas.map((a) => a.title).join(", ") || ui.none],
-      ["general", "mdi:thermometer", g.outdoor, this._ok(outdoor) ? `${this._num(outdoor.state)} ${outdoor.attributes.unit_of_measurement || ""}` : o.outdoor_temperature || ui.none],
+      ["general", "mdi:thermometer", g.outdoor, outdoorText],
       ["general", "mdi:calendar-range", g.season, `${o.season_start} – ${o.season_end}`],
       ["general", "mdi:bag-suitcase-outline", g.vacation, (o.vacation_entities || []).map((id) => this._name(id)).join(", ") || ui.none],
       ["rules", "mdi:alert-outline", g.emergency, o.emergency_enabled ? ui.on : ui.off],
