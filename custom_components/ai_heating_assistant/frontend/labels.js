@@ -142,9 +142,9 @@ export const LABELS = {
     "Maximale Ausgabe-Tokens",
     "Obergrenze je Antwort, auch für die Kostenschätzung vor einer Abfrage."
    ],
-   "theta_start": [
-    "Startwert theta",
-    "Heiztag-Regel: liegt die Prognose-Höchsttemperatur unter theta, wird geheizt. Wird danach gelernt."
+   "theta": [
+    "theta (gelernt)",
+    "Aktuelle Schwelle der Heiztag-Regel: liegt die Prognose-Höchsttemperatur darunter, wird geheizt. Eine Änderung ersetzt den gelernten Wert; danach wird von hier aus weiter gelernt."
    ],
    "too_cold_margin": [
     "Zu kalt unter Sollwert um",
@@ -275,6 +275,24 @@ export const LABELS = {
     "Optional. Solange aktiv (z. B. Klimaanlage läuft, Beschattung geschlossen) wird kein Lüften empfohlen."
    ]
   },
+  "learned": {
+   "window_delay": [
+    "Fensterverzögerung",
+    "So lange offen pausiert die Heizung. Die KI darf den Wert anpassen."
+   ],
+   "recovery_time": [
+    "Erholungszeit nach Lüften",
+    "Gelernte Wartezeit nach dem Schließen der Fenster."
+   ],
+   "dead_time": [
+    "Totzeit",
+    "Gelernte Zeit, bis der Raum nach dem Einschalten wärmer wird."
+   ],
+   "puffer": [
+    "Puffer",
+    "Heiztag-Regel: nötiger Abstand über dem Sollwert beim Nachtlauf (gelernt)."
+   ]
+  },
   "sections": {
    "sensors": [
     "Sensoren",
@@ -286,11 +304,15 @@ export const LABELS = {
    ],
    "start_values": [
     "Startwerte (werden gelernt)",
-    "Eine Änderung hier ersetzt den gelernten bzw. angepassten Wert; das Lernen dieses Werts beginnt neu."
+    "Nur beim Anlegen des Bereichs. Danach werden die gelernten Werte bearbeitet."
    ],
    "ventilation": [
     "Lüftung",
     ""
+   ],
+   "learned_values": [
+    "Gelernte Werte",
+    "Werte, mit denen gerade geregelt wird. Eine Änderung ersetzt den gelernten bzw. von der KI angepassten Wert; danach wird von hier aus weiter gelernt."
    ]
   },
   "limits": {
@@ -507,9 +529,9 @@ export const LABELS = {
     "Maximum output tokens",
     "Upper limit per answer, also used for the cost estimate before a call."
    ],
-   "theta_start": [
-    "Start value theta",
-    "Heating day rule: if the forecast maximum is below theta, heating is needed. Learned afterwards."
+   "theta": [
+    "theta (learned)",
+    "Current threshold of the heating day rule: if the forecast maximum is below it, heating is needed. A change replaces the learned value; learning continues from there."
    ],
    "too_cold_margin": [
     "Too cold below target by",
@@ -640,6 +662,24 @@ export const LABELS = {
     "Optional. While active (e.g. air conditioner running, sun protection closed) no ventilation is recommended."
    ]
   },
+  "learned": {
+   "window_delay": [
+    "Window delay",
+    "Window open this long pauses heating. The AI may adjust it."
+   ],
+   "recovery_time": [
+    "Recovery time after airing",
+    "Learned wait after the windows are closed."
+   ],
+   "dead_time": [
+    "Dead time",
+    "Learned time until the room warms up after switching on."
+   ],
+   "puffer": [
+    "Puffer",
+    "Heating day rule: needed margin above the target at the nightly run (learned)."
+   ]
+  },
   "sections": {
    "sensors": [
     "Sensors",
@@ -651,11 +691,15 @@ export const LABELS = {
    ],
    "start_values": [
     "Start values (learned later)",
-    "A change here replaces the learned or adjusted value; learning of that value starts again."
+    "Only when the area is created. Afterwards the learned values are edited."
    ],
    "ventilation": [
     "Ventilation",
     ""
+   ],
+   "learned_values": [
+    "Learned values",
+    "Values the control currently uses. A change replaces the learned or AI-adjusted value; learning continues from there."
    ]
   },
   "limits": {

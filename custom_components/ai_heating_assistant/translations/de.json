@@ -43,6 +43,16 @@
           "preheat_reserve": "Zusätzliche Zeit zur berechneten Vorheizzeit."
         }
       },
+      "decision": {
+        "title": "Heiztag-Entscheidung",
+        "description": "Startwert der Heiztag-Regel. Er wird nur hier beim Einrichten gesetzt; danach wird theta gelernt und der gelernte Wert lässt sich unter „Heiztag-Entscheidung“ bearbeiten.",
+        "data": {
+          "theta_start": "Startwert theta"
+        },
+        "data_description": {
+          "theta_start": "Liegt die Prognose-Höchsttemperatur unter theta, wird geheizt."
+        }
+      },
       "ai": {
         "title": "KI (Claude)",
         "description": "Die KI prüft periodisch die Parameter. Ohne API-Key läuft nur die lokale Regelung.",
@@ -204,9 +214,9 @@
       },
       "advanced": {
         "title": "Heiztag-Entscheidung",
-        "description": "Bewertung, Lernschritte und Phasenwechsel der Heiztag-Entscheidung.",
+        "description": "Gelernte Schwelle, Bewertung, Lernschritte und Phasenwechsel der Heiztag-Entscheidung.",
         "data": {
-          "theta_start": "Startwert theta",
+          "theta": "theta (gelernt)",
           "too_cold_margin": "Zu kalt unter Sollwert um",
           "too_cold_minutes": "Minuten zu kalt für Heizbedarf",
           "theta_step_up": "theta Schritt hoch",
@@ -222,7 +232,7 @@
           "phase_ai_check_every_days": "KI-Kontrolle alle"
         },
         "data_description": {
-          "theta_start": "Heiztag-Regel: liegt die Prognose-Höchsttemperatur unter theta, wird geheizt. Wird danach gelernt.",
+          "theta": "Aktuelle Schwelle der Heiztag-Regel: liegt die Prognose-Höchsttemperatur darunter, wird geheizt. Eine Änderung ersetzt den gelernten Wert; danach wird von hier aus weiter gelernt.",
           "too_cold_margin": "Bewertung: ein Bereich gilt als zu kalt unter Sollwert minus diesem Wert (Lüften ausgenommen).",
           "too_cold_minutes": "Bewertung: so viele Minuten zu kalt bedeuten Heizbedarf.",
           "theta_step_up": "Nach Fehler A (zu kalt ohne Heizbetrieb).",
@@ -377,7 +387,7 @@
             },
             "start_values": {
               "name": "Startwerte (werden gelernt)",
-              "description": "Eine Änderung hier ersetzt den gelernten bzw. angepassten Wert; das Lernen dieses Werts beginnt neu.",
+              "description": "Nur beim Anlegen des Bereichs. Danach werden die gelernten Werte bearbeitet.",
               "data": {
                 "window_delay": "Fensterverzögerung (Startwert)",
                 "recovery_time": "Erholungszeit nach Lüften (Startwert)",
@@ -450,20 +460,20 @@
                 "min_off_time": "Wird immer eingehalten. Wird nicht gelernt."
               }
             },
-            "start_values": {
-              "name": "Startwerte (werden gelernt)",
-              "description": "Eine Änderung hier ersetzt den gelernten bzw. angepassten Wert; das Lernen dieses Werts beginnt neu.",
+            "learned_values": {
+              "name": "Gelernte Werte",
+              "description": "Werte, mit denen gerade geregelt wird. Eine Änderung ersetzt den gelernten bzw. von der KI angepassten Wert; danach wird von hier aus weiter gelernt.",
               "data": {
-                "window_delay": "Fensterverzögerung (Startwert)",
-                "recovery_time": "Erholungszeit nach Lüften (Startwert)",
-                "dead_time": "Totzeit (Startwert)",
-                "puffer": "Puffer (Startwert)"
+                "window_delay": "Fensterverzögerung",
+                "recovery_time": "Erholungszeit nach Lüften",
+                "dead_time": "Totzeit",
+                "puffer": "Puffer"
               },
               "data_description": {
                 "window_delay": "So lange offen pausiert die Heizung. Die KI darf den Wert anpassen.",
-                "recovery_time": "Nach dem Schließen wird so lange gewartet, weil Estrich und Wände den Raum oft selbst aufheizen. Wird danach gelernt.",
-                "dead_time": "Zeit, bis der Raum nach dem Einschalten wärmer wird. Wird danach gelernt.",
-                "puffer": "Heiztag-Regel: nötiger Abstand über dem Sollwert beim Nachtlauf. Wird danach gelernt."
+                "recovery_time": "Gelernte Wartezeit nach dem Schließen der Fenster.",
+                "dead_time": "Gelernte Zeit, bis der Raum nach dem Einschalten wärmer wird.",
+                "puffer": "Heiztag-Regel: nötiger Abstand über dem Sollwert beim Nachtlauf (gelernt)."
               }
             },
             "ventilation": {

@@ -49,7 +49,7 @@ Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionale
   * **Überheizen** (`over_kh`): Kelvinstunden mehr als 0,2 K über dem Sollwert, während der Kreis läuft und bis 4 Stunden nach dem Abschalten (also Wärme, die die Heizung zu viel geliefert hat). Wärme nur von der Sonne an einem Tag ohne Heizen zählt nicht. Der Anteil bei Sonne (`sun_over_kh`, PV ab 0,3 kW) zeigt, ob der Sonnenfaktor zu niedrig ist.
   * **Heizaufwand je Bedarf** (`on_per_kh`): Heizminuten je Kelvinstunde Unterschied zwischen Sollwert und Außentemperatur. So sind Prüfungen bei unterschiedlichem Wetter vergleichbar.
   * **Mittlere Laufzeit** je Einschalten.
-  * **Verlauf der letzten 6 Prüfungen** mit ihren Kennzahlen und den dabei gemachten Änderungen. Die KI kann damit beurteilen, ob eine Änderung etwas gebracht hat, und sie sonst zurücknehmen. Wird ein Bereich zurückgesetzt oder ein Startwert geändert, wird sein Verlauf gelöscht.
+  * **Verlauf der letzten 6 Prüfungen** mit ihren Kennzahlen und den dabei gemachten Änderungen. Die KI kann damit beurteilen, ob eine Änderung etwas gebracht hat, und sie sonst zurücknehmen. Wird ein Bereich zurückgesetzt oder ein gelernter Wert von Hand geändert, wird sein Verlauf gelöscht.
 * Anpassbare Parameter: Einschalt- und Ausschalthysterese, Faktor Überschwingen, Faktor Vorlauf, Sonnenfaktor, Fensterverzögerung, Korrektur der Erholungszeit, `puffer` und `theta`. Jeder Wert wird auf Minimum, Maximum und eine maximale Änderung je Prüfung begrenzt (alles einstellbar).
 * **Seltener fragen:** Das Prüfintervall verdoppelt sich nach jeder Prüfung ohne relevante Änderung und ohne Komfortfehler (bis zum Maximalintervall). Es fällt auf das Grundintervall zurück, wenn es zu kalt war, ein Bereich deutlich überheizt wurde (mehr als 0,5 Kelvinstunden je Tag, anteilig), die KI deutlich geändert hat oder du Sollwert bzw. Einstellungen änderst. Eine bereits geplante Prüfung bleibt über den Nachtlauf hinweg bestehen; nach einem Nicht-Heiztag folgt die nächste Prüfung nach dem Grundintervall, und war ein Raum seit der letzten Prüfung zu kalt, wird die nächste Prüfung vorgezogen.
 * **Kosten:** aus der Token-Nutzung mal den eingetragenen Preisen. Vor jeder Abfrage wird geschätzt; ist das Monatsbudget erreicht, gibt es bis zum Monatswechsel keine Abfragen.
@@ -87,7 +87,7 @@ Nach der Einrichtung gibt es in der Seitenleiste die Seite **AI Heating Assistan
 
 * **Übersicht:** Heiztag mit Phase und Begründung, Heiztag manuell (Automatik, Heute heizen, Heute nicht heizen), alle Bereiche mit Temperatur, Sollwert, Status und Lüftungsempfehlung (anklicken öffnet das Thermostat), Schalter KI aktiv, letzte und nächste KI-Prüfung, nächster Nachtlauf, letzte Heiztag-Entscheidung mit Quelle (KI, Regel, beide einig), KI-Kosten im Monat, Hinweise (fehlende Entitäten, letzter KI-Fehler, Budget erreicht) und eine Zusammenfassung der Einstellungen.
 * **Heizbereiche:** alle Bereiche als Tabelle; anklicken zum Bearbeiten, hinzufügen und löschen.
-* **Lernwerte:** je Bereich mit Heizkreis eine kompakte Kachel mit Lernstand, Aufheiz- und Abkühlrate, Totzeit, Überschwingen, Erholung nach Lüften, Einfluss Außentemperatur und Sonne; aufklappbar die von der KI anpassbaren Regelparameter. Dazu die Heiztag-Regel (`theta`, bewertete Tage).
+* **Lernwerte:** je Bereich mit Heizkreis eine kompakte Kachel mit Lernstand, Aufheiz- und Abkühlrate, Totzeit, Überschwingen, Erholung nach Lüften, Einfluss Außentemperatur und Sonne; aufklappbar die von der KI anpassbaren Regelparameter. Dazu die Heiztag-Regel (`theta`, bewertete Tage). Der Stift führt zum Bearbeiten der gelernten Werte.
 * **Allgemein, Notfall & Lüftung, KI, Heiztag-Entscheidung:** alle Einstellungen nach Themen in Karten, jede Karte wird für sich gespeichert. Unter **KI** auch der API-Key (wird vor dem Speichern geprüft, der gespeicherte Key wird nie angezeigt) und die KI-Grenzen.
 
 Die Einrichtung selbst läuft weiterhin als Dialog.
@@ -108,6 +108,7 @@ Die Einrichtung selbst läuft weiterhin als Dialog.
 | Urlaubstemperatur | 18 °C | für alle Bereiche |
 | Rückkehr Datum/Uhrzeit | | optional, für das Vorheizen |
 | Vorheiz-Reserve | 30 min | |
+| Startwert `theta` | 16 °C | Heiztag-Regel; nur bei der Einrichtung, danach wird der gelernte Wert bearbeitet |
 | API-Key, Modell | Claude Opus 5.5 | änderbar, eigener Modellname möglich |
 | Nachtlauf | 03:00 | |
 | Monatsbudget | 5 € | |
@@ -119,7 +120,7 @@ Die Einrichtung selbst läuft weiterhin als Dialog.
 * **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20 bis 8 Uhr.
 * **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in €/Million Tokens (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
 * **KI-Grenzen:** Minimum, Maximum, größte Änderung je Prüfung für jeden Parameter.
-* **Heiztag-Entscheidung:** Startwert `theta` (16 °C), Bewertungsschwellen, Lernschritte, Bedingungen der Phasenwechsel.
+* **Heiztag-Entscheidung:** gelerntes `theta` (änderbar), Bewertungsschwellen, Lernschritte, Bedingungen der Phasenwechsel.
 
 Den API-Key änderst du im Dashboard unter **KI** oder über **Neu konfigurieren**.
 
@@ -134,12 +135,12 @@ Im Dashboard unter **Heizbereiche** (oder unter der Integration **Heizbereich hi
 | Heizkreis-Schalter | z. B. `switch.heating_circuit_1`; leer = nur Lüftungsempfehlung |
 | Start-Sollwert, kleinster und größter Sollwert | 21 / 16 / 24 °C |
 | Mindest-Ein- und -Ausschaltzeit | 10 / 10 min (fest) |
-| Startwerte Fensterverzögerung, Erholungszeit, Totzeit, puffer | 5 min, 30 min, 30 min, 0,7 K; eine Änderung ersetzt den gelernten Wert |
+| Startwerte Fensterverzögerung, Erholungszeit, Totzeit, puffer | 5 min, 30 min, 30 min, 0,7 K; nur beim Anlegen |
 | Feuchte-Schwelle | 60 % |
 | Referenz-Temperatur und -Feuchte | optional, statt außen (Raum ohne eigenes Fenster) |
 | Lüftungs-Sperr-Entität | optional |
 
-Startwerte gelten, bis etwas gelernt wurde. Änderst du einen Startwert später, ersetzt er den gelernten bzw. von der KI angepassten Wert, das Lernen dieses Werts beginnt neu, und das Logbuch vermerkt es.
+Startwerte (auch `theta`) werden nur beim Einrichten bzw. Anlegen gesetzt und gelten, bis etwas gelernt wurde. Danach lassen sie sich nicht mehr ändern; stattdessen zeigt der Bereich unter **Gelernte Werte** die Werte, mit denen gerade geregelt wird (Fensterverzögerung, Erholungszeit, Totzeit, puffer), und das gelernte `theta` steht unter **Heiztag-Entscheidung**. Eine Änderung dort ersetzt den gelernten bzw. von der KI angepassten Wert, das Lernen geht von dort aus weiter, und das Logbuch vermerkt es.
 
 ## Entitäten
 

@@ -31,7 +31,8 @@ const UI = {
       schedule: ["Zeiten", "Nachtlauf und periodische Prüfung an Heiztagen."],
       costs: ["Budget und Preise", "Preise je Million Tokens."],
       limits: ["KI-Grenzen", "Minimum, Maximum und größte Änderung je Prüfung für jeden Parameter, den die KI anpassen darf."],
-      evaluation: ["Bewertung", "Startwert der Heiztag-Regel und wann ein Bereich als zu kalt gilt."],
+      dayrule: ["Heiztag-Regel", "Gelernte Schwelle theta. Der Startwert wird nur beim Einrichten gesetzt; eine Änderung hier ersetzt den gelernten Wert."],
+      evaluation: ["Bewertung", "Wann ein Bereich als zu kalt gilt."],
       learning: ["Lernschritte", "Wie stark theta und puffer nach einem Fehler angepasst werden."],
       phases: ["Phasenwechsel", "Wann die Entscheidung von der KI zur Regel wechselt und zurück."],
       areas: ["Heizbereiche", "Ein Bereich hat einen Heizkreis (oder keinen, nur für die Lüftungsempfehlung)."],
@@ -79,6 +80,8 @@ const UI = {
     evaluatedDays: "Bewertete Tage",
     noLearning: "Ohne Heizkreis wird nichts gelernt:",
     noLearnedAreas: "Noch kein Bereich mit Heizkreis.",
+    notRunning: "Die Integration läuft gerade nicht, gelernte Werte sind nicht verfügbar.",
+    editLearned: "Gelernte Werte bearbeiten",
     lastDecision: "Letzte Heiztag-Entscheidung",
     sources: {
       ai: "KI",
@@ -147,7 +150,8 @@ const UI = {
       schedule: ["Times", "Nightly run and periodic check on heating days."],
       costs: ["Budget and prices", "Prices per million tokens."],
       limits: ["AI limits", "Minimum, maximum and largest change per check for every parameter the AI may adjust."],
-      evaluation: ["Evaluation", "Start value of the heating day rule and when an area counts as too cold."],
+      dayrule: ["Heating day rule", "Learned threshold theta. Its start value is only set during setup; a change here replaces the learned value."],
+      evaluation: ["Evaluation", "When an area counts as too cold."],
       learning: ["Learning steps", "How much theta and puffer change after an error."],
       phases: ["Phase changes", "When the decision moves from the AI to the rule and back."],
       areas: ["Heating areas", "An area has a heating circuit (or none, only for the ventilation recommendation)."],
@@ -195,6 +199,8 @@ const UI = {
     evaluatedDays: "Evaluated days",
     noLearning: "Nothing is learned without a heating circuit:",
     noLearnedAreas: "No area with a heating circuit yet.",
+    notRunning: "The integration is not running, learned values are not available.",
+    editLearned: "Edit learned values",
     lastDecision: "Last heating day decision",
     sources: {
       ai: "AI",
@@ -284,7 +290,8 @@ const SETTINGS = {
     { id: "limits", icon: "mdi:arrow-expand-horizontal", special: "limits" },
   ],
   decision: [
-    { id: "evaluation", icon: "mdi:thermometer-check", fields: ["theta_start", "too_cold_margin", "too_cold_minutes"] },
+    { id: "dayrule", icon: "mdi:thermometer-lines", special: "theta" },
+    { id: "evaluation", icon: "mdi:thermometer-check", fields: ["too_cold_margin", "too_cold_minutes"] },
     { id: "learning", icon: "mdi:school-outline", fields: ["theta_step_up", "theta_step_down", "puffer_step_up", "puffer_step_down"] },
     {
       id: "phases",
@@ -302,11 +309,13 @@ const SETTINGS = {
   ],
 };
 
-// Groups of the heating area editor as in the dialog: [section, fields, collapsed]
+// Groups of the heating area editor as in the dialog: [section, fields, collapsed].
+// The start values only when an area is created; an existing one shows its learned values.
 const AREA_GROUPS = [
   ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors"], false],
   ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time"], false],
   ["start_values", ["window_delay", "recovery_time", "dead_time", "puffer"], true],
+  ["learned_values", ["window_delay", "recovery_time", "dead_time", "puffer"], false],
   ["ventilation", ["ventilation_rh_threshold", "reference_temperature", "reference_humidity", "ventilation_block_entity"], true],
 ];
 
@@ -801,7 +810,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const others = this._cfg.areas.filter((a) => !a.entities.learning_progress);
     const phase = this._state(this._cfg.entities.decision_phase);
     const dayRule = this._ok(phase)
-      ? `<div class="card learn"><div class="learn-head"><h2><ha-icon icon="mdi:calendar-check-outline"></ha-icon>${esc(ui.dayRule)}</h2></div>
+      ? `<div class="card learn"><div class="learn-head"><h2><ha-icon icon="mdi:calendar-check-outline"></ha-icon>${esc(ui.dayRule)}</h2>
+            <button class="icon-btn muted" data-tab="decision" title="${esc(ui.editLearned)}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button></div>
           <div class="learn-grid">
             <div class="learn-cell"><span class="lbl small">${esc(ui.theta)}</span><span>${esc(`${this._num(phase.attributes.theta)} °C`)}</span></div>
             <div class="learn-cell"><span class="lbl small">${esc(ui.evaluatedDays)}</span><span>${esc(this._num(phase.attributes.evaluated_days, 0))}</span></div>
@@ -825,7 +835,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
           .join("");
         const open = this._openDetails?.has(`params-${area.id}`);
         return `<div class="card learn">
-          <div class="learn-head"><h2>${esc(area.title)}</h2>
+          <div class="learn-head"><h2>${esc(area.title)}</h2><span class="grow"></span>
+            <button class="icon-btn muted" data-edit="${esc(area.id)}" title="${esc(ui.editLearned)}"><ha-icon icon="mdi:pencil-outline"></ha-icon></button>
             <span class="pill ${this._ok(progress) ? "" : "muted"}" title="${esc(ui.learningProgress)}"><ha-icon icon="mdi:school-outline"></ha-icon>${esc(this._formatState(area.entities.learning_progress, 0))}</span></div>
           <div class="learn-grid">${cells}</div>
           ${params ? `<details data-keep="params-${esc(area.id)}" ${open ? "open" : ""}><summary>${esc(ui.aiParams)}</summary><div class="learn-grid">${params}</div></details>` : ""}
@@ -843,17 +854,29 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const specs = this._cfg.area_specs;
     const title = e.id ? e.title || e.originalTitle : ui.newArea;
     const groups = AREA_GROUPS.map(([sec, keys, collapsed]) => {
+      const learned = sec === "learned_values";
+      if (sec === "start_values" && e.id) return "";
+      if (learned && !Object.keys(e.learned).length) return "";
       const [name, desc] = this.labels.sections[sec] || [sec, ""];
-      const fields = keys.map((key) => this._field("edit", key, specs[key], e.data[key])).join("");
+      const fields = keys
+        .filter((key) => !learned || key in e.learned)
+        .map((key) =>
+          learned
+            ? this._field("learned", key, this._cfg.learned_specs[key], e.learned[key], this.labels.learned[key])
+            : this._field("edit", key, specs[key], e.data[key]),
+        )
+        .join("");
       const body = `${desc ? `<p class="desc">${esc(desc)}</p>` : ""}<div class="fields">${fields}</div>`;
       if (!collapsed) return `<h3>${esc(name)}</h3>${body}`;
       return `<details data-section="${sec}" ${e.open.has(sec) ? "open" : ""}><summary>${esc(name)}</summary>${body}</details>`;
     }).join("");
+    const running = !e.id || this._cfg.theta !== null;
     return `<div class="card" data-card="edit">
       <h2><button class="icon-btn" data-action="close-edit"><ha-icon icon="mdi:arrow-left"></ha-icon></button>
         <ha-icon icon="${e.data.heater_switch ? "mdi:home-thermometer-outline" : "mdi:weather-windy"}"></ha-icon>${esc(title)}</h2>
       <div class="fields">${this._field("edit", "name", specs.name, e.title)}</div>
       ${groups}
+      ${running ? "" : `<p class="desc">${esc(ui.notRunning)}</p>`}
       <div class="actions"><span class="msg"></span>
         ${e.id ? `<button class="btn danger" data-action="delete-area">${esc(ui.delete)}</button>` : ""}
         <span class="grow"></span>
@@ -885,6 +908,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
   _settingsCard(card) {
     if (card.special === "apikey") return this._apiKeyCard(card);
     if (card.special === "limits") return this._limitsCard(card);
+    if (card.special === "theta") return this._thetaCard(card);
     const specs = this._cfg.option_specs;
     const fields = card.fields.map((key) => this._field(card.id, key, specs[key], this._value(card.id, key))).join("");
     return `<div class="card" data-card="${card.id}">${this._head(card)}<div class="fields">${fields}</div>${this._actions(card.id)}</div>`;
@@ -902,6 +926,19 @@ class AiHeatingAssistantPanel extends HTMLElement {
           <small>${esc(ui.newKeyHelp)}</small></label>
         ${this._cfg.has_api_key ? this._toggle("apikey", "remove", ui.removeKey, "", !!draft.remove) : ""}
       </div>${this._actions("apikey")}</div>`;
+  }
+
+  _thetaCard(card) {
+    const ui = this.ui;
+    if (this._cfg.theta === null) return `<div class="card" data-card="theta">${this._head(card)}<div class="muted">${esc(ui.notRunning)}</div></div>`;
+    const draft = this._drafts.theta;
+    const value = draft && "theta" in draft ? draft.theta : this._cfg.theta;
+    const phase = this._state(this._cfg.entities.decision_phase);
+    const days = this._ok(phase) ? phase.attributes.evaluated_days : null;
+    return `<div class="card" data-card="theta">${this._head(card)}
+      <div class="fields">${this._field("theta", "theta", this._cfg.learned_specs.theta, value)}
+        <div class="field"><span class="lbl">${esc(ui.evaluatedDays)}</span><span>${esc(this._num(days, 0))}</span></div></div>
+      ${this._actions("theta")}</div>`;
   }
 
   _limitsCard(card) {
@@ -925,9 +962,9 @@ class AiHeatingAssistantPanel extends HTMLElement {
       <input type="checkbox" class="switch-input" data-card-id="${cardId}" data-k="${key}" data-type="bool" ${on ? "checked" : ""}><span class="switch ${on ? "on" : ""}"></span></label>`;
   }
 
-  _field(cardId, key, spec, value) {
+  _field(cardId, key, spec, value, label = this.label(key)) {
     const ui = this.ui;
-    const [name, help] = this.label(key);
+    const [name, help] = label;
     const kind = spec?.selector || "text";
     const helpHtml = help ? `<small>${esc(help)}</small>` : "";
     const attrs = (type) => `data-card-id="${cardId}" data-k="${key}" data-type="${type}"`;
@@ -982,6 +1019,10 @@ class AiHeatingAssistantPanel extends HTMLElement {
     if (cardId === "edit") {
       if (key === "name") this._edit.title = value;
       else this._edit.data[key] = value;
+      return;
+    }
+    if (cardId === "learned") {
+      this._edit.learned[key] = value;
       return;
     }
     this._drafts[cardId] = this._drafts[cardId] || {};
@@ -1074,8 +1115,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
   _openEditor(area) {
     const defaults = clone(this._cfg.area_defaults);
     this._edit = area
-      ? { id: area.id, title: area.title, originalTitle: area.title, data: { ...defaults, ...clone(area.data) }, open: new Set() }
-      : { id: null, title: "", data: defaults, open: new Set() };
+      ? { id: area.id, title: area.title, originalTitle: area.title, data: { ...defaults, ...clone(area.data) }, learned: clone(area.learned || {}), open: new Set() }
+      : { id: null, title: "", data: defaults, learned: {}, open: new Set() };
     delete this._edit.data.name;
   }
 
@@ -1172,6 +1213,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
         ? { type: `${DOMAIN}/save_api_key`, remove: true }
         : { type: `${DOMAIN}/save_api_key`, api_key: String(draft.api_key || "") };
       if (!draft.remove) this._cardMessage(button, this.ui.checking);
+    } else if (cardId === "theta") {
+      msg = { type: `${DOMAIN}/save_theta`, theta: draft.theta ?? "" };
     } else {
       msg = { type: `${DOMAIN}/save_options`, options: { ...draft } };
     }
@@ -1190,7 +1233,13 @@ class AiHeatingAssistantPanel extends HTMLElement {
   async _saveArea(button) {
     const e = this._edit;
     const msg = { type: `${DOMAIN}/save_area`, title: e.title || "", data: { ...e.data } };
-    if (e.id) msg.subentry_id = e.id;
+    if (e.id) {
+      msg.subentry_id = e.id;
+      // only the learned values changed here, the others keep learning undisturbed
+      const before = this._cfg.areas.find((a) => a.id === e.id)?.learned || {};
+      const changed = Object.entries(e.learned).filter(([key, value]) => value !== before[key]);
+      if (changed.length) msg.learned = Object.fromEntries(changed);
+    }
     button.disabled = true;
     try {
       const result = await this._ws(msg);

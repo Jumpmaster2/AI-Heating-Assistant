@@ -224,3 +224,71 @@ async def test_area_change_reloads(hass: HomeAssistant, base_states, hass_ws_cli
     assert entry.runtime_data.areas[sub_id].name == "Lounge"
     msg = await _send(client, type=f"{DOMAIN}/config")
     assert msg["result"]["areas"][0]["entities"]["climate"].startswith("climate.")
+
+
+async def test_learned_values(hass: HomeAssistant, base_states, hass_ws_client) -> None:
+    """Start values stay as created; the panel edits the learned values and theta."""
+    entry = await _setup(hass, areas=[AREA_DATA])
+    client = await hass_ws_client(hass)
+    sub_id = next(iter(entry.subentries))
+    area = entry.runtime_data.areas[sub_id]
+    area.learner.dead_time.add(2400)  # 30 min -> 35 min
+
+    msg = await _send(client, type=f"{DOMAIN}/config")
+    cfg = msg["result"]
+    assert cfg["theta"] == 16.0
+    assert "theta_start" not in cfg["option_specs"]
+    assert cfg["learned_specs"]["theta"]["min"] == cfg["options"]["limits"]["theta"]["min"]
+    assert cfg["areas"][0]["learned"] == {
+        "window_delay": 5.0,
+        "puffer": 0.7,
+        "dead_time": 35.0,
+        "recovery_time": 30.0,
+    }
+
+    msg = await _send(client, type=f"{DOMAIN}/save_options", options={"theta_start": 12})
+    assert msg["error"]["message"] == "unknown_option:theta_start"
+
+    msg = await _send(client, type=f"{DOMAIN}/save_theta", theta="14.5")
+    assert msg["success"], msg
+    assert entry.runtime_data.theta == 14.5
+    assert msg["result"]["theta"] == 14.5
+    msg = await _send(client, type=f"{DOMAIN}/save_theta", theta=99)
+    assert msg["error"]["message"] == "invalid_value:theta"
+
+    msg = await _send(
+        client,
+        type=f"{DOMAIN}/save_area",
+        subentry_id=sub_id,
+        title="Living room",
+        data={**entry.subentries[sub_id].data, "dead_time": 60, "puffer": 1.5},
+        learned={"dead_time": 50, "puffer": 0.4, "window_delay": 5, "recovery_time": 30},
+    )
+    assert msg["success"], msg
+    await hass.async_block_till_done(wait_background_tasks=True)
+    data = entry.subentries[sub_id].data
+    assert (data["dead_time"], data["puffer"]) == (30, 0.7)
+    area = entry.runtime_data.areas[sub_id]
+    assert area.learner.dead_time.value == 50 * 60
+    assert area.params.puffer == 0.4
+    assert area.learner.recovery.count == 0  # unchanged values are not touched
+
+    msg = await _send(
+        client,
+        type=f"{DOMAIN}/save_area",
+        subentry_id=sub_id,
+        title="Living room",
+        data=dict(entry.subentries[sub_id].data),
+        learned={"dead_time": 1},
+    )
+    assert msg["error"]["message"] == "invalid_value:dead_time"
+
+    msg = await _send(
+        client,
+        type=f"{DOMAIN}/save_area",
+        subentry_id=sub_id,
+        title="Living room",
+        data=dict(entry.subentries[sub_id].data),
+        learned={"heat_rate": 1},
+    )
+    assert msg["error"]["message"] == "unknown_option:heat_rate"
