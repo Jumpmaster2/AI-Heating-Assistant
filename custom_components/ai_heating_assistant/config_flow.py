@@ -8,6 +8,7 @@ import voluptuous as vol
 from homeassistant.config_entries import (
     SOURCE_USER,
     ConfigEntry,
+    ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentryFlow,
@@ -108,10 +109,12 @@ from .const import (
     DEFAULTS,
     DOMAIN,
     EFFORT_OPTIONS,
+    LEARNED_THETA,
     MODEL_OPTIONS,
     MODEL_PRICE_SUGGESTIONS,
     NAME,
     SECTION_HEATING,
+    SECTION_LEARNED,
     SECTION_SENSORS,
     SECTION_START,
     SECTION_VENTILATION,
@@ -123,7 +126,9 @@ from .logic.physics import parse_day_month
 PRICE_KEYS = (CONF_PRICE_INPUT, CONF_PRICE_OUTPUT, CONF_PRICE_CACHE_WRITE, CONF_PRICE_CACHE_READ)
 
 
-def _number(minimum: float, maximum: float, step: float, unit: str | None = None) -> NumberSelector:
+def _number(
+    minimum: float, maximum: float, step: float | str, unit: str | None = None
+) -> NumberSelector:
     config = NumberSelectorConfig(min=minimum, max=maximum, step=step, mode=NumberSelectorMode.BOX)
     if unit:
         config["unit_of_measurement"] = unit
@@ -266,10 +271,31 @@ def _limits_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(fields)
 
 
+def _decision_schema(v: dict[str, Any]) -> vol.Schema:
+    """Start value of the heating day rule: set once at setup, learned afterwards."""
+    return vol.Schema({_req(CONF_THETA_START, v): _number(5, 25, 0.5, "°C")})
+
+
+def _coordinator(entry: ConfigEntry) -> Any:
+    """The running coordinator of the entry, or None (learned values need it)."""
+    if entry.state is not ConfigEntryState.LOADED:
+        return None
+    return getattr(entry, "runtime_data", None)
+
+
+def _learned_fields(values: dict[str, float], ranges: dict[str, tuple[float, float]]) -> dict:
+    """Fields for learned values that replace the start values once set up."""
+    units = {LEARNED_THETA: "°C", CONF_PUFFER: "K"}
+    # learned values are not on a step grid
+    return {
+        vol.Required(key, default=value): _number(*ranges[key], "any", units.get(key, "min"))
+        for key, value in values.items()
+    }
+
+
 def _advanced_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            _req(CONF_THETA_START, v): _number(5, 25, 0.5, "°C"),
             _req(CONF_TOO_COLD_MARGIN, v): _number(0, 3, 0.1, "K"),
             _req(CONF_TOO_COLD_MINUTES, v): _number(0, 600, 5, "min"),
             _req(CONF_THETA_UP, v): _number(0, 5, 0.1, "K"),
@@ -382,8 +408,16 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         if user_input is not None:
             self._options.update(_clean(user_input))
-            return await self.async_step_ai()
+            return await self.async_step_decision()
         return self.async_show_form(step_id="vacation", data_schema=_vacation_schema({}))
+
+    async def async_step_decision(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._options.update(user_input)
+            return await self.async_step_ai()
+        return self.async_show_form(step_id="decision", data_schema=_decision_schema({}))
 
     async def async_step_ai(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
@@ -546,15 +580,33 @@ class AiHeatingOptionsFlow(OptionsFlow):
     async def async_step_advanced(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        coordinator = _coordinator(self.config_entry)
         if user_input is not None:
+            theta = user_input.pop(LEARNED_THETA, None)
+            if coordinator is not None and theta is not None:
+                coordinator.set_theta(theta)
             return self._save(user_input)
-        return self.async_show_form(step_id="advanced", data_schema=_advanced_schema(self._values))
+        schema = _advanced_schema(self._values)
+        if coordinator is not None:
+            # The start value is set once at setup; afterwards the learned value is edited.
+            learned = _learned_fields(
+                {LEARNED_THETA: round(coordinator.theta, 2)}, coordinator.learned_ranges()
+            )
+            schema = vol.Schema({**learned, **schema.schema})
+        return self.async_show_form(step_id="advanced", data_schema=schema)
 
 
 # ---------------------------------------------------------------- heating area subentry
 
 
-def _area_schema(v: dict[str, Any]) -> vol.Schema:
+def _area_schema(
+    v: dict[str, Any],
+    learned: dict[str, float] | None = None,
+    ranges: dict[str, tuple[float, float]] | None = None,
+) -> vol.Schema:
+    """Form of a heating area. Start values only when it is created: an existing area
+    shows the learned values instead (``learned``, omitted when unknown)."""
+
     def req(key: str) -> vol.Required:
         return vol.Required(key, default=v.get(key, AREA_DEFAULTS.get(key)))
 
@@ -588,17 +640,7 @@ def _area_schema(v: dict[str, Any]) -> vol.Schema:
                 ),
                 {"collapsed": False},
             ),
-            vol.Required(SECTION_START): section(
-                vol.Schema(
-                    {
-                        req(CONF_WINDOW_DELAY): _number(0, 60, 1, "min"),
-                        req(CONF_RECOVERY): _number(0, 240, 5, "min"),
-                        req(CONF_DEAD_TIME): _number(5, 240, 5, "min"),
-                        req(CONF_PUFFER): _number(0, 2, 0.1, "K"),
-                    }
-                ),
-                {"collapsed": True},
-            ),
+            **(_start_section(v) if learned is None else _learned_section(learned, ranges)),
             vol.Required(SECTION_VENTILATION): section(
                 vol.Schema(
                     {
@@ -614,11 +656,50 @@ def _area_schema(v: dict[str, Any]) -> vol.Schema:
     )
 
 
+def _start_section(v: dict[str, Any]) -> dict[Any, Any]:
+    def req(key: str) -> vol.Required:
+        return vol.Required(key, default=v.get(key, AREA_DEFAULTS.get(key)))
+
+    return {
+        vol.Required(SECTION_START): section(
+            vol.Schema(
+                {
+                    req(CONF_WINDOW_DELAY): _number(0, 60, 1, "min"),
+                    req(CONF_RECOVERY): _number(0, 240, 5, "min"),
+                    req(CONF_DEAD_TIME): _number(5, 240, 5, "min"),
+                    req(CONF_PUFFER): _number(0, 2, 0.1, "K"),
+                }
+            ),
+            {"collapsed": True},
+        )
+    }
+
+
+def _learned_section(
+    learned: dict[str, float], ranges: dict[str, tuple[float, float]] | None
+) -> dict[Any, Any]:
+    if not learned or ranges is None:
+        return {}
+    return {
+        vol.Required(SECTION_LEARNED): section(
+            vol.Schema(_learned_fields(learned, ranges)), {"collapsed": True}
+        )
+    }
+
+
 def _flatten(user_input: dict[str, Any]) -> dict[str, Any]:
     flat: dict[str, Any] = {CONF_AREA_NAME: str(user_input.get(CONF_AREA_NAME, "")).strip()}
     for key in (SECTION_SENSORS, SECTION_HEATING, SECTION_START, SECTION_VENTILATION):
         flat.update(user_input.get(key) or {})
     return _clean(flat)
+
+
+START_KEYS = (CONF_WINDOW_DELAY, CONF_RECOVERY, CONF_DEAD_TIME, CONF_PUFFER)
+
+
+def keep_start_values(data: Any) -> dict[str, Any]:
+    """Start values of an existing area: not changed after it was created."""
+    return {k: data[k] for k in START_KEYS if k in data}
 
 
 def _validate_area(data: dict[str, Any]) -> dict[str, str]:
@@ -651,16 +732,29 @@ class AreaSubentryFlow(ConfigSubentryFlow):
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
+        entry = self._get_entry()
         subentry = self._get_reconfigure_subentry()
+        coordinator = _coordinator(entry)
+        learned: dict[str, float] = {}
+        ranges = None
+        if coordinator is not None:
+            learned = coordinator.learned_values(subentry.subentry_id)
+            ranges = coordinator.learned_ranges()
         errors: dict[str, str] = {}
         values = {CONF_AREA_NAME: subentry.title, **subentry.data}
         if user_input is not None:
-            values = _flatten(user_input)
+            edited = user_input.pop(SECTION_LEARNED, None) or {}
+            # the start values were set when the area was created and stay as they are
+            values = {**_flatten(user_input), **keep_start_values(subentry.data)}
             errors = _validate_area(values)
             if not errors:
+                if coordinator is not None and edited:
+                    coordinator.set_learned(subentry.subentry_id, edited)
                 return self.async_update_and_abort(
-                    self._get_entry(), subentry, title=values[CONF_AREA_NAME], data=values
+                    entry, subentry, title=values[CONF_AREA_NAME], data=values
                 )
         return self.async_show_form(
-            step_id="reconfigure", data_schema=_area_schema(values), errors=errors
+            step_id="reconfigure",
+            data_schema=_area_schema(values, learned, ranges),
+            errors=errors,
         )

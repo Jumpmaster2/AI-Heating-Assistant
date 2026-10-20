@@ -70,6 +70,10 @@ _TEXTS: dict[str, dict[str, str]] = {
         "de": "Startwert {name} aus der Konfiguration übernommen: {old} → {new} {unit}.",
         "en": "Start value {name} applied from the configuration: {old} → {new} {unit}.",
     },
+    "learned_edit": {
+        "de": "Gelernter Wert {name} von Hand geändert: {old} → {new} {unit}.",
+        "en": "Learned value {name} changed by hand: {old} → {new} {unit}.",
+    },
     "dead_time": {"de": "Totzeit", "en": "dead time"},
     "recovery": {"de": "Erholungszeit", "en": "recovery time"},
     "window_delay_min": {"de": "Fensterverzögerung", "en": "window delay"},

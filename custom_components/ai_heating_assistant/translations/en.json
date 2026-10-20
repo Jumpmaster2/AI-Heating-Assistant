@@ -43,6 +43,16 @@
           "preheat_reserve": "Additional time added to the calculated preheating time."
         }
       },
+      "decision": {
+        "title": "Heating day decision",
+        "description": "Start value of the heating day rule. It is only set here during setup; afterwards theta is learned and the learned value can be edited under 'Heating day decision'.",
+        "data": {
+          "theta_start": "Start value theta"
+        },
+        "data_description": {
+          "theta_start": "If the forecast maximum is below theta, heating is needed."
+        }
+      },
       "ai": {
         "title": "AI (Claude)",
         "description": "The AI checks the parameters periodically. Without an API key only the local control runs.",
@@ -204,9 +214,9 @@
       },
       "advanced": {
         "title": "Heating day decision",
-        "description": "Evaluation, learning steps and phase changes of the heating day decision.",
+        "description": "Learned threshold, evaluation, learning steps and phase changes of the heating day decision.",
         "data": {
-          "theta_start": "Start value theta",
+          "theta": "theta (learned)",
           "too_cold_margin": "Too cold below target by",
           "too_cold_minutes": "Too cold minutes for heating need",
           "theta_step_up": "theta step up",
@@ -222,7 +232,7 @@
           "phase_ai_check_every_days": "AI control check every"
         },
         "data_description": {
-          "theta_start": "Heating day rule: if the forecast maximum is below theta, heating is needed. Learned afterwards.",
+          "theta": "Current threshold of the heating day rule: if the forecast maximum is below it, heating is needed. A change replaces the learned value; learning continues from there.",
           "too_cold_margin": "Evaluation: an area counts as too cold below target minus this (airing excluded).",
           "too_cold_minutes": "Evaluation: this many minutes too cold mean heating was needed.",
           "theta_step_up": "After error A (too cold without heating).",
@@ -377,7 +387,7 @@
             },
             "start_values": {
               "name": "Start values (learned later)",
-              "description": "A change here replaces the learned or adjusted value; learning of that value starts again.",
+              "description": "Only when the area is created. Afterwards the learned values are edited.",
               "data": {
                 "window_delay": "Window delay (start value)",
                 "recovery_time": "Recovery time after airing (start value)",
@@ -450,20 +460,20 @@
                 "min_off_time": "Always respected. Not learned."
               }
             },
-            "start_values": {
-              "name": "Start values (learned later)",
-              "description": "A change here replaces the learned or adjusted value; learning of that value starts again.",
+            "learned_values": {
+              "name": "Learned values",
+              "description": "Values the control currently uses. A change replaces the learned or AI-adjusted value; learning continues from there.",
               "data": {
-                "window_delay": "Window delay (start value)",
-                "recovery_time": "Recovery time after airing (start value)",
-                "dead_time": "Dead time (start value)",
-                "puffer": "Puffer (start value)"
+                "window_delay": "Window delay",
+                "recovery_time": "Recovery time after airing",
+                "dead_time": "Dead time",
+                "puffer": "Puffer"
               },
               "data_description": {
                 "window_delay": "Window open this long pauses heating. The AI may adjust it.",
-                "recovery_time": "After closing, heating waits this long because floor and walls often reheat the room. Learned afterwards.",
-                "dead_time": "Time until the room warms up after switching on. Learned afterwards.",
-                "puffer": "Heating day rule: needed margin above the target at the nightly run. Learned afterwards."
+                "recovery_time": "Learned wait after the windows are closed.",
+                "dead_time": "Learned time until the room warms up after switching on.",
+                "puffer": "Heating day rule: needed margin above the target at the nightly run (learned)."
               }
             },
             "ventilation": {

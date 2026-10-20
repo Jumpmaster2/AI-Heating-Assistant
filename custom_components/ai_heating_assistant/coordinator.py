@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
@@ -139,10 +140,17 @@ from .logic.controller import (
     step,
 )
 from .logic.energy import HeatMeter, to_kwh
-from .logic.learning import DEAD_TIME_BOUNDS, P_START, RECOVERY_BOUNDS, AreaLearner, Sample
+from .logic.learning import (
+    DEAD_TIME_BOUNDS,
+    P_START,
+    RECOVERY_BOUNDS,
+    AreaLearner,
+    Ewma,
+    Sample,
+)
 from .logic.physics import clamp, in_season, parse_day_month
 from .logic.prompts import check_messages, nightly_messages, r
-from .logic.start_values import apply_start_values, read_record
+from .logic.start_values import LEARNED_BOUNDS, apply_start_values, read_record
 from .logic.sun import (
     FORECAST_TRUST,
     Point,
@@ -236,6 +244,14 @@ _START_UNITS = {
     "recovery": (60.0, "min"),
     "window_delay_min": (1.0, "min"),
     "puffer": (1.0, "K"),
+}
+
+# Start value of the area configuration -> learned value or parameter that replaces it.
+LEARNED_NAMES = {
+    CONF_WINDOW_DELAY: "window_delay_min",
+    CONF_RECOVERY: "recovery",
+    CONF_DEAD_TIME: "dead_time",
+    CONF_PUFFER: "puffer",
 }
 
 
@@ -1835,6 +1851,76 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             self._forget_check_history(area)
             self._log("reset", area)
         self._config_changed()
+
+    # --------------------------------------------------------- learned values (user edits)
+
+    def learned_ranges(self) -> dict[str, tuple[float, float]]:
+        """Allowed range of each editable learned value, in the units of the configuration."""
+        limits = self.limits
+        ranges = {"theta": (limits["theta"]["min"], limits["theta"]["max"])}
+        for key, name in LEARNED_NAMES.items():
+            if name in LEARNED_BOUNDS:
+                low, high = LEARNED_BOUNDS[name]
+                ranges[key] = (low / 60, high / 60)
+            else:
+                ranges[key] = (limits[name]["min"], limits[name]["max"])
+        return ranges
+
+    def learned_values(self, area_id: str) -> dict[str, float]:
+        """Values in effect instead of the start values of an area, in configuration units."""
+        area = self.areas.get(area_id)
+        if area is None:
+            return {}
+        values = {CONF_WINDOW_DELAY: area.params.window_delay_min, CONF_PUFFER: area.params.puffer}
+        if area.learner is not None:
+            values[CONF_DEAD_TIME] = area.learner.dead_time.value / 60
+            values[CONF_RECOVERY] = area.learner.recovery.value / 60
+        return {k: round(v, 2) for k, v in values.items()}
+
+    def set_learned(self, area_id: str, values: dict[str, float]) -> None:
+        """Replace learned values of an area; learning continues from the new value."""
+        area = self.areas[area_id]
+        ranges = self.learned_ranges()
+        current = self.learned_values(area_id)
+        changed = False
+        for key, value in values.items():
+            if key not in current or math.isclose(current[key], float(value), abs_tol=1e-6):
+                continue
+            name = LEARNED_NAMES[key]
+            new = clamp(float(value), *ranges[key])
+            if name in LEARNED_BOUNDS:
+                assert area.learner is not None
+                ewma: Ewma = getattr(area.learner, name)
+                ewma.value = new * 60
+                # a value set by hand counts as an observation, like an imported one
+                ewma.count = max(1, ewma.count)
+            else:
+                setattr(area.params, name, new)
+            _, unit = _START_UNITS[name]
+            self._log(
+                "learned_edit",
+                area,
+                name=text(self.language, name),
+                old=f"{current[key]:g}",
+                new=f"{round(new, 2):g}",
+                unit=unit,
+            )
+            changed = True
+        if changed:
+            self._forget_check_history(area)
+            self._config_changed()
+            self.async_update_listeners()
+
+    def set_theta(self, value: float) -> None:
+        """Replace the learned theta of the heating day rule."""
+        new = clamp(float(value), *self.learned_ranges()["theta"])
+        old = self.theta
+        if math.isclose(round(old, 2), new, abs_tol=1e-6):
+            return
+        self.day_state["theta"] = new
+        self._log("learned_edit", name="theta", old=f"{round(old, 2):g}", new=f"{new:g}", unit="°C")
+        self._config_changed()
+        self.async_update_listeners()
 
 
 def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[str, Any]) -> None:

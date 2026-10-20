@@ -16,16 +16,20 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.selector import EntitySelector, Selector, TimeSelector
 
 from .config_flow import (
+    START_KEYS,
     _advanced_schema,
     _ai_schema,
     _area_schema,
     _check_api_key,
+    _coordinator,
     _general_schema,
+    _learned_fields,
     _rules_schema,
     _vacation_schema,
     _validate_area,
     _ventilation_schema,
     _with_price_suggestions,
+    keep_start_values,
 )
 from .const import (
     AREA_DEFAULTS,
@@ -40,6 +44,7 @@ from .const import (
     CONF_TEMP_SENSOR,
     DEFAULTS,
     DOMAIN,
+    LEARNED_THETA,
     MODEL_PRICE_SUGGESTIONS,
     SUBENTRY_AREA,
 )
@@ -86,6 +91,7 @@ def async_register_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_save_api_key)
     websocket_api.async_register_command(hass, ws_save_area)
     websocket_api.async_register_command(hass, ws_delete_area)
+    websocket_api.async_register_command(hass, ws_save_theta)
 
 
 def _entry(hass: HomeAssistant) -> ConfigEntry | None:
@@ -250,8 +256,28 @@ def area_data(title: str, data: dict[str, Any]) -> dict[str, Any]:
     return values
 
 
+def _learned(coordinator: Any, values: Any) -> dict[str, float]:
+    """Learned values from the panel, validated with the fields of the dialog."""
+    if not isinstance(values, dict):
+        raise PanelError("invalid_value", LEARNED_THETA)
+    ranges = coordinator.learned_ranges()
+    for key in values:
+        if key not in ranges:
+            raise PanelError("unknown_option", key)
+    fields = _learned_fields(dict.fromkeys(values, 0.0), ranges)
+    result = {}
+    for marker, selector in fields.items():
+        key = str(marker)
+        try:
+            result[key] = float(selector(values[key]))
+        except (vol.Invalid, TypeError, ValueError) as err:
+            raise PanelError("invalid_value", key) from err
+    return result
+
+
 def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     registry = er.async_get(hass)
+    coordinator = _coordinator(entry)
     entities: dict[str, str] = {}
     for key, domain in ENTITY_KEYS.items():
         if entity_id := registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{key}"):
@@ -266,10 +292,24 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
             if (entity_id := registry.async_get_entity_id(domain, DOMAIN, f"{sub_id}_{key}"))
         }
         areas.append(
-            {"id": sub_id, "title": sub.title, "data": dict(sub.data), "entities": area_entities}
+            {
+                "id": sub_id,
+                "title": sub.title,
+                "data": dict(sub.data),
+                "entities": area_entities,
+                # values in effect instead of the start values (empty while not running)
+                "learned": coordinator.learned_values(sub_id) if coordinator else {},
+            }
         )
     options = {**DEFAULTS, **entry.options}
     options[CONF_LIMITS] = _limits({}, entry.options.get(CONF_LIMITS))
+    learned_specs: dict[str, Any] = {}
+    if coordinator is not None:
+        keys = dict.fromkeys((LEARNED_THETA, *START_KEYS), 0.0)
+        learned_specs = {
+            str(k): _spec(sel)
+            for k, sel in _learned_fields(keys, coordinator.learned_ranges()).items()
+        }
     return {
         "entry_id": entry.entry_id,
         "options": options,
@@ -279,6 +319,8 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "option_specs": {key: _spec(sel) for key, sel in option_fields().items()},
         "area_specs": {key: _spec(sel) for key, sel in area_fields().items()},
         "area_defaults": dict(AREA_DEFAULTS),
+        "theta": round(coordinator.theta, 2) if coordinator else None,
+        "learned_specs": learned_specs,
         "limit_params": [{"key": p.key, "unit": p.unit} for p in PARAMS.values()],
         "model_prices": {k: list(v) for k, v in MODEL_PRICE_SUGGESTIONS.items()},
     }
@@ -356,6 +398,7 @@ async def ws_save_api_key(
         vol.Optional("subentry_id"): str,
         vol.Required("title"): str,
         vol.Required("data"): dict,
+        vol.Optional("learned"): dict,
     }
 )
 @websocket_api.require_admin
@@ -367,17 +410,29 @@ def ws_save_area(
     if entry is None:
         connection.send_error(msg["id"], "not_found", "AI Heating Assistant is not set up")
         return
+    sub_id = msg.get("subentry_id")
+    subentry = entry.subentries.get(sub_id) if sub_id else None
+    if sub_id and (subentry is None or subentry.subentry_type != SUBENTRY_AREA):
+        connection.send_error(msg["id"], "not_found", "area not found")
+        return
+    coordinator = _coordinator(entry)
     try:
         data = area_data(msg["title"], msg["data"])
+        learned = (
+            _learned(coordinator, msg["learned"])
+            if subentry is not None and coordinator is not None and "learned" in msg
+            else {}
+        )
     except PanelError as err:
         _error(connection, msg["id"], err)
         return
     title = data[CONF_AREA_NAME]
-    if sub_id := msg.get("subentry_id"):
-        subentry = entry.subentries.get(sub_id)
-        if subentry is None or subentry.subentry_type != SUBENTRY_AREA:
-            connection.send_error(msg["id"], "not_found", "area not found")
-            return
+    if subentry is not None:
+        # the start values were set when the area was created and stay as they are
+        data = {k: v for k, v in data.items() if k not in START_KEYS}
+        data.update(keep_start_values(subentry.data))
+        if learned:
+            coordinator.set_learned(subentry.subentry_id, learned)
         hass.config_entries.async_update_subentry(entry, subentry, data=data, title=title)
     else:
         subentry = ConfigSubentry(
@@ -388,6 +443,29 @@ def ws_save_area(
     connection.send_result(
         msg["id"], {"subentry_id": sub_id, "config": config_payload(hass, entry)}
     )
+
+
+@websocket_api.websocket_command(
+    {vol.Required("type"): f"{DOMAIN}/save_theta", vol.Required("theta"): vol.Any(int, float, str)}
+)
+@websocket_api.require_admin
+@callback
+def ws_save_theta(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict
+) -> None:
+    """Change the learned theta (its start value is only set up once)."""
+    entry = _entry(hass)
+    coordinator = _coordinator(entry) if entry else None
+    if entry is None or coordinator is None:
+        connection.send_error(msg["id"], "not_found", "AI Heating Assistant is not running")
+        return
+    try:
+        theta = _learned(coordinator, {LEARNED_THETA: msg["theta"]})[LEARNED_THETA]
+    except PanelError as err:
+        _error(connection, msg["id"], err)
+        return
+    coordinator.set_theta(theta)
+    connection.send_result(msg["id"], config_payload(hass, entry))
 
 
 @websocket_api.websocket_command(

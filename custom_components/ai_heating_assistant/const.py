@@ -105,6 +105,8 @@ SECTION_HEATING = "heating"
 SECTION_SENSORS = "sensors"
 SECTION_VENTILATION = "ventilation"
 SECTION_START = "start_values"
+SECTION_LEARNED = "learned_values"
+LEARNED_THETA = "theta"
 
 # ---------- AI ----------
 EFFORT_OPTIONS: Final = ["auto", "low", "medium", "high"]

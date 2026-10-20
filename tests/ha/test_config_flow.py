@@ -21,6 +21,7 @@ GENERAL = {
     "frost_temperature": 7.0,
 }
 VACATION = {"vacation_entities": [], "vacation_temperature": 18.0, "preheat_reserve": 30}
+DECISION = {"theta_start": 15.5}
 AI = {"model": "claude-sonnet-5-5", "nightly_time": "03:00:00", "monthly_budget": 5.0}
 
 
@@ -36,6 +37,8 @@ async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> No
     result = await hass.config_entries.flow.async_configure(result["flow_id"], GENERAL)
     assert result["step_id"] == "vacation"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], VACATION)
+    assert result["step_id"] == "decision"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], DECISION)
     assert result["step_id"] == "ai"
     result = await hass.config_entries.flow.async_configure(result["flow_id"], AI)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -47,6 +50,7 @@ async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> No
     # prices follow the chosen model
     assert entry.options["price_input"] == 2.0
     assert entry.options["season_start"] == "01.10."
+    assert entry.options["theta_start"] == 15.5
     # the flow continues with the first heating area
     assert result["next_flow"][0] == FlowType.CONFIG_SUBENTRIES_FLOW
 
@@ -55,6 +59,7 @@ async def test_api_key_is_validated(hass: HomeAssistant, base_states) -> None:
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
     result = await hass.config_entries.flow.async_configure(result["flow_id"], GENERAL)
     result = await hass.config_entries.flow.async_configure(result["flow_id"], VACATION)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], DECISION)
     with patch(
         "custom_components.ai_heating_assistant.config_flow.ClaudeClient.validate",
         side_effect=AiAuthError("authentication failed"),
@@ -247,7 +252,7 @@ async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, b
             "min_on_time": 10,
             "min_off_time": 10,
         },
-        "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 30, "puffer": 0.7},
+        "learned_values": {"window_delay": 5, "puffer": 0.7},
         "ventilation": {"ventilation_rh_threshold": 65},
     }
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
@@ -256,10 +261,8 @@ async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, b
     assert entry.runtime_data.areas[sub.subentry_id].target == 18.0
 
 
-async def test_changed_start_value_replaces_the_learned_one(
-    hass: HomeAssistant, base_states
-) -> None:
-    """A start value changed in the area configuration replaces the learned value."""
+async def test_existing_area_edits_learned_values(hass: HomeAssistant, base_states) -> None:
+    """An existing area shows the learned values instead of its start values."""
     entry = make_entry()
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -267,10 +270,20 @@ async def test_changed_start_value_replaces_the_learned_one(
     sub = next(s for s in entry.subentries.values() if s.title == "Living room")
     area = entry.runtime_data.areas[sub.subentry_id]
     area.learner.dead_time.add(2400)  # one sample: 30 min -> 35 min
-    assert area.start["dead_time"] == 1800
     events = async_capture_events(hass, EVENT_LOGBOOK)
 
     result = await entry.start_subentry_reconfigure_flow(hass, sub.subentry_id)
+    schema = result["data_schema"].schema
+    assert "start_values" not in schema
+    learned = schema["learned_values"].schema.schema
+    defaults = {str(k): k.default() for k in learned}
+    assert defaults == {
+        "window_delay": 5.0,
+        "puffer": 0.7,
+        "dead_time": 35.0,
+        "recovery_time": 30.0,
+    }
+
     user_input = {
         "name": "Living room",
         "sensors": {
@@ -286,13 +299,44 @@ async def test_changed_start_value_replaces_the_learned_one(
             "min_on_time": 10,
             "min_off_time": 10,
         },
-        "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 45, "puffer": 0.7},
+        "learned_values": {**defaults, "dead_time": 45, "puffer": 0.5},
         "ventilation": {"ventilation_rh_threshold": 60},
     }
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["reason"] == "reconfigure_successful"
     area = entry.runtime_data.areas[sub.subentry_id]
-    assert area.learner.dead_time.value == 45 * 60 and area.learner.dead_time.count == 0
-    assert area.start["dead_time"] == 45 * 60
-    assert any("dead time" in e.data["message"] for e in events)
+    # learning goes on from the edited value; the start values stay as configured
+    assert area.learner.dead_time.value == 45 * 60 and area.learner.dead_time.count == 1
+    assert area.params.puffer == 0.5
+    assert area.learner.recovery.value == 30 * 60
+    assert entry.subentries[sub.subentry_id].data["dead_time"] == 30
+    assert area.start["dead_time"] == 30 * 60
+    messages = [e.data["message"] for e in events]
+    assert any("dead time" in m and "45" in m for m in messages)
+    assert not any("recovery" in m for m in messages)
+
+
+async def test_options_edit_learned_theta(hass: HomeAssistant, base_states) -> None:
+    """The start value of theta is not in the options; the learned theta is."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    entry.runtime_data.day_state["theta"] = 14.0
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "advanced"}
+    )
+    schema = result["data_schema"].schema
+    keys = {str(k): k for k in schema}
+    assert "theta_start" not in keys
+    assert keys["theta"].default() == 14.0
+    values = {str(k): k.default() for k in schema}
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**values, "theta": 13.5}
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert "theta" not in entry.options
+    assert entry.runtime_data.theta == 13.5

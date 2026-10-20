@@ -49,7 +49,7 @@ On a no-heating day all circuits stay off except frost protection and the option
   * **Overheating** (`over_kh`): Kelvin hours more than 0.2 K above the target while the circuit runs and up to 4 hours after switch-off (heat the heating delivered in excess). Warmth from the sun alone on a day without heating does not count. The share with sun (`sun_over_kh`, PV from 0.3 kW) shows whether the sun factor is too low.
   * **Heating effort per demand** (`on_per_kh`): heating minutes per Kelvin hour of difference between target and outdoor temperature, so checks in different weather can be compared.
   * **Average run time** per switch-on.
-  * **History of the last 6 checks** with their figures and the changes made. The AI can judge whether a change helped and otherwise undo it. Resetting an area or changing a start value deletes its history.
+  * **History of the last 6 checks** with their figures and the changes made. The AI can judge whether a change helped and otherwise undo it. Resetting an area or editing a learned value by hand deletes its history.
 * Adjustable parameters: switch-on and switch-off hysteresis, overshoot factor, lead time factor, sun factor, window delay, recovery time correction, `puffer` and `theta`. Every value is clamped to minimum, maximum and a maximum change per check (all configurable).
 * **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, an area was clearly overheated (more than 0.5 Kelvin hours per day, pro rata), the AI changed something significant, or you change the target or settings. A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
 * **Costs:** token usage times the configured prices. Every call is estimated beforehand; once the monthly budget is reached there are no calls until the month changes.
@@ -87,7 +87,7 @@ After the setup the sidebar has the page **AI Heating Assistant** (administrator
 
 * **Overview:** heating day with phase and reason, manual heating day (automatic, heat today, no heating today), all areas with temperature, target, status and ventilation recommendation (click opens the thermostat), switch AI active, last and next AI check, next nightly run, last heating day decision with its source (AI, rule, both agree), AI costs this month, notes (missing entities, last AI error, budget reached) and a summary of the settings.
 * **Heating areas:** all areas as a table; click to edit, add and delete.
-* **Learned values:** a compact tile per area with a heating circuit with learning progress, heat-up and cooling rate, dead time, overshoot, recovery after airing, outdoor and sun influence; the control parameters the AI may adjust can be expanded. Plus the heating day rule (`theta`, evaluated days).
+* **Learned values:** a compact tile per area with a heating circuit with learning progress, heat-up and cooling rate, dead time, overshoot, recovery after airing, outdoor and sun influence; the control parameters the AI may adjust can be expanded. Plus the heating day rule (`theta`, evaluated days). The pencil opens the learned values for editing.
 * **General, Emergency & ventilation, AI, Heating day decision:** all settings by topic in cards, each card is saved on its own. **AI** also holds the API key (checked before saving, the stored key is never shown) and the AI limits.
 
 The setup itself is still a dialog.
@@ -108,6 +108,7 @@ The setup itself is still a dialog.
 | Vacation temperature | 18 °C | for all areas |
 | Return date/time | | optional, for preheating |
 | Preheat reserve | 30 min | |
+| Start value `theta` | 16 °C | heating day rule; only during setup, afterwards the learned value is edited |
 | API key, model | Claude Opus 5.5 | changeable, custom model names possible |
 | Nightly run | 03:00 | |
 | Monthly budget | 5 € | |
@@ -119,7 +120,7 @@ The setup itself is still a dialog.
 * **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
 * **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in €/million tokens (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
-* **Heating day decision:** start value `theta` (16 °C), evaluation thresholds, learning steps, conditions for phase changes.
+* **Heating day decision:** learned `theta` (editable), evaluation thresholds, learning steps, conditions for phase changes.
 
 Change the API key in the dashboard under **AI** or via **Reconfigure**.
 
@@ -134,12 +135,12 @@ In the dashboard under **Heating areas** (or under the integration with **Add he
 | Heating circuit switch | e.g. `switch.heating_circuit_1`; empty = ventilation recommendation only |
 | Initial, minimum and maximum target | 21 / 16 / 24 °C |
 | Minimum on and off time | 10 / 10 min (fixed) |
-| Start values window delay, recovery time, dead time, puffer | 5 min, 30 min, 30 min, 0.7 K; a change replaces the learned value |
+| Start values window delay, recovery time, dead time, puffer | 5 min, 30 min, 30 min, 0.7 K; only when the area is created |
 | Humidity threshold | 60 % |
 | Reference temperature and humidity | optional, instead of outdoor (room without its own window) |
 | Ventilation block entity | optional |
 
-Start values apply until something has been learned. If you change a start value later, it replaces the learned or AI-adjusted value, learning of that value starts again, and the logbook records it.
+Start values (including `theta`) are only set during setup or when an area is created and apply until something has been learned. They cannot be changed afterwards; instead an area shows the values the control currently uses under **Learned values** (window delay, recovery time, dead time, puffer), and the learned `theta` is under **Heating day decision**. A change there replaces the learned or AI-adjusted value, learning continues from there, and the logbook records it.
 
 ## Entities
 

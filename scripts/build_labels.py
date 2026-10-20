@@ -42,11 +42,21 @@ def labels(translation: dict[str, Any]) -> dict[str, Any]:
     _add(fields, area)
     for sec in area["sections"].values():
         _add(fields, sec)
+    # an existing area shows its learned values instead of the start values
+    learned_section = translation["config_subentries"]["heating_area"]["step"]["reconfigure"][
+        "sections"
+    ]["learned_values"]
+    learned: dict[str, list[str]] = {}
+    _add(learned, learned_section)
     entity = translation["entity"]
     limits = options["ai_limits"]["sections"]
     return {
         "fields": fields,
-        "sections": {k: [v["name"], v.get("description", "")] for k, v in area["sections"].items()},
+        "learned": learned,
+        "sections": {
+            **{k: [v["name"], v.get("description", "")] for k, v in area["sections"].items()},
+            "learned_values": [learned_section["name"], learned_section.get("description", "")],
+        },
         "limits": {k: v["name"] for k, v in limits.items()},
         "limit_columns": next(iter(limits.values()))["data"],
         "errors": translation["options"]["error"],
