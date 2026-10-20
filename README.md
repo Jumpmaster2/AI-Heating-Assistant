@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.21. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.22. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -248,7 +248,9 @@ automation:
     actions:
       - action: select.select_option
         target:
-          entity_id: select.ai_heating_assistant_heating_day_override
+          # mit deutscher Systemsprache bei der Einrichtung; die ID steht unter
+          # Einstellungen > Entitäten (Englisch: ..._heating_day_override)
+          entity_id: select.ai_heating_assistant_heiztag_manuell
         data:
           option: off_today
 ```

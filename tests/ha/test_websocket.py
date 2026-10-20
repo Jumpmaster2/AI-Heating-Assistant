@@ -328,3 +328,15 @@ async def test_learned_rates_for_the_panel(
     registry = er.async_get(hass)
     assert registry.async_get("sensor.living_room_dead_time").disabled_by is not None
     assert registry.async_get("sensor.living_room_status").disabled_by is None
+
+
+async def test_saved_limits_are_in_the_reply_at_once(
+    hass: HomeAssistant, base_states, hass_ws_client
+) -> None:
+    """The reply to a save already uses the new limits (before the reload)."""
+    entry = await _setup(hass)
+    coordinator = entry.runtime_data
+    assert coordinator.limits["theta"]["max"] != 25.0
+    limits = {**entry.options["limits"], "theta": {**entry.options["limits"]["theta"], "max": 25.0}}
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "limits": limits})
+    assert coordinator.limits["theta"]["max"] == 25.0

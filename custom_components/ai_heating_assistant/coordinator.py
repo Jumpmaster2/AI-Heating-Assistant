@@ -352,6 +352,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._unsub_check: Callable[[], None] | None = None
         self._deciding = False
         self._opts: dict[str, Any] | None = None
+        self._opts_src: Any = None
         self._decide_failed_at: float | None = None
         self._checking = False
         self._tick_count = 0
@@ -366,9 +367,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     @property
     def opts(self) -> dict[str, Any]:
-        # Built once per run: a change of the options reloads the entry.
-        if self._opts is None:
-            self._opts = {**DEFAULTS, **self.config_entry.options}
+        # Built once per options object: saving options replaces it (and reloads the
+        # entry later), so a reply built right after saving already sees the change.
+        options = self.config_entry.options
+        if self._opts is None or self._opts_src is not options:
+            self._opts, self._opts_src = {**DEFAULTS, **options}, options
         return self._opts
 
     def opt(self, key: str) -> Any:
