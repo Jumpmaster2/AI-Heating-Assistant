@@ -1449,9 +1449,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             if ref_hum is None and (weather := self._state(self.opt(CONF_WEATHER))):
                 humidity = weather.attributes.get("humidity")
                 ref_hum = float(humidity) if isinstance(humidity, int | float) else None
-        hour = dt_util.now().hour
-        start, end = int(self.opt(CONF_NIGHT_START)), int(self.opt(CONF_NIGHT_END))
-        is_night = (hour >= start or hour < end) if start > end else (start <= hour < end)
+        now = dt_util.now().time()
+        start = _night_time(self.opt(CONF_NIGHT_START), 20)
+        end = _night_time(self.opt(CONF_NIGHT_END), 8)
+        is_night = (now >= start or now < end) if start > end else (start <= now < end)
         heating_active = self.heats_now and heating_day and (area.hvac_on or not area.has_circuit)
         area.ventilation = recommend(
             VentilationInput(
@@ -2380,6 +2381,16 @@ async def async_turn_off_switches(hass: HomeAssistant, entity_ids: list[str]) ->
             continue
         switched.append(entity_id)
     return switched
+
+
+def _night_time(value: Any, default_hour: int) -> time:
+    """Night start or end: a time ("HH:MM:SS"), or an hour of an older entry."""
+    if isinstance(value, int | float):
+        return time(int(value) % 24)
+    try:
+        return time.fromisoformat(str(value))
+    except ValueError:
+        return time(default_hour)
 
 
 def _parse_time(value: str) -> time:

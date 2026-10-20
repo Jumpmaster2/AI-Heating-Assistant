@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.9. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.10. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -124,7 +124,7 @@ Temperature sensors may report °C, °F or K; without a unit the unit system of 
 
 * **General:** sensors, heating period and frost protection, vacation as above.
 * **Emergency rule:** on, 1 K below target (expected after the lead time, at least the switch-on hysteresis), 45 min, windows unchanged for 30 min.
-* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
+* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20:00 to 08:00 (times, to the minute).
 * **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in USD per million tokens (Anthropic bills in US dollars; nothing is converted) (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
 * **Heating day decision:** learned `theta` (editable), evaluation thresholds, learning steps, conditions for phase changes.

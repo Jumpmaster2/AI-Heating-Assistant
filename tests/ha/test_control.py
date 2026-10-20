@@ -739,7 +739,7 @@ async def test_old_default_of_max_output_tokens_is_raised(
     freezer.move_to(IN_SEASON)
     old = make_entry(max_output_tokens=4000)
     await _setup(hass, old)
-    assert old.options["max_output_tokens"] == 16000 and old.minor_version == 3
+    assert old.options["max_output_tokens"] == 16000 and old.minor_version == 4
 
 
 async def test_own_max_output_tokens_is_kept(
@@ -1098,3 +1098,29 @@ async def test_pv_thresholds_follow_the_size_of_the_plant(
     assert coordinator._pv_threshold(0.3, 0.1, 0.05) == pytest.approx(1.0)
     coordinator.sun_scale = SunScale(0.2)  # balcony plant
     assert coordinator._pv_threshold(0.3, 0.1, 0.05) == 0.05
+
+
+async def test_night_hours_of_an_old_entry_become_times(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    freezer.move_to(IN_SEASON)
+    new = make_entry()
+    old = MockConfigEntry(
+        domain=DOMAIN,
+        title=new.title,
+        data=dict(new.data),
+        options={**new.options, "night_start_hour": 22, "night_end_hour": 6},
+        subentries_data=[
+            {"data": dict(s.data), "subentry_type": s.subentry_type, "title": s.title}
+            for s in new.subentries.values()
+        ],
+        minor_version=3,
+    )
+    await _setup(hass, old)
+    assert old.minor_version == 4
+    assert (old.options["night_start_hour"], old.options["night_end_hour"]) == (
+        "22:00:00",
+        "06:00:00",
+    )

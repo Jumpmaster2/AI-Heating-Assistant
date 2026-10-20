@@ -247,8 +247,8 @@ def _ventilation_schema(v: dict[str, Any]) -> vol.Schema:
             _req(CONF_VENT_MIN_COOLING, v): _number(0, 10, 0.5, "K"),
             _req(CONF_VENT_COOL_MARGIN, v): _number(0, 5, 0.1, "K"),
             _req(CONF_VENT_COOL_MIN_TEMP, v): _number(0, 35, 0.5, "°C"),
-            _req(CONF_NIGHT_START, v): _number(0, 23, 1, "h"),
-            _req(CONF_NIGHT_END, v): _number(0, 23, 1, "h"),
+            _req(CONF_NIGHT_START, v): TimeSelector(),
+            _req(CONF_NIGHT_END, v): TimeSelector(),
         }
     )
 
@@ -425,7 +425,8 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
     # 2: relay minute options removed, learning steps down doubled
     # 3: max output tokens 4000 -> 16000 (thinking counts as output)
-    MINOR_VERSION = 3
+    # 4: night start and end as times instead of hours
+    MINOR_VERSION = 4
 
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
