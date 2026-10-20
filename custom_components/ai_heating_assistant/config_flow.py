@@ -54,6 +54,8 @@ from .const import (
     CONF_EMERGENCY_ENABLED,
     CONF_EMERGENCY_QUIET,
     CONF_FALLBACK_ERRORS,
+    CONF_FORCE_ON_BELOW,
+    CONF_FORECAST_TRUST,
     CONF_FROST_TEMP,
     CONF_HEAT_METER,
     CONF_HEATING_TYPE,
@@ -167,6 +169,7 @@ def _general_schema(v: dict[str, Any]) -> vol.Schema:
             _opt_entity(CONF_WEATHER, v): _entity(["weather"]),
             _opt_entity(CONF_PV_POWER, v): _entity(["sensor"]),
             _opt_entity(CONF_PV_FORECAST, v): _entity(["sensor"]),
+            _req(CONF_FORECAST_TRUST, v): _number(0, 100, 5, "%"),
             _opt_entity(CONF_HEAT_METER, v): _entity(["sensor"]),
             _req(CONF_SEASON_START, v): TextSelector(),
             _req(CONF_SEASON_END, v): TextSelector(),
@@ -197,6 +200,7 @@ def _rules_schema(v: dict[str, Any]) -> vol.Schema:
             _req(CONF_EMERGENCY_DELTA, v): _number(0.2, 5, 0.1, "K"),
             _req(CONF_EMERGENCY_DURATION, v): _number(5, 240, 5, "min"),
             _req(CONF_EMERGENCY_QUIET, v): _number(0, 240, 5, "min"),
+            _req(CONF_FORCE_ON_BELOW, v): _number(0.3, 3, 0.1, "K"),
         }
     )
 

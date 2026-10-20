@@ -76,6 +76,7 @@ class AreaSettings:
     emergency_delta: float = 1.0
     emergency_duration_s: float = 45 * 60.0
     emergency_window_quiet_s: float = 30 * 60.0
+    force_on_below: float = FORCE_ON_BELOW  # K below target: heat regardless of predictions
 
 
 @dataclass(slots=True)
@@ -312,6 +313,7 @@ def thermostat(
     params: ControlParams,
     learned: LearnedValues,
     carry_peak: float | None = None,
+    force_on_below: float = FORCE_ON_BELOW,
 ) -> tuple[bool, float, float]:
     """Predictive on/off decision. Returns (want_on, predicted_temp, expected_peak).
 
@@ -325,7 +327,7 @@ def thermostat(
         peak = max(peak, carry_peak)  # the peak still expected from the last run
     on_threshold = data.target - params.hysteresis_on
     off_threshold = data.target + params.hysteresis_off
-    if data.temp < data.target - FORCE_ON_BELOW:
+    if data.temp < data.target - force_on_below:
         want = True
     elif data.switch_on:
         want = peak < off_threshold
@@ -377,7 +379,9 @@ def step(
         if not rt.emergency_active:
             return ControlDecision(False, AreaStatus.NO_HEATING_DAY, may_switch)
 
-    want, predicted, peak = thermostat(data, params, learned, rt.carry_peak)
+    want, predicted, peak = thermostat(
+        data, params, learned, rt.carry_peak, settings.force_on_below
+    )
     if data.switch_on:
         rt.last_peak = peak
     if hold and want and not data.switch_on:

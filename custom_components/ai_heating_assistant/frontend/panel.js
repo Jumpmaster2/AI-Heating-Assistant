@@ -262,12 +262,12 @@ const TABS = [
 // Settings cards per tab (types and ranges come from the option specs)
 const SETTINGS = {
   general: [
-    { id: "sensors", icon: "mdi:thermometer", fields: ["outdoor_temperature", "outdoor_humidity", "weather", "pv_power", "pv_forecast", "heat_meter"] },
+    { id: "sensors", icon: "mdi:thermometer", fields: ["outdoor_temperature", "outdoor_humidity", "weather", "pv_power", "pv_forecast", "forecast_trust", "heat_meter"] },
     { id: "season", icon: "mdi:calendar-range", fields: ["season_start", "season_end", "frost_temperature"] },
     { id: "vacation", icon: "mdi:bag-suitcase-outline", fields: ["vacation_entities", "vacation_temperature", "return_entity", "preheat_reserve"] },
   ],
   rules: [
-    { id: "emergency", icon: "mdi:alert-outline", fields: ["emergency_enabled", "emergency_delta", "emergency_duration", "emergency_window_quiet"] },
+    { id: "emergency", icon: "mdi:alert-outline", fields: ["emergency_enabled", "emergency_delta", "emergency_duration", "emergency_window_quiet", "force_on_below"] },
     {
       id: "ventilation",
       icon: "mdi:weather-windy",

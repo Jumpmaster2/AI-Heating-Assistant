@@ -1046,3 +1046,24 @@ async def test_outdoor_temperature_from_the_weather_entity(
     await _advance(hass, freezer, 16)
     issue = ir.async_get(hass).async_get_issue(DOMAIN, "outdoor_unavailable")
     assert issue is not None and issue.translation_placeholders["entity_id"] == "weather.home"
+
+
+async def test_forecast_trust_scales_the_expected_sun(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.pv_power", "0", {"unit_of_measurement": "W"})
+    hass.states.async_set("sensor.pv_energy_next_hour", "3.0", {"unit_of_measurement": "kWh"})
+    expected = {}
+    for trust in (100, 50, 0):
+        entry = make_entry(
+            pv_power="sensor.pv_power",
+            pv_forecast="sensor.pv_energy_next_hour",
+            forecast_trust=trust,
+        )
+        await _setup(hass, entry)
+        await _advance(hass, freezer, 1)
+        expected[trust] = entry.runtime_data._pv_estimate(dt_util.utcnow().timestamp())
+        assert await hass.config_entries.async_remove(entry.entry_id)
+    assert expected[100] > 0 and expected[0] == 0
+    assert expected[50] == pytest.approx(expected[100] / 2)

@@ -13,7 +13,8 @@
           "heat_meter": "Wärmezähler",
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
-          "frost_temperature": "Frostschutz-Mindesttemperatur"
+          "frost_temperature": "Frostschutz-Mindesttemperatur",
+          "forecast_trust": "Vertrauen in die Sonnenprognose"
         },
         "data_description": {
           "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
@@ -24,7 +25,8 @@
           "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
-          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat."
+          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.",
+          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt)."
         }
       },
       "vacation": {
@@ -125,7 +127,8 @@
           "heat_meter": "Wärmezähler",
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
-          "frost_temperature": "Frostschutz-Mindesttemperatur"
+          "frost_temperature": "Frostschutz-Mindesttemperatur",
+          "forecast_trust": "Vertrauen in die Sonnenprognose"
         },
         "data_description": {
           "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
@@ -136,7 +139,8 @@
           "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
-          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat."
+          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.",
+          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt)."
         }
       },
       "vacation": {
@@ -162,13 +166,15 @@
           "emergency_enabled": "Notfallregel",
           "emergency_delta": "Notfall: unter Sollwert um",
           "emergency_duration": "Notfall: Dauer",
-          "emergency_window_quiet": "Notfall: keine Fensteränderung seit"
+          "emergency_window_quiet": "Notfall: keine Fensteränderung seit",
+          "force_on_below": "Immer heizen unter Sollwert um"
         },
         "data_description": {
           "emergency_enabled": "An Tagen ohne Heizbetrieb darf ein Bereich trotzdem heizen, wenn die nach der Vorlaufzeit erwartete Temperatur lange und deutlich unter dem Sollwert liegt, ohne dass gelüftet wurde.",
           "emergency_delta": "Wie weit die nach der Vorlaufzeit erwartete Temperatur unter dem Sollwert liegen muss (mindestens die Einschalthysterese).",
           "emergency_duration": "Wie lange die erwartete Temperatur so tief bleiben muss.",
-          "emergency_window_quiet": "Lüften zählt nicht: die Fenster dürfen sich so lange nicht verändert haben."
+          "emergency_window_quiet": "Lüften zählt nicht: die Fenster dürfen sich so lange nicht verändert haben.",
+          "force_on_below": "So weit unter dem Sollwert heizt der Kreis unabhängig von jeder Vorhersage und der erwarteten Sonne."
         }
       },
       "ventilation": {

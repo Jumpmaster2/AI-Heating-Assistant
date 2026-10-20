@@ -379,3 +379,11 @@ def test_emergency_prediction_starts_from_the_carried_peak() -> None:
     rt = AreaRuntime(carry_peak=20.6, carry_max=20.1, carry_since=0.0)
     d = step(_input(now=0, temp=20.1, heating_day=False), PARAMS, SETTINGS, LEARNED, rt)
     assert d.status == AreaStatus.NO_HEATING_DAY and rt.below_emergency_since is None
+
+
+def test_force_on_threshold_is_configurable() -> None:
+    # 0.6 K below target, the prediction (strong expected sun) says it warms up
+    warming = LearnedValues(cool_rate_kph=-1.0, dead_time_s=3600, overshoot_k=0.4)
+    data = _input(temp=20.4)
+    assert not thermostat(data, PARAMS, warming)[0]  # default: forced only from 1 K
+    assert thermostat(data, PARAMS, warming, force_on_below=0.5)[0]

@@ -34,6 +34,8 @@ CONF_HEAT_METER = "heat_meter"
 CONF_SEASON_START = "season_start"
 CONF_SEASON_END = "season_end"
 CONF_FROST_TEMP = "frost_temperature"
+CONF_FORECAST_TRUST = "forecast_trust"
+CONF_FORCE_ON_BELOW = "force_on_below"
 
 CONF_VACATION_ENTITIES = "vacation_entities"
 CONF_VACATION_TEMP = "vacation_temperature"
@@ -131,6 +133,8 @@ DEFAULTS: Final[dict[str, object]] = {
     CONF_SEASON_START: "01.10.",
     CONF_SEASON_END: "31.03.",
     CONF_FROST_TEMP: 7.0,
+    CONF_FORECAST_TRUST: 70,
+    CONF_FORCE_ON_BELOW: 1.0,
     CONF_VACATION_ENTITIES: [],
     CONF_VACATION_TEMP: 18.0,
     CONF_PREHEAT_RESERVE: 30,

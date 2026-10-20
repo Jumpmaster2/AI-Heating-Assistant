@@ -51,6 +51,8 @@ from .const import (
     CONF_EMERGENCY_ENABLED,
     CONF_EMERGENCY_QUIET,
     CONF_FALLBACK_ERRORS,
+    CONF_FORCE_ON_BELOW,
+    CONF_FORECAST_TRUST,
     CONF_FROST_TEMP,
     CONF_HEAT_METER,
     CONF_HEATING_TYPE,
@@ -159,7 +161,6 @@ from .logic.physics import clamp, in_season, parse_day_month
 from .logic.prompts import check_messages, nightly_messages, r
 from .logic.start_values import LEARNED_BOUNDS, apply_start_values, read_record
 from .logic.sun import (
-    FORECAST_TRUST,
     Point,
     SunScale,
     clear_sky_index,
@@ -521,6 +522,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             emergency_delta=float(self.opt(CONF_EMERGENCY_DELTA)),
             emergency_duration_s=float(self.opt(CONF_EMERGENCY_DURATION)) * 60,
             emergency_window_quiet_s=float(self.opt(CONF_EMERGENCY_QUIET)) * 60,
+            force_on_below=float(self.opt(CONF_FORCE_ON_BELOW)),
         )
         learner = (
             AreaLearner.from_dict(stored.get("learner"), start["dead_time"], start["recovery"])
@@ -1124,7 +1126,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     def _pv_estimate(self, ts: float) -> float | None:
         """PV power expected now: from the forecast points, else from sun position, clouds
         and the learned clear sky scale; None without any basis."""
-        if (expected := expected_now(self._pv_points, ts)) is not None:
+        if (expected := expected_now(self._pv_points, ts, self._trust)) is not None:
             return expected
         scale = self.sun_scale.value
         index = self._sun_index(ts)
@@ -1133,7 +1135,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if index <= 0:
             return 0.0
         cloud = self._cloud_now()
-        return scale * index * cloud_factor(100.0 if cloud is None else cloud) * FORECAST_TRUST
+        return scale * index * cloud_factor(100.0 if cloud is None else cloud) * self._trust
+
+    @property
+    def _trust(self) -> float:
+        """Share of the expected sun that is relied on (forecasts are uncertain)."""
+        return float(self.opt(CONF_FORECAST_TRUST)) / 100
 
     def _pv_negligible(self, ts: float) -> bool:
         """A missing PV value may be read as zero: the sun is low or little is expected."""
@@ -1170,7 +1177,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         # current PV power. Heating rates (preheating) keep the current value.
         pv_now = self.pv_assumed
         lead_s = learner.dead_time.value * area.params.lead_factor
-        pv_plan = planning_pv(ts, pv_now, self._pv_points, lead_s)
+        pv_plan = planning_pv(ts, pv_now, self._pv_points, lead_s, self._trust)
         return LearnedValues(
             cool_rate_kph=model.cool_rate(diff, pv_plan, area.params.sun_factor),
             heat_rate_kph=model.heat_rate(diff, pv_now, area.params.sun_factor),

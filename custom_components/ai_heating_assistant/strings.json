@@ -13,7 +13,8 @@
           "heat_meter": "Heat meter",
           "season_start": "Heating period start (DD.MM.)",
           "season_end": "Heating period end (DD.MM.)",
-          "frost_temperature": "Frost protection temperature"
+          "frost_temperature": "Frost protection temperature",
+          "forecast_trust": "Trust in the sun forecast"
         },
         "data_description": {
           "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors). Without it the current temperature of the weather entity is used.",
@@ -24,7 +25,8 @@
           "heat_meter": "Optional. Meter reading of the heat meter of the circuits controlled here (Wh, kWh, MWh, MJ or GJ, e.g. total_increasing). The AI then sees the measured heat; it is also shown in the dashboard. Seldom and coarse readings are fine.",
           "season_start": "Outside the heating period all circuits stay off (frost protection only) and the AI is not asked.",
           "season_end": "Last day of the heating period, may be in the next year (e.g. 31.03.).",
-          "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat."
+          "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat.",
+          "forecast_trust": "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts)."
         }
       },
       "vacation": {
@@ -125,7 +127,8 @@
           "heat_meter": "Heat meter",
           "season_start": "Heating period start (DD.MM.)",
           "season_end": "Heating period end (DD.MM.)",
-          "frost_temperature": "Frost protection temperature"
+          "frost_temperature": "Frost protection temperature",
+          "forecast_trust": "Trust in the sun forecast"
         },
         "data_description": {
           "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors). Without it the current temperature of the weather entity is used.",
@@ -136,7 +139,8 @@
           "heat_meter": "Optional. Meter reading of the heat meter of the circuits controlled here (Wh, kWh, MWh, MJ or GJ, e.g. total_increasing). The AI then sees the measured heat; it is also shown in the dashboard. Seldom and coarse readings are fine.",
           "season_start": "Outside the heating period all circuits stay off (frost protection only) and the AI is not asked.",
           "season_end": "Last day of the heating period, may be in the next year (e.g. 31.03.).",
-          "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat."
+          "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat.",
+          "forecast_trust": "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts)."
         }
       },
       "vacation": {
@@ -162,13 +166,15 @@
           "emergency_enabled": "Emergency rule",
           "emergency_delta": "Emergency: below target by",
           "emergency_duration": "Emergency: duration",
-          "emergency_window_quiet": "Emergency: no window change for"
+          "emergency_window_quiet": "Emergency: no window change for",
+          "force_on_below": "Always heat below target by"
         },
         "data_description": {
           "emergency_enabled": "On days without heating, an area may still heat if the temperature expected after the lead time is long and clearly below its target, without airing.",
           "emergency_delta": "How far below the target the temperature expected after the lead time has to be (at least the switch-on hysteresis).",
           "emergency_duration": "How long the expected temperature has to stay that low.",
-          "emergency_window_quiet": "Airing does not count: windows must not have changed for this time."
+          "emergency_window_quiet": "Airing does not count: windows must not have changed for this time.",
+          "force_on_below": "Below target by this much the circuit heats regardless of every prediction and the expected sun."
         }
       },
       "ventilation": {

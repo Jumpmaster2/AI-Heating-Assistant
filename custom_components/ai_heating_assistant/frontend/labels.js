@@ -38,6 +38,10 @@ export const LABELS = {
     "Frostschutz-Mindesttemperatur",
     "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat."
    ],
+   "forecast_trust": [
+    "Vertrauen in die Sonnenprognose",
+    "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt)."
+   ],
    "vacation_entities": [
     "Urlaubs-Entitäten",
     "Ist eine dieser Entitäten 'an', gilt Urlaub (z. B. ein input_boolean oder ein Kalender)."
@@ -69,6 +73,10 @@ export const LABELS = {
    "emergency_window_quiet": [
     "Notfall: keine Fensteränderung seit",
     "Lüften zählt nicht: die Fenster dürfen sich so lange nicht verändert haben."
+   ],
+   "force_on_below": [
+    "Immer heizen unter Sollwert um",
+    "So weit unter dem Sollwert heizt der Kreis unabhängig von jeder Vorhersage und der erwarteten Sonne."
    ],
    "ventilation_min_ah_advantage": [
     "Mindestvorteil absolute Feuchte",
@@ -438,6 +446,10 @@ export const LABELS = {
     "Frost protection temperature",
     "Always applies, also outside the heating period and with a switched-off thermostat."
    ],
+   "forecast_trust": [
+    "Trust in the sun forecast",
+    "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts)."
+   ],
    "vacation_entities": [
     "Vacation entities",
     "Any of these entities being 'on' means vacation (e.g. an input_boolean or a calendar)."
@@ -469,6 +481,10 @@ export const LABELS = {
    "emergency_window_quiet": [
     "Emergency: no window change for",
     "Airing does not count: windows must not have changed for this time."
+   ],
+   "force_on_below": [
+    "Always heat below target by",
+    "Below target by this much the circuit heats regardless of every prediction and the expected sun."
    ],
    "ventilation_min_ah_advantage": [
     "Minimum drying advantage",
