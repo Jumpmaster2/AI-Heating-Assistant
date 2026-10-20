@@ -247,7 +247,7 @@ Jeder Schritt hat Tests, ruff (Prüfung und Format) sowie Übersetzungen de/en u
 | F-08 Listener-Leck | widerlegt (Beleg in der Tabelle), Regressionstest | `f00e892` |
 | F-09 Heizungsart | behoben | `db474b9` |
 | F-10 Recorder-Last | behoben | `21c24f9` |
-| F-11 SDK-Version, eigener Client | behoben | `74fa3fd` |
+| F-11 SDK-Version, eigener Client | behoben: eigener Client wird geschlossen. Statt Pinnen gilt die Mindestversion `anthropic>=0.125.0`, weil hassfest das Pinnen einer Abhängigkeit von Home Assistant selbst ablehnt; lehnt ein neueres SDK den geteilten Client ab, greift der eigene Client | `74fa3fd`, `dfed005` |
 | F-12 Prognose-Timeout | behoben | `74fa3fd`, `2fd4f72` (Test) |
 | F-13 Doku | behoben | laufend, Abschluss in Schritt 15 |
 | F-14 Selektoren | behoben | `09a81dc`, `b2d928d` |

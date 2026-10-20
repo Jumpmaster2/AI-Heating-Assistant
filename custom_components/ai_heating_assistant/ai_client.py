@@ -66,10 +66,10 @@ class ClaudeClient:
     ) -> ClaudeClient:
         """Create the SDK client outside the event loop (it loads certificates).
 
-        The manifest pins the SDK version of Home Assistant's own Anthropic
-        integration, which accepts the shared httpx client. Should another version be
-        installed that rejects it (SDK 1.x requires httpx2), the SDK creates its own
-        client, which ``close`` releases.
+        The manifest asks for at least the SDK version of Home Assistant's own
+        Anthropic integration (hassfest forbids pinning a core dependency), which
+        accepts the shared httpx client. Should a newer version reject it (SDK 1.x
+        requires httpx2), the SDK creates its own client, which ``close`` releases.
         """
         try:
             client = await hass.async_add_executor_job(
