@@ -56,6 +56,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="heat_rate",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="K/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
@@ -67,6 +68,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="cool_rate",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="K/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=3,
@@ -75,6 +77,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="overshoot",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         device_class=SensorDeviceClass.TEMPERATURE_DELTA,
         native_unit_of_measurement=UnitOfTemperature.KELVIN,
         state_class=SensorStateClass.MEASUREMENT,
@@ -87,6 +90,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="dead_time",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         state_class=SensorStateClass.MEASUREMENT,
@@ -96,6 +100,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="recovery_time",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         state_class=SensorStateClass.MEASUREMENT,
@@ -108,6 +113,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="outdoor_influence",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="1/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=4,
@@ -115,6 +121,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="sun_influence",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="K/h/kW",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=3,
@@ -211,6 +218,7 @@ class HeatingDayPhaseSensor(GlobalEntity, SensorEntity):
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [p.value for p in Phase]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _unrecorded_attributes = frozenset({"last_days"})
 
     def __init__(self, coordinator: HeatingCoordinator) -> None:
@@ -234,6 +242,7 @@ class AiTimestampSensor(GlobalEntity, SensorEntity):
     """Last or next AI check."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _unrecorded_attributes = frozenset({"summary", "rejected"})
 
     def __init__(self, coordinator: HeatingCoordinator, key: str, state_key: str) -> None:
@@ -262,6 +271,7 @@ class AiCostSensor(GlobalEntity, SensorEntity):
     """AI costs of the current month."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     # Anthropic bills in US dollars; prices and budget are entered in USD as well.
     _attr_native_unit_of_measurement = "USD"
     _attr_suggested_display_precision = 2

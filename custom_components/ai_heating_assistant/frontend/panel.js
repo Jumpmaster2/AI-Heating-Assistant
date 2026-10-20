@@ -816,6 +816,33 @@ class AiHeatingAssistantPanel extends HTMLElement {
     return `${text} ${st.attributes.unit_of_measurement || ""}`.trim();
   }
 
+  // Learned rates come from the integration: their sensors are disabled by default.
+  _learnedStats() {
+    const now = Date.now();
+    if (!this._statsLoading && (!this._statsAt || now - this._statsAt > 60000)) {
+      this._statsLoading = true;
+      this._ws({ type: `${DOMAIN}/learned` })
+        .then((stats) => {
+          this._stats = stats;
+          this._statsAt = Date.now();
+        })
+        .catch(() => {
+          this._statsAt = Date.now(); // not running: try again later
+        })
+        .finally(() => {
+          this._statsLoading = false;
+          if (this._tab === "learned" && this._stats) this._rerenderContent();
+        });
+    }
+    return this._stats || {};
+  }
+
+  _learnedText(entityId, stat, digits) {
+    if (this._ok(this._state(entityId))) return this._formatState(entityId, digits);
+    if (!stat || typeof stat.value !== "number") return this.ui.none;
+    return `${this._num(stat.value, digits)} ${stat.unit || ""}`.trim();
+  }
+
   _learnedTab() {
     const ui = this.ui;
     const heating = this._cfg.areas.filter((a) => a.entities.learning_progress);
@@ -833,10 +860,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const cards = heating
       .map((area) => {
         const progress = this._state(area.entities.learning_progress);
-        const cells = LEARNED.filter(([key]) => area.entities[key])
+        const stats = this._learnedStats()[area.id] || {};
+        const cells = LEARNED.filter(([key]) => area.entities[key] || stats[key])
           .map(
             ([key, icon, digits]) => `<div class="learn-cell"><span class="lbl small"><ha-icon icon="${icon}"></ha-icon>${esc(ui.learnedNames[key])}</span>
-              <span>${esc(this._formatState(area.entities[key], digits))}</span></div>`,
+              <span>${esc(this._learnedText(area.entities[key], stats[key], digits))}</span></div>`,
           )
           .join("");
         const params = Object.entries(progress?.attributes?.parameters || {})

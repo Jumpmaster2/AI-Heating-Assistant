@@ -190,3 +190,28 @@ async def test_entity_that_failed_to_load_keeps_its_registry_entry(
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert registry.async_get("climate.living_room").name == "My floor"
+
+
+async def test_area_device_is_placed_in_the_area_of_its_sensor(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.ai_heating_assistant.const import DOMAIN
+
+    from .conftest import AREA_DATA
+
+    freezer.move_to(IN_SEASON)
+    lounge = ar.async_get(hass).async_create("Lounge")
+    sensor = er.async_get(hass).async_get_or_create("sensor", "test", "lounge_temp")
+    er.async_get(hass).async_update_entity(sensor.entity_id, area_id=lounge.id)
+    hass.states.async_set(sensor.entity_id, "19.0", {"unit_of_measurement": "°C"})
+    entry = make_entry(areas=[{**AREA_DATA, "temperature_sensor": sensor.entity_id}])
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    area_id = next(iter(entry.subentries))
+    device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, area_id), entry.entry_id)
+    assert device is not None and device.area_id == lounge.id

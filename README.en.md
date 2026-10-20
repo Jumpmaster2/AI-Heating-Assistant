@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.16. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.17. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -155,6 +155,8 @@ Start values (including `theta`) are only set during setup or when an area is cr
 ## Entities
 
 Entities no longer provided after a change (e.g. "Heat today" after removing the heat meter) are removed from the entity registry at the next load. Fast changing forecast values (`predicted_temperature`, `expected_peak`, `expected_pv_kw`) and large attributes (parameter list, last days, rule, AI summary) are not recorded; values are rounded to the shown precision so that not every minute creates a new state.
+
+On new installations the diagnostic sensors of the learned values (heating and cooling rate, overshoot, dead time, recovery time, outdoor and sun influence) start disabled; the panel shows the values anyway. They can be enabled under Settings > Entities. AI timestamps, AI costs and decision phase are diagnostic entities. A new area device is placed in the Home Assistant area of its temperature sensor.
 
 Global (device "AI Heating Assistant"):
 

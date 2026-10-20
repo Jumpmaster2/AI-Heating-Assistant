@@ -58,6 +58,7 @@ from .const import (
 )
 from .logic.ai_schema import PARAMS, default_limits
 from .logic.physics import parse_day_month
+from .sensor import AREA_SENSORS
 
 DATA_WS = f"{DOMAIN}_ws_registered"
 
@@ -100,6 +101,7 @@ def async_register_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_save_area)
     websocket_api.async_register_command(hass, ws_delete_area)
     websocket_api.async_register_command(hass, ws_save_theta)
+    websocket_api.async_register_command(hass, ws_learned)
 
 
 def _entry(hass: HomeAssistant) -> ConfigEntry | None:
@@ -341,6 +343,39 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
 
 def _error(connection: websocket_api.ActiveConnection, msg_id: int, err: Exception) -> None:
     connection.send_error(msg_id, "invalid", str(err))
+
+
+# learned rates of the areas, shown in the panel (their sensors are off by default)
+LEARNED_STATS = (
+    "heat_rate",
+    "cool_rate",
+    "overshoot",
+    "dead_time",
+    "recovery_time",
+    "outdoor_influence",
+    "sun_influence",
+)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/learned"})
+@websocket_api.require_admin
+@callback
+def ws_learned(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    entry = _entry(hass)
+    coordinator = _coordinator(entry) if entry else None
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "AI Heating Assistant is not running")
+        return
+    descriptions = {d.key: d for d in AREA_SENSORS if d.key in LEARNED_STATS}
+    result = {
+        area.area_id: {
+            key: {"value": d.value_fn(area), "unit": d.native_unit_of_measurement}
+            for key, d in descriptions.items()
+        }
+        for area in coordinator.areas.values()
+        if area.has_circuit
+    }
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/config"})
