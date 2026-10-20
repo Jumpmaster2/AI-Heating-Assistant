@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.0.0. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.0.1. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -248,6 +248,8 @@ automation:
     actions:
       - action: select.select_option
         target:
+          # with English as the system language at setup; the id is shown under
+          # Settings > Entities (German: ..._heiztag_manuell)
           entity_id: select.ai_heating_assistant_heating_day_override
         data:
           option: off_today

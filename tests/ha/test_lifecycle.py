@@ -230,3 +230,38 @@ async def test_disabling_removes_the_panel(
         )
         await hass.async_block_till_done()
     unregister.assert_called_once()
+
+
+async def test_removal_also_switches_off_a_circuit_still_to_be_released(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await _setup_heating(hass, freezer)
+    living = next(s for s in entry.subentries.values() if s.title == "Living room")
+    hass.states.async_set(CIRCUIT, "unavailable")
+    hass.config_entries.async_remove_subentry(entry, living.subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert entry.runtime_data.pending_release == [CIRCUIT]
+    hass.states.async_set(CIRCUIT, "on")  # back with its power-on state
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(CIRCUIT).state == "off"
+
+
+async def test_released_circuit_that_took_the_command_is_not_pending(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """A switch whose state follows later must not be switched off again at every start."""
+    from homeassistant.core import ServiceCall
+
+    entry = await _setup_heating(hass, freezer)
+    calls: list[str] = []
+
+    async def lagging(call: ServiceCall) -> None:
+        calls.append(call.service)  # accepted; the state reports back later
+
+    hass.services.async_register("input_boolean", "turn_off", lagging)
+    living = next(s for s in entry.subentries.values() if s.title == "Living room")
+    hass.config_entries.async_remove_subentry(entry, living.subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert calls == ["turn_off"]
+    assert entry.runtime_data.pending_release == []

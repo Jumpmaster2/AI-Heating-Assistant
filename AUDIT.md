@@ -238,7 +238,7 @@ Jeder Schritt hat Tests, ruff (Prüfung und Format) sowie Übersetzungen de/en u
 | Fund | Stand | Commit(s) |
 |---|---|---|
 | F-01 Temperatureinheiten | behoben | `f9227b3`, `cf7cc33` (Thermostat in °F) |
-| F-02 Kreise beim Deaktivieren/Entfernen aus | behoben | `efa3744`, `cf7cc33` (Wiederholung beim nächsten Start) |
+| F-02 Kreise beim Deaktivieren/Entfernen aus | behoben | `efa3744`, `cf7cc33` (Wiederholung beim nächsten Start), Nachprüfung: noch nicht ausgeschaltete freigegebene Kreise auch beim Entfernen und Deaktivieren |
 | F-03 Ausfall Sensor/Aktor, Repairs | behoben | `b8a6770`, `cf7cc33` (ignorierte Meldungen bleiben). Ein Notbetrieb bei Sensorausfall ist **nicht** eingebaut (zu prüfen, ob gewünscht). |
 | F-04 Reauth | behoben | `9df0cfc` |
 | F-05 USD | behoben | `2fd4f72` |
@@ -247,7 +247,7 @@ Jeder Schritt hat Tests, ruff (Prüfung und Format) sowie Übersetzungen de/en u
 | F-08 Listener-Leck | widerlegt (Beleg in der Tabelle), Regressionstest | `f00e892` |
 | F-09 Heizungsart | behoben | `db474b9` |
 | F-10 Recorder-Last | behoben | `21c24f9` |
-| F-11 SDK-Version, eigener Client | behoben | `74fa3fd` |
+| F-11 SDK-Version, eigener Client | behoben: eigener Client wird geschlossen. Statt Pinnen gilt die Mindestversion `anthropic>=0.125.0`, weil hassfest das Pinnen einer Abhängigkeit von Home Assistant selbst ablehnt; lehnt ein neueres SDK den geteilten Client ab, greift der eigene Client | `74fa3fd`, `dfed005` |
 | F-12 Prognose-Timeout | behoben | `74fa3fd`, `2fd4f72` (Test) |
 | F-13 Doku | behoben | laufend, Abschluss in Schritt 15 |
 | F-14 Selektoren | behoben | `09a81dc`, `b2d928d` |

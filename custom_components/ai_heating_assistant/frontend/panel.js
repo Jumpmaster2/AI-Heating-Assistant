@@ -525,21 +525,25 @@ class AiHeatingAssistantPanel extends HTMLElement {
   }
 
   _datalists() {
-    // suggestions for the plain text fields only; ha-selector brings its own picker
-    if (!this._hass || customElements.get("ha-selector")) return "";
-    const option = (id) => `<option value="${esc(id)}">${esc(this._name(id))}</option>`;
-    const all = Object.keys(this._hass.states).sort();
-    let html = `<datalist id="dl-all">${all.map(option).join("")}</datalist>`;
-    const sets = new Set();
-    for (const spec of [...Object.values(this._cfg?.option_specs || {}), ...Object.values(this._cfg?.area_specs || {})]) {
-      const domains = domainsOf(spec);
-      if (spec.selector === "entity" && domains.length) sets.add(domains.join(","));
+    if (!this._hass) return "";
+    let html = "";
+    // entity suggestions only for the plain text fields; ha-selector brings its own picker
+    if (!customElements.get("ha-selector")) {
+      const option = (id) => `<option value="${esc(id)}">${esc(this._name(id))}</option>`;
+      const all = Object.keys(this._hass.states).sort();
+      html += `<datalist id="dl-all">${all.map(option).join("")}</datalist>`;
+      const sets = new Set();
+      for (const spec of [...Object.values(this._cfg?.option_specs || {}), ...Object.values(this._cfg?.area_specs || {})]) {
+        const domains = domainsOf(spec);
+        if (spec.selector === "entity" && domains.length) sets.add(domains.join(","));
+      }
+      for (const set of sets) {
+        const domains = set.split(",");
+        const ids = all.filter((id) => domains.includes(id.split(".")[0]));
+        html += `<datalist id="dl-${esc(set.replace(/,/g, "-"))}">${ids.map(option).join("")}</datalist>`;
+      }
     }
-    for (const set of sets) {
-      const domains = set.split(",");
-      const ids = all.filter((id) => domains.includes(id.split(".")[0]));
-      html += `<datalist id="dl-${esc(set.replace(/,/g, "-"))}">${ids.map(option).join("")}</datalist>`;
-    }
+    // choices of free text selects (e.g. the AI model) are always needed
     for (const [key, spec] of Object.entries(this._cfg?.option_specs || {})) {
       if (spec.selector === "select" && spec.custom_value) {
         html += `<datalist id="dl-opt-${esc(key)}">${(spec.options || []).map((o) => `<option value="${esc(typeof o === "object" ? o.value : o)}"></option>`).join("")}</datalist>`;

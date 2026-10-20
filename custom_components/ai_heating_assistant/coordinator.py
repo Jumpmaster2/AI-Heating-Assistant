@@ -352,6 +352,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._unsub_check: Callable[[], None] | None = None
         self._deciding = False
         self._opts: dict[str, Any] | None = None
+        self._opts_src: Any = None
         self._decide_failed_at: float | None = None
         self._checking = False
         self._tick_count = 0
@@ -366,9 +367,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     @property
     def opts(self) -> dict[str, Any]:
-        # Built once per run: a change of the options reloads the entry.
-        if self._opts is None:
-            self._opts = {**DEFAULTS, **self.config_entry.options}
+        # Built once per options object: saving options replaces it (and reloads the
+        # entry later), so a reply built right after saving already sees the change.
+        options = self.config_entry.options
+        if self._opts is None or self._opts_src is not options:
+            self._opts, self._opts_src = {**DEFAULTS, **options}, options
         return self._opts
 
     def opt(self, key: str) -> Any:
@@ -579,6 +582,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             )
         area.start = configured
 
+    @property
+    def pending_release(self) -> list[str]:
+        """Switches dropped from the areas that are not known to be off yet."""
+        return list(self._pending_release)
+
     def _clamp_to_limits(self) -> None:
         """Bring the parameters into the AI limits, which may have been narrowed."""
         limits = self.limits
@@ -628,12 +636,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return
 
         async def release() -> None:
-            for entity_id in await async_turn_off_switches(self.hass, dropped):
+            switched = await async_turn_off_switches(self.hass, dropped)
+            for entity_id in switched:
                 self._log("circuit_released", entity_id=entity_id)
+            # A switch that took the command counts as released, even if its state still
+            # reads "on" for a moment (the device reports back later).
             self._pending_release = [
                 e
                 for e in dropped
-                if (st := self.hass.states.get(e)) is None or st.state != STATE_OFF
+                if e not in switched
+                and ((st := self.hass.states.get(e)) is None or st.state != STATE_OFF)
             ]
             self._save()
 

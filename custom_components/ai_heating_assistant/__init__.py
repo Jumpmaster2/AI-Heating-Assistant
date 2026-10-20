@@ -127,7 +127,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
         # Disabled (not a reload): stop the control first, so no tick switches a
         # circuit on again, then nothing controls the circuits any more.
         await entry.runtime_data.async_shutdown()
-        await _async_switch_off_circuits(hass, entry, "disabled")
+        await _async_switch_off_circuits(
+            hass, entry, "disabled", entry.runtime_data.pending_release
+        )
         async_delete_issues(hass)
         async_unregister_panel(hass)  # nothing to show while disabled
     return unloaded
@@ -136,21 +138,26 @@ async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
 async def async_remove_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
     """Switch off the circuits and delete stored learning data and the panel when the
     integration is removed."""
-    await _async_switch_off_circuits(hass, entry, "removed")
+    store: Store[dict] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}")
+    # switches dropped from areas but not yet switched off are only kept in the store
+    stored = await store.async_load() or {}
+    pending = [s for s in stored.get("release") or [] if isinstance(s, str)]
+    await _async_switch_off_circuits(hass, entry, "removed", pending)
     async_delete_issues(hass)
     async_unregister_panel(hass)
-    await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()
+    await store.async_remove()
 
 
 async def _async_switch_off_circuits(
-    hass: HomeAssistant, entry: AiHeatingConfigEntry, reason: str
+    hass: HomeAssistant, entry: AiHeatingConfigEntry, reason: str, pending: list[str]
 ) -> None:
-    """Switch off every circuit of the entry that is on (a circuit left on would heat
-    without limit once nothing controls it)."""
+    """Switch off every circuit of the entry that is on, and the dropped ones still owed
+    a switch-off (a circuit left on would heat without limit once nothing controls it)."""
     switches = [
         sub.data[CONF_SWITCH]
         for sub in entry.subentries.values()
         if sub.subentry_type == SUBENTRY_AREA and sub.data.get(CONF_SWITCH)
     ]
+    switches += [s for s in pending if s not in switches]
     for entity_id in await async_turn_off_switches(hass, switches):
         LOGGER.info("Switched off %s: %s was %s", entity_id, entry.title, reason)
