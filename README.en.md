@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.10.2. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.1. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -93,6 +93,8 @@ After the setup the sidebar has the page **AI Heating Assistant** (administrator
 The setup itself is still a dialog.
 
 ### Setup (global)
+
+Temperature sensors may report °C, °F or K; without a unit the unit system of Home Assistant applies. Internally everything is calculated in °C, and all temperatures in the settings (targets, frost protection, `theta`) are entered in °C. The thermostats show values in the unit system of Home Assistant.
 
 | Option | Default | Meaning |
 |---|---|---|

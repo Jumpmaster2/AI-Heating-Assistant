@@ -576,14 +576,18 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const sensor = this._state(area.data.temperature_sensor);
     const current = climate ? climate.attributes.current_temperature : this._ok(sensor) ? sensor.state : null;
     const target = climate ? climate.attributes.temperature : null;
-    return [current, target, climate];
+    // the thermostat shows the unit system of HA, a plain sensor its own unit
+    const unit = climate
+      ? this._hass.config?.unit_system?.temperature || "°C"
+      : sensor?.attributes?.unit_of_measurement || this._hass.config?.unit_system?.temperature || "°C";
+    return [current, target, climate, unit];
   }
 
-  _tempHtml(current, target) {
+  _tempHtml(current, target, unit) {
     // each value stays on one line; a narrow column breaks before the arrow
-    const now = `<span class="temp">${esc(`${this._num(current)} °C`)}</span>`;
+    const now = `<span class="temp">${esc(`${this._num(current)} ${unit}`)}</span>`;
     if (target === null || target === undefined) return now;
-    return `${now} <span class="temp">${esc(`→ ${this._num(target)} °C`)}</span>`;
+    return `${now} <span class="temp">${esc(`→ ${this._num(target)} ${unit}`)}</span>`;
   }
 
   _areaStatus(area) {
@@ -641,11 +645,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     // areas
     const areaRows = this._cfg.areas
       .map((area) => {
-        const [current, target, climate] = this._areaTemps(area);
+        const [current, target, climate, unit] = this._areaTemps(area);
         const heating = climate?.attributes?.hvac_action === "heating";
         const [statusText, statusCls] = this._areaStatus(area);
         const vent = this._areaVent(area);
-        const temp = this._tempHtml(current, target);
+        const temp = this._tempHtml(current, target, unit);
         const action = area.entities.climate ? `data-action="more-info" data-entity="${esc(area.entities.climate)}"` : `data-edit="${esc(area.id)}"`;
         return `<button class="row link" ${action}>
           <ha-icon icon="${heating ? "mdi:fire" : area.entities.climate ? "mdi:home-thermometer-outline" : "mdi:weather-windy"}" style="${heating ? "color:var(--warning-color, #ffa600)" : ""}"></ha-icon>
@@ -769,11 +773,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const [title, desc] = ui.cards.areas;
     const rows = this._cfg.areas
       .map((area) => {
-        const [current, target] = this._areaTemps(area);
+        const [current, target, , unit] = this._areaTemps(area);
         const [statusText, statusCls] = this._areaStatus(area);
         const vent = this._areaVent(area);
         const circuit = area.data.heater_switch ? this._name(area.data.heater_switch) : ui.noCircuit;
-        const temp = this._tempHtml(current, target);
+        const temp = this._tempHtml(current, target, unit);
         return `<tr data-edit="${esc(area.id)}">
           <td class="c-icon"><ha-icon icon="${area.data.heater_switch ? "mdi:home-thermometer-outline" : "mdi:weather-windy"}"></ha-icon></td>
           <td class="c-name"><div>${esc(area.title)}</div><div class="muted small entity-id">${esc(area.data.temperature_sensor)}</div></td>

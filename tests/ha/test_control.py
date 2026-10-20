@@ -8,8 +8,9 @@ from unittest.mock import patch
 
 import pytest
 from freezegun.api import FrozenDateTimeFactory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import (
     async_capture_events,
     async_fire_time_changed,
@@ -554,3 +555,66 @@ async def test_old_store_applies_unlearned_start_values(
     assert (
         stored["start"]["dead_time"] == 1800.0 and stored["learner"]["dead_time"]["value"] == 1800
     )
+
+
+async def test_fahrenheit_sensors_are_converted(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """Sensors in °F are read in °C: 68 °F is 20 °C, below the target of 21 °C."""
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.living_room_temperature", "68.0", {"unit_of_measurement": "°F"})
+    hass.states.async_set("sensor.outdoor_temperature", "41.0", {"unit_of_measurement": "°F"})
+    await _setup(hass, make_entry())
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    area = next(a for a in coordinator.areas.values() if a.has_circuit)
+    assert area.temp == pytest.approx(20.0)
+    assert coordinator.outdoor_temp == pytest.approx(5.0)
+    assert hass.states.get("climate.living_room").attributes["current_temperature"] == 20.0
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+
+
+async def test_frost_protection_with_fahrenheit_sensor(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """40 °F (4.4 °C) is below the frost limit of 7 °C, also outside the season."""
+    freezer.move_to("2026-07-01 10:00:00+02:00")
+    hass.states.async_set("sensor.living_room_temperature", "40.0", {"unit_of_measurement": "°F"})
+    await _setup(hass, make_entry())
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("sensor.living_room_status").state == "frost_protection"
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+
+
+async def test_forecast_in_fahrenheit_is_converted(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """With the US unit system the weather service answers in °F; the rule works in °C."""
+    freezer.move_to(IN_SEASON)
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    hass.states.async_set("weather.home", "cloudy", {"temperature": 41, "temperature_unit": "°F"})
+
+    async def forecasts(call: ServiceCall) -> dict:
+        item = {"datetime": "2026-11-16T12:00:00+01:00", "temperature": 50.0, "templow": 41.0}
+        return {"weather.home": {"forecast": [item]}}
+
+    hass.services.async_register(
+        "weather", "get_forecasts", forecasts, supports_response=SupportsResponse.ONLY
+    )
+    await _setup(hass, make_entry(weather="weather.home"))
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    daily = await coordinator._forecast("daily")
+    assert (daily[0]["temperature"], daily[0]["templow"]) == (10.0, 5.0)
+    # the nightly decision compared the forecast maximum in °C with theta
+    assert coordinator.current_day["rule"]["tmax"] == 10.0
+
+
+async def test_temperature_with_unknown_unit_is_ignored(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory, caplog
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.living_room_temperature", "55", {"unit_of_measurement": "%"})
+    await _setup(hass, make_entry())
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("sensor.living_room_status").state == "sensor_error"
+    assert "sensor.living_room_temperature reports the unit '%'" in caplog.text

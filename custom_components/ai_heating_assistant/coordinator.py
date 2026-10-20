@@ -17,6 +17,7 @@ from homeassistant.const import (
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfPower,
+    UnitOfTemperature,
 )
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -30,6 +31,7 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import TemperatureConverter
 
 from .ai_client import AiError, ClaudeClient
 from .const import (
@@ -317,6 +319,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._deciding = False
         self._checking = False
         self._tick_count = 0
+        self._unit_warned: set[str] = set()  # entities already warned about an odd unit
 
     # ------------------------------------------------------------------ config
 
@@ -614,6 +617,34 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         except ValueError:
             return None
 
+    def _temp(self, entity_id: str | None) -> float | None:
+        """Temperature of a sensor in °C, whatever unit the sensor reports."""
+        value = self._float(entity_id)
+        if value is None:
+            return None
+        state = self._state(entity_id)
+        unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
+        return self._to_celsius(value, unit, str(entity_id))
+
+    def _to_celsius(self, value: float, unit: str | None, source: str) -> float | None:
+        """Convert a temperature to °C. Without a unit the unit system of HA applies;
+        a unit that is no temperature unit makes the value unknown (warned once)."""
+        unit = unit or self.hass.config.units.temperature_unit
+        if unit == UnitOfTemperature.CELSIUS:
+            return value
+        try:
+            return TemperatureConverter.convert(value, unit, UnitOfTemperature.CELSIUS)
+        except HomeAssistantError:
+            if source not in self._unit_warned:
+                self._unit_warned.add(source)
+                LOGGER.warning(
+                    "%s reports the unit %r instead of a temperature unit (°C, °F or K); "
+                    "its value is ignored",
+                    source,
+                    unit,
+                )
+            return None
+
     def _is_on(self, entity_id: str | None) -> bool:
         state = self._state(entity_id)
         return state is not None and state.state == STATE_ON
@@ -711,7 +742,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         minutes = 0.0 if self._last_tick is None else clamp((ts - self._last_tick) / 60, 0.0, 5.0)
         self._last_tick = ts
 
-        self.outdoor_temp = self._float(self.opt(CONF_OUTDOOR_TEMP))
+        self.outdoor_temp = self._temp(self.opt(CONF_OUTDOOR_TEMP))
         self.pv_kw = self._pv_kw()
         self._pv_measured = self.pv_kw is not None
         await self._update_pv_forecast(ts)
@@ -901,7 +932,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self, area: Area, ts: float, minutes: float, heating_day: bool, return_ts: float | None
     ) -> None:
         cfg = area.cfg
-        area.temp = self._float(cfg.get(CONF_TEMP_SENSOR))
+        area.temp = self._temp(cfg.get(CONF_TEMP_SENSOR))
         area.humidity = self._float(cfg.get(CONF_HUMIDITY_SENSOR))
         area.window_open = any(self._is_on(w) for w in cfg.get(CONF_WINDOWS) or [])
 
@@ -1111,7 +1142,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         cfg = area.cfg
         indoor_ref = bool(cfg.get(CONF_REF_TEMP))
         if indoor_ref:
-            ref_temp = self._float(cfg.get(CONF_REF_TEMP))
+            ref_temp = self._temp(cfg.get(CONF_REF_TEMP))
             ref_hum = self._float(cfg.get(CONF_REF_HUMIDITY))
         else:
             ref_temp = self.outdoor_temp
@@ -1241,7 +1272,24 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return []
         data = (response or {}).get(weather, {})
         forecast = data.get("forecast") if isinstance(data, dict) else None
-        return forecast if isinstance(forecast, list) else []
+        if not isinstance(forecast, list):
+            return []
+        # The service answers in the temperature unit of the weather entity (the unit
+        # system of HA unless set per entity); the logic works in °C.
+        state = self._state(weather)
+        unit = state.attributes.get("temperature_unit") if state else None
+        items = []
+        for item in forecast:
+            if not isinstance(item, dict):
+                continue
+            item = dict(item)
+            for key in ("temperature", "templow"):
+                value = item.get(key)
+                if isinstance(value, int | float) and not isinstance(value, bool):
+                    celsius = self._to_celsius(float(value), unit, weather)
+                    item[key] = None if celsius is None else round(celsius, 1)
+            items.append(item)
+        return items
 
     async def async_decide_heating_day(self, trigger: str, use_ai: bool = True) -> None:
         """Evaluate the previous day and decide whether today is a heating day."""

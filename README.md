@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.10.2. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.11.1. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -93,6 +93,8 @@ Nach der Einrichtung gibt es in der Seitenleiste die Seite **AI Heating Assistan
 Die Einrichtung selbst läuft weiterhin als Dialog.
 
 ### Einrichtung (global)
+
+Temperatursensoren dürfen in °C, °F oder K melden; ohne Einheit gilt das Einheitensystem von Home Assistant. Gerechnet wird intern in °C, und alle Temperaturen in den Einstellungen (Sollwerte, Frostschutz, `theta`) werden in °C eingegeben. Die Thermostate zeigen Werte im Einheitensystem von Home Assistant.
 
 | Option | Standard | Bedeutung |
 |---|---|---|
