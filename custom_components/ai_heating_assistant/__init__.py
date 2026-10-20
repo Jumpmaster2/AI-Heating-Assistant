@@ -6,11 +6,11 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.entity_platform import async_get_platforms
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    CONF_HEAT_METER,
     CONF_MAX_OUTPUT_TOKENS,
     CONF_PUFFER_DOWN,
     CONF_SWITCH,
@@ -29,6 +29,7 @@ from .coordinator import (
 )
 from .entity import global_device_info
 from .panel import async_register_panel, async_unregister_panel
+from .sensor import AREA_SENSORS
 from .services import async_setup_services
 from .websocket import async_register_websocket
 
@@ -85,20 +86,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) ->
 
 @callback
 def _async_remove_stale_entities(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
-    """Remove entities this entry no longer creates (heat meter removed, circuit removed
-    from an area); they would stay as "unavailable". Disabled entities are never added,
-    so only enabled ones of a platform that was set up are judged."""
-    created: dict[str, set[str]] = {}
-    for platform in async_get_platforms(hass, DOMAIN):
-        if platform.config_entry is entry:
-            created.setdefault(platform.domain, set()).update(platform.entities)
+    """Remove entities the configuration no longer provides (heat meter removed, circuit
+    removed from an area); they would stay as "unavailable". Judged from the
+    configuration, not from what was set up: an entity that failed to load keeps its
+    registry entry and the user's settings."""
+    coordinator = entry.runtime_data
+    stale = set()
+    if not coordinator.opt(CONF_HEAT_METER):
+        stale.add(f"{entry.entry_id}_heat_today")
+    for area in coordinator.areas.values():
+        if not area.has_circuit:
+            stale.add(f"{area.area_id}_climate")
+            stale.update(f"{area.area_id}_{d.key}" for d in AREA_SENSORS if d.circuit_only)
     registry = er.async_get(hass)
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
-        if (
-            not reg_entry.disabled
-            and reg_entry.domain in created
-            and reg_entry.entity_id not in created[reg_entry.domain]
-        ):
+        if reg_entry.platform == DOMAIN and reg_entry.unique_id in stale:
             LOGGER.info("Removing %s: no longer provided", reg_entry.entity_id)
             registry.async_remove(reg_entry.entity_id)
 

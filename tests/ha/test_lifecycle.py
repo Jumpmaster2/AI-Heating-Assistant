@@ -152,3 +152,41 @@ async def test_entities_no_longer_provided_are_removed(
     assert registry.async_get(heat) is None
     assert registry.async_get("sensor.living_room_dead_time") is not None
     assert registry.async_get("climate.living_room") is not None
+
+
+async def test_circuit_entities_of_an_area_without_circuit_are_removed(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from homeassistant.helpers import entity_registry as er
+
+    entry = await _setup_heating(hass, freezer)
+    registry = er.async_get(hass)
+    living = next(s for s in entry.subentries.values() if s.title == "Living room")
+    data = {k: v for k, v in living.data.items() if k != "heater_switch"}
+    hass.config_entries.async_update_subentry(entry, living, data=data)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert registry.async_get("climate.living_room") is None
+    assert registry.async_get("sensor.living_room_dead_time") is None
+    # the ventilation advice of the area stays
+    assert registry.async_get("sensor.living_room_ventilation_recommendation") is not None
+
+
+async def test_entity_that_failed_to_load_keeps_its_registry_entry(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """A platform error must not delete entities the configuration still provides."""
+    from homeassistant.helpers import entity_registry as er
+
+    from custom_components.ai_heating_assistant import climate
+
+    entry = await _setup_heating(hass, freezer)
+    registry = er.async_get(hass)
+    registry.async_update_entity("climate.living_room", name="My floor")
+
+    async def broken(*args, **kwargs) -> None:
+        raise RuntimeError("platform bug")
+
+    with patch.object(climate, "async_setup_entry", broken):
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert registry.async_get("climate.living_room").name == "My floor"
