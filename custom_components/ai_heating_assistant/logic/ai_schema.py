@@ -248,7 +248,8 @@ def validate_check(
         old = float(current[area][key])
         new = clamp(wanted, low, high)
         new = clamp(new, old - step, old + step)
-        new = round(new, 3)
+        # A value outside narrowed limits must not stay outside by the step limit.
+        new = round(clamp(new, low, high), 3)
         if abs(new - old) < 1e-6:
             continue
         seen.add((area, key))

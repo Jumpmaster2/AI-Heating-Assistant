@@ -205,6 +205,7 @@ async def test_areas(hass: HomeAssistant, base_states, hass_ws_client) -> None:
             "reference_incomplete",
         ),
         ("X", {"temperature_sensor": "binary_sensor.x"}, "invalid_value:temperature_sensor"),
+        (" living ROOM", {"temperature_sensor": "sensor.x"}, "name_in_use"),
         (
             "X",
             {"temperature_sensor": "sensor.x", "heater_switch": "input_boolean.heating_circuit_1"},

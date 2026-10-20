@@ -756,9 +756,11 @@ async def test_costs_use_the_prices_of_the_model_that_answered(
 
     freezer.move_to(IN_SEASON)
     with patch(STRUCTURED, side_effect=AiError("offline")):
-        await _setup(hass, make_entry(api_key="test-key"))
+        # own prices, so they differ from the list price of the selected model
+        await _setup(hass, make_entry(api_key="test-key", price_input=9.0))
     coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
     configured = coordinator.prices
+    assert configured.input == 9.0
     coordinator.client.served_model = "claude-opus-5-5"
     assert coordinator._served_prices() == configured
     coordinator.client.served_model = "claude-sonnet-5-5-20261001"  # server fallback
@@ -826,3 +828,119 @@ async def test_hourly_forecast_for_pv_is_fetched_in_the_background(
     freezer.tick(timedelta(minutes=1))
     await coordinator.async_refresh()
     assert coordinator._pv_points
+
+
+async def test_parameters_are_clamped_into_narrowed_limits(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    await _setup(hass, entry)
+    coordinator = entry.runtime_data
+    area = next(a for a in coordinator.areas.values() if a.has_circuit)
+    area.params.hysteresis_on = 0.4
+    coordinator.day_state["theta"] = 17.5
+    await coordinator.async_shutdown()  # store the values
+
+    limits = {**entry.options["limits"]}
+    limits["hysteresis_on"] = {**limits["hysteresis_on"], "max": 0.3}
+    limits["theta"] = {**limits["theta"], "max": 16.0}
+    events = async_capture_events(hass, EVENT_LOGBOOK)
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "limits": limits})
+    await hass.async_block_till_done(wait_background_tasks=True)
+    coordinator = entry.runtime_data
+    area = coordinator.areas[area.area_id]
+    assert area.params.hysteresis_on == 0.3
+    assert coordinator.theta == 16.0
+    assert sum("AI limits" in e.data["message"] for e in events) == 2
+
+
+async def test_impossible_sensor_values_are_ignored(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory, caplog
+) -> None:
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    await _setup(hass, entry)
+    area = next(a for a in entry.runtime_data.areas.values() if a.has_circuit)
+    for value in ("nan", "inf", "200"):
+        hass.states.async_set(
+            "sensor.living_room_temperature", value, {"unit_of_measurement": "°C"}
+        )
+        await _advance(hass, freezer, 1)
+        assert hass.states.get("sensor.living_room_status").state == "sensor_error", value
+    assert caplog.text.count("reports the implausible value") == 1  # once per sensor
+    hass.states.async_set("sensor.living_room_humidity", "150", {"unit_of_measurement": "%"})
+    await _advance(hass, freezer, 1)
+    assert area.humidity is None
+
+
+async def test_pv_and_meter_units_are_checked(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory, caplog
+) -> None:
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.pv_power", "500")
+    hass.states.async_set("sensor.heat_meter", "12", {"unit_of_measurement": "m³"})
+    entry = make_entry(pv_power="sensor.pv_power", heat_meter="sensor.heat_meter")
+    await _setup(hass, entry)
+    coordinator = entry.runtime_data
+    assert coordinator._pv_kw() == 0.5  # no unit: read as W
+    assert "sensor.pv_power reports no unit" in caplog.text
+    assert "sensor.heat_meter reports the unit 'm³'" in caplog.text
+    hass.states.async_set("sensor.pv_power", "500", {"unit_of_measurement": "%"})
+    assert coordinator._pv_kw() is None
+    hass.states.async_set("sensor.pv_power", "2", {"unit_of_measurement": "kW"})
+    assert coordinator._pv_kw() == 2.0
+
+
+async def test_budget_month_changes_in_the_tick_and_reload_unblocks(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    await _setup(hass, entry)
+    budget = entry.runtime_data.budget
+    budget.month, budget.spent, budget.blocked = "2026-10", 4.5, True
+    await _advance(hass, freezer, 1)
+    assert (budget.month, budget.spent, budget.blocked) == ("2026-11", 0.0, False)
+
+    budget.spent, budget.blocked = 4.9, True
+    # e.g. the budget was raised in the options: judged again at the next call
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert entry.runtime_data.budget.spent == 4.9
+    assert not entry.runtime_data.budget.blocked
+    attrs = hass.states.get("sensor.ai_heating_assistant_ai_costs_this_month").attributes
+    assert attrs["budget_reached"] is False
+
+
+async def test_target_step_of_exactly_half_a_kelvin_resets_the_interval(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    entry = make_entry(areas=[{**AREA_DATA, "min_target": 15.0}])
+    await _setup(hass, entry)
+    coordinator = entry.runtime_data
+    area_id = next(iter(coordinator.areas))
+    await coordinator.async_set_target(area_id, 15.9)
+    coordinator.ai_state["stable"] = 3
+    await coordinator.async_set_target(area_id, 16.4)  # 16.4 - 15.9 is 0.4999... in floats
+    assert coordinator.ai_state["stable"] == 0
+
+
+async def test_heat_today_heats_outside_the_heating_period(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """A cold day in spring: "heat today" is a decision for this one day."""
+    freezer.move_to("2026-05-10 10:00:00+02:00")
+    entry = make_entry()
+    await _setup(hass, entry)
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("sensor.living_room_status").state == "out_of_season"
+    await entry.runtime_data.async_set_override("heat_today")
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+    assert hass.states.get("sensor.living_room_status").state != "out_of_season"
+    # the next nightly decision ends it
+    freezer.move_to("2026-05-11 03:05:00+02:00")
+    await _advance(hass, freezer, 15)
+    assert hass.states.get("sensor.living_room_status").state == "out_of_season"

@@ -506,6 +506,7 @@
       },
       "error": {
         "name_required": "Please enter a name.",
+        "name_in_use": "Another area already has this name. Please choose a unique name (export and import find areas by name).",
         "switch_in_use": "This switch already controls another heating area. Each circuit can belong to one area only: choose another switch, or remove it from the other area first.",
         "min_above_max": "The minimum target must be below the maximum target.",
         "target_out_of_range": "The initial target must be between minimum and maximum.",

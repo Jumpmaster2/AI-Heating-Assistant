@@ -59,7 +59,13 @@ CHECK_SYSTEM = (
 
 
 def _lang_hint(language: str) -> str:
-    return f" Write all reasons and the summary in {LANGUAGES.get(language, 'English')}."
+    """Language of the free text answers: the Home Assistant language, regional
+    variants included (de-CH is German); another code is passed on as it is."""
+    code = (language or "en").strip()
+    name = LANGUAGES.get(code.split("-")[0].split("_")[0].lower())
+    if name is None:
+        name = f"the language with the code '{code}'"
+    return f" Write all reasons and the summary in {name}."
 
 
 def nightly_messages(payload: dict[str, Any], language: str) -> tuple[str, str]:

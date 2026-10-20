@@ -46,3 +46,11 @@ async def test_own_http_client_is_closed_on_unload(
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
     assert created[0].is_closed()
+
+
+def test_request_timeout_grows_with_the_answer_length() -> None:
+    from custom_components.ai_heating_assistant.ai_client import request_timeout
+
+    assert request_timeout(1000) == 120.0
+    assert request_timeout(16000) > 500
+    assert request_timeout(32000) == 600.0

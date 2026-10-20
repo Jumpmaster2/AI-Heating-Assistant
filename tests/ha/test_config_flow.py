@@ -367,6 +367,11 @@ async def test_switch_of_another_area_is_rejected(hass: HomeAssistant, base_stat
     }
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
     assert result["errors"] == {"base": "switch_in_use"}
+    # the name comes first, whatever its case and spaces
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {**user_input, "name": " living ROOM"}
+    )
+    assert result["errors"] == {"name": "name_in_use", "base": "switch_in_use"}
 
     # the area that owns the switch keeps it when it is changed
     living = next(s for s in entry.subentries.values() if s.title == "Living room")

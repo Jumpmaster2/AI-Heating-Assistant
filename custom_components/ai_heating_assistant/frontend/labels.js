@@ -340,6 +340,7 @@ export const LABELS = {
   },
   "area_errors": {
    "name_required": "Bitte einen Namen angeben.",
+   "name_in_use": "Ein anderer Bereich heißt schon so. Bitte einen eindeutigen Namen wählen (Export und Import finden Bereiche über den Namen).",
    "switch_in_use": "Dieser Schalter steuert bereits einen anderen Heizbereich. Jeder Heizkreis gehört zu genau einem Bereich: wähle einen anderen Schalter oder entferne ihn zuerst aus dem anderen Bereich.",
    "min_above_max": "Der kleinste Sollwert muss unter dem größten liegen.",
    "target_out_of_range": "Der Start-Sollwert muss zwischen kleinstem und größtem Sollwert liegen.",
@@ -729,6 +730,7 @@ export const LABELS = {
   },
   "area_errors": {
    "name_required": "Please enter a name.",
+   "name_in_use": "Another area already has this name. Please choose a unique name (export and import find areas by name).",
    "switch_in_use": "This switch already controls another heating area. Each circuit can belong to one area only: choose another switch, or remove it from the other area first.",
    "min_above_max": "The minimum target must be below the maximum target.",
    "target_out_of_range": "The initial target must be between minimum and maximum.",

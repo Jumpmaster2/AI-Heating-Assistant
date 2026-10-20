@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.9. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.10. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -22,7 +22,7 @@ The overview, the learned values and all settings are in the **AI Heating Assist
 * **Short airing:** while a window is open, a circuit that is off does not switch on, even before the window delay is over. A running circuit is not interrupted. If the window was open for at least 2 minutes but shorter than the window delay, a shortened recovery follows: the share of the window delay the window was open, applied to the learned recovery time (3 of 5 minutes gives 60 %). It also ends early once the temperature before airing is reached again.
 * **Minimum on and off times** are always respected.
 * **Frost protection** always applies, also outside the heating period and with the thermostat switched off.
-* **Outages:** if the temperature sensor has no value, the circuit stays off (status *Sensor error*) and frost protection cannot work either. If the switch is unavailable, the status shows *Actuator unavailable*. If such an outage (or one of the outdoor temperature sensor) lasts longer than 15 minutes, a repair appears under Settings > System > Repairs; it disappears by itself once the value is back. A dismissed repair stays dismissed across restarts while the outage lasts. A switch that does not follow its commands is asked again after 1, 2, 4, 8 and then every 15 minutes instead of every minute; after three attempts a repair appears as well.
+* **Outages:** if the temperature sensor has no value or an impossible one (outside −50 to 80 °C, `nan`), the circuit stays off (status *Sensor error*) and frost protection cannot work either. If the switch is unavailable, the status shows *Actuator unavailable*. If such an outage (or one of the outdoor temperature sensor) lasts longer than 15 minutes, a repair appears under Settings > System > Repairs; it disappears by itself once the value is back. A dismissed repair stays dismissed across restarts while the outage lasts. A switch that does not follow its commands is asked again after 1, 2, 4, 8 and then every 15 minutes instead of every minute; after three attempts a repair appears as well.
 * **Heating period:** outside (e.g. 01.04. to 30.09.) all circuits stay off and the AI is not called.
 * **Vacation:** freely selectable entities indicate vacation (e.g. `input_boolean.vacation_mode` or a calendar). Then the vacation temperature applies to all areas. With an optional return entity (e.g. `input_datetime.vacation_end`) preheating starts early enough, based on the learned heat-up rate, to reach the normal target on return. A return time in the past (e.g. vacation switched on manually) is ignored and the vacation temperature applies.
 
@@ -35,17 +35,17 @@ Once per night (time configurable) it is decided whether heating is needed today
 3. A **phase model** decides who leads: *AI leads* (start), *shared* (agreement wins, otherwise the rule if it is sure), *rule leads* (the AI is only asked when the rule is unsure, plus once a week as a control). The phase advances after enough days with high agreement and few rule errors and falls back after errors.
 4. Every day is **evaluated** afterwards. While nothing heated, the real room temperature is the truth (minutes too cold outside airing phases). Once a circuit ran, the decision itself kept the room warm; then a virtual room that keeps cooling with the learned rate and no heating decides. Error A (no heating although needed) and error B (heating without need) adapt `theta` and `puffer`. Days under a manual override are not learned from.
 
-On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (area below target and temperature expected after the lead time long and clearly below it, without airing). The select "Heating day override" overrides the day until the next decision.
+On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (area below target and temperature expected after the lead time long and clearly below it, without airing). The select "Heating day override" overrides the day until the next decision. "Heat today" also works outside the heating period (e.g. on a cold spring day); the AI stays off there.
 
 ### Learning per area
 
 * **Thermal model** (recursive least squares): `dT/dt = a · valve − k · (T_in − T_out) + s · PV`. This yields heat-up rate, cooling rate, influence of the outdoor temperature (`k`) and of the sun (`s`, PV power as sunshine indicator).
 * **Events:** dead time after switching on, overshoot after switching off, recovery time after airing. The dead time only counts once the rise is confirmed (a second sensor step, or one step lasting five minutes), so a single sensor jitter cannot distort it. The recovery time is also learned when heating cuts the wait short, provided the room was warming up by itself at the end of the wait; the thermal model forgets slowly (about three weeks).
-* All values are stored permanently, exposed as sensors and can be exported, imported and reset.
+* All values are stored permanently, exposed as sensors and can be exported, imported and reset. Export and import find areas by name, so every area needs its own name. If the AI limits are narrowed, values outside are set to the limit at the next load (with a logbook entry).
 
 ### AI check (Claude)
 
-* Only on heating days within the heating period. It receives a compact summary per area (actual, target, learned values, statistics since the last check) and returns parameter adjustments as JSON.
+* Only on heating days within the heating period. It receives a compact summary per area (actual, target, learned values, statistics since the last check) and returns parameter adjustments as JSON. It writes its reasons in the language of Home Assistant (regional variants such as en-GB included).
 * **Goal:** as little heat as possible without any area falling below its target. Comfort is a hard limit, not something to trade. Besides the minutes too cold the AI therefore receives:
   * **Overheating** (`over_kh`): Kelvin hours more than 0.2 K above the target while the circuit runs and up to 4 hours after switch-off (heat the heating delivered in excess). Warmth from the sun alone on a day without heating does not count. The share with sun (`sun_over_kh`, PV from 0.3 kW) shows whether the sun factor is too low.
   * **Heating effort per demand** (`on_per_kh`): heating minutes per Kelvin hour of difference between target and outdoor temperature, so checks in different weather can be compared.
@@ -104,7 +104,7 @@ Temperature sensors may report °C, °F or K; without a unit the unit system of 
 | Outdoor temperature sensor | | e.g. `sensor.outdoor_temperature` |
 | Outdoor humidity sensor | | optional, for the ventilation recommendation |
 | Weather entity | | optional, forecast for the nightly run and the expected sun |
-| PV power sensor | | optional, sunshine indicator (W or kW) |
+| PV power sensor | | optional, sunshine indicator (W or kW; without a unit W applies, another unit is ignored with a warning) |
 | PV forecast sensor | | optional, only with the PV power sensor: energy of the next hour (Wh or kWh) or power in one hour (W or kW); without it the weather forecast is used |
 | Heat meter | | optional, meter reading of the circuits controlled here (Wh, kWh, MWh, MJ or GJ); seldom and coarse readings are fine, see [Heat meter](#heat-meter) |
 | Heating period | 01.10. to 31.03. | format DD.MM. |

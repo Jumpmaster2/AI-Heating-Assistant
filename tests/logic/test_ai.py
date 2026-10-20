@@ -148,3 +148,30 @@ def test_prompts_are_compact_json() -> None:
     assert "over_kh" in system and "on_per_kh" in system and "history" in system
     assert "hard limit" in system
     assert "over_kh" in nightly_messages({}, "en")[0]
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [
+        ("de", "in German."),
+        ("de-CH", "in German."),
+        ("en-GB", "in English."),
+        ("fr", "in the language with the code 'fr'."),
+    ],
+)
+def test_prompt_language_follows_home_assistant(language: str, expected: str) -> None:
+    system, _ = nightly_messages({}, language)
+    assert system.endswith(expected)
+
+
+def test_value_outside_narrowed_limits_ends_inside() -> None:
+    """Limits narrowed below the current value: the step limit must not keep it outside."""
+    limits = default_limits()
+    limits["hysteresis_on"] = {"min": 0.1, "max": 0.25, "step": 0.05}
+    current = {"a1": {**CURRENT["a1"], "hysteresis_on": 0.5}, GLOBAL: CURRENT[GLOBAL]}
+    raw = {
+        "adjustments": [{"area": "a1", "parameter": "hysteresis_on", "value": 0.45, "reason": ""}],
+        "summary": "",
+        "confidence": 1,
+    }
+    assert validate_check(raw, current, limits).applied[0].new == 0.25

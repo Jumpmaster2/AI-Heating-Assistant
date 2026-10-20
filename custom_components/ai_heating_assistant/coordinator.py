@@ -34,7 +34,7 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
-from homeassistant.util.unit_conversion import TemperatureConverter
+from homeassistant.util.unit_conversion import PowerConverter, TemperatureConverter
 
 from .ai_client import AiAuthError, AiError, ClaudeClient
 from .const import (
@@ -198,6 +198,7 @@ CMD_RETRY_MIN = (1, 2, 4, 8, 15)  # min before a switch command without effect i
 CMD_ISSUE_ATTEMPTS = 3  # commands without effect before a repair issue
 # Repair issues of this integration (translation keys; the issue id adds the area id).
 SWITCH_OFF_TIMEOUT = 10  # s to wait for a circuit to switch off when control ends
+TEMP_RANGE = (-50.0, 80.0)  # °C a temperature sensor can plausibly report
 FORECAST_TIMEOUT = 10  # s to wait for the weather service
 TARGET_CHANGE_K = 0.5  # target change that makes the AI look again soon
 DECIDE_RETRY_S = 15 * 60  # pause after a failed heating day decision before the next try
@@ -346,7 +347,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._checking = False
         self._tick_count = 0
         self._shut_down = False
-        self._unit_warned: set[str] = set()  # entities already warned about an odd unit
+        self._warned: set[str] = set()  # entities already warned about an odd unit or value
         # switches no area controls any more that are not known to be off yet
         self._pending_release: list[str] = []
         self._missing_since: dict[str, float] = {}  # repair issue id -> start of the outage
@@ -420,6 +421,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return True
         return bool(current.get("heat", True))
 
+    @property
+    def heats_now(self) -> bool:
+        """Heating is allowed: within the heating period, or "heat today" chosen by hand
+        outside it (for that day only; the AI stays off outside the period)."""
+        return self.season_active or self.day_state.get("override") == hd.Override.HEAT
+
     def _eval_settings(self) -> hd.EvalSettings:
         limits = self.limits
         return hd.EvalSettings(
@@ -454,6 +461,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.day_state = stored.get("day", {})
         self.ai_state = stored.get("ai", {})
         self.budget = Budget.from_dict(self.ai_state.get("budget"))
+        # Judged again at the next call: the budget may have been raised meanwhile.
+        self.budget.blocked = False
         self.meter = HeatMeter.from_dict(stored.get("meter"))
         scale = (stored.get("sun") or {}).get("scale")
         self.sun_scale = SunScale(float(scale) if isinstance(scale, int | float) else None)
@@ -478,6 +487,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 str(self.opt(CONF_AI_EFFORT)),
             )
 
+        self._clamp_to_limits()
         self._release_circuits(stored.get("circuits"), stored.get("release"))
         self._drop_stale_issues()
         self._register_listeners()
@@ -555,6 +565,25 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 unit=unit,
             )
         area.start = configured
+
+    def _clamp_to_limits(self) -> None:
+        """Bring the parameters into the AI limits, which may have been narrowed."""
+        limits = self.limits
+        for area in self.areas.values():
+            for key, spec in PARAMS.items():
+                if spec.scope != "area" or key not in limits:
+                    continue
+                old = float(getattr(area.params, key))
+                new = clamp(old, limits[key]["min"], limits[key]["max"])
+                if new != old:
+                    setattr(area.params, key, new)
+                    self._log("limit_clamp", area, parameter=key, old=f"{old:g}", new=f"{new:g}")
+        if "theta" in self.day_state:
+            old = float(self.day_state["theta"])
+            new = clamp(old, limits["theta"]["min"], limits["theta"]["max"])
+            if new != old:
+                self.day_state["theta"] = new
+                self._log("limit_clamp", parameter="theta", old=f"{old:g}", new=f"{new:g}")
 
     @callback
     def _release_circuits(self, stored: Any, pending: Any) -> None:
@@ -747,9 +776,25 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE, ""):
             return None
         try:
-            return float(state.state)
+            value = float(state.state)
         except ValueError:
             return None
+        return value if math.isfinite(value) else None
+
+    def _humidity(self, entity_id: str | None) -> float | None:
+        """Relative humidity in %, None outside 0-100 (defective sensor)."""
+        value = self._float(entity_id)
+        return value if value is None or 0 <= value <= 100 else self._implausible(entity_id, value)
+
+    def _implausible(self, entity_id: str | None, value: float) -> None:
+        """Ignore an impossible reading; warn once per entity."""
+        self._warn_once(
+            f"{entity_id} value",
+            "%s reports the implausible value %s; it is ignored",
+            entity_id,
+            value,
+        )
+        return None
 
     def _temp(self, entity_id: str | None) -> float | None:
         """Temperature of a sensor in °C, whatever unit the sensor reports."""
@@ -758,7 +803,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return None
         state = self._state(entity_id)
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
-        return self._to_celsius(value, unit, str(entity_id))
+        celsius = self._to_celsius(value, unit, str(entity_id))
+        if celsius is not None and not TEMP_RANGE[0] <= celsius <= TEMP_RANGE[1]:
+            return self._implausible(entity_id, value)
+        return celsius
 
     def _to_celsius(self, value: float, unit: str | None, source: str) -> float | None:
         """Convert a temperature to °C. Without a unit the unit system of HA applies;
@@ -769,14 +817,13 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         try:
             return TemperatureConverter.convert(value, unit, UnitOfTemperature.CELSIUS)
         except HomeAssistantError:
-            if source not in self._unit_warned:
-                self._unit_warned.add(source)
-                LOGGER.warning(
-                    "%s reports the unit %r instead of a temperature unit (°C, °F or K); "
-                    "its value is ignored",
-                    source,
-                    unit,
-                )
+            self._warn_once(
+                source,
+                "%s reports the unit %r instead of a temperature unit (°C, °F or K); "
+                "its value is ignored",
+                source,
+                unit,
+            )
             return None
 
     def _is_on(self, entity_id: str | None) -> bool:
@@ -798,11 +845,26 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if value is None:
             return None
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
-        if unit == UnitOfPower.KILO_WATT:
-            return max(0.0, value)
-        if unit == UnitOfPower.MEGA_WATT:
-            return max(0.0, value * 1000)
-        return max(0.0, value / 1000)
+        if not unit:
+            self._warn_once(entity_id, "%s reports no unit; its value is read as W", entity_id)
+            unit = UnitOfPower.WATT
+        try:
+            kw = PowerConverter.convert(value, unit, UnitOfPower.KILO_WATT)
+        except HomeAssistantError:
+            self._warn_once(
+                entity_id,
+                "%s reports the unit %r instead of a power unit (W, kW); its value is ignored",
+                entity_id,
+                unit,
+            )
+            return None
+        return max(0.0, kw)
+
+    def _warn_once(self, key: str, message: str, *args: Any) -> None:
+        """A sensor reporting odd units or values is logged once, not every minute."""
+        if key not in self._warned:
+            self._warned.add(key)
+            LOGGER.warning(message, *args)
 
     def _return_ts(self) -> float | None:
         state = self._state(self.opt(CONF_RETURN_ENTITY))
@@ -897,6 +959,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             self._pv_missing_min, self._pv_warned = 0.0, False
         self.pv_assumed = self.pv_kw if self.pv_kw is not None else (self._pv_estimate(ts) or 0.0)
         self.season_active = self._season()
+        self.budget.roll(dt_util.now().strftime("%Y-%m"))  # the cost sensor shows the new month
         self.vacation = any(self._is_on(e) for e in self.opt(CONF_VACATION_ENTITIES) or [])
         return_ts = self._return_ts() if self.vacation else None
         heating_day = self.heating_day
@@ -955,6 +1018,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         state = self._state(entity_id)
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
         kwh = None if value is None else to_kwh(value, unit)
+        if value is not None and kwh is None:
+            self._warn_once(
+                entity_id,
+                "%s reports the unit %r instead of an energy unit (Wh, kWh, MWh, MJ, GJ); "
+                "the heat is not counted",
+                entity_id,
+                unit,
+            )
         if kwh is not None:
             self.meter.update(kwh, ts)
             for name in ("check", "day", "today", "month"):  # periods start with the first reading
@@ -1088,7 +1159,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     ) -> None:
         cfg = area.cfg
         area.temp = self._temp(cfg.get(CONF_TEMP_SENSOR))
-        area.humidity = self._float(cfg.get(CONF_HUMIDITY_SENSOR))
+        area.humidity = self._humidity(cfg.get(CONF_HUMIDITY_SENSOR))
         area.window_open = any(self._is_on(w) for w in cfg.get(CONF_WINDOWS) or [])
 
         if area.has_circuit:
@@ -1150,7 +1221,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 temp=area.temp,
                 target=target,
                 hvac_on=area.hvac_on,
-                season_active=self.season_active,
+                season_active=self.heats_now,
                 heating_day=heating_day or area.preheat,
                 frost_temp=float(self.opt(CONF_FROST_TEMP)),
                 window_open=area.window_open,
@@ -1317,19 +1388,17 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         indoor_ref = bool(cfg.get(CONF_REF_TEMP))
         if indoor_ref:
             ref_temp = self._temp(cfg.get(CONF_REF_TEMP))
-            ref_hum = self._float(cfg.get(CONF_REF_HUMIDITY))
+            ref_hum = self._humidity(cfg.get(CONF_REF_HUMIDITY))
         else:
             ref_temp = self.outdoor_temp
-            ref_hum = self._float(self.opt(CONF_OUTDOOR_HUMIDITY))
+            ref_hum = self._humidity(self.opt(CONF_OUTDOOR_HUMIDITY))
             if ref_hum is None and (weather := self._state(self.opt(CONF_WEATHER))):
                 humidity = weather.attributes.get("humidity")
                 ref_hum = float(humidity) if isinstance(humidity, int | float) else None
         hour = dt_util.now().hour
         start, end = int(self.opt(CONF_NIGHT_START)), int(self.opt(CONF_NIGHT_END))
         is_night = (hour >= start or hour < end) if start > end else (start <= hour < end)
-        heating_active = (
-            self.season_active and heating_day and (area.hvac_on or not area.has_circuit)
-        )
+        heating_active = self.heats_now and heating_day and (area.hvac_on or not area.has_circuit)
         area.ventilation = recommend(
             VentilationInput(
                 temp=area.temp,
@@ -1359,7 +1428,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     async def async_set_target(self, area_id: str, value: float) -> None:
         area = self.areas[area_id]
         old, area.target = area.target, round(float(value), 2)
-        if abs(area.target - old) >= TARGET_CHANGE_K:
+        if round(abs(area.target - old), 2) >= TARGET_CHANGE_K:  # 16.4 - 15.9 < 0.5
             self._config_changed()
         else:
             # Small steps (often from automations) would otherwise keep the AI interval

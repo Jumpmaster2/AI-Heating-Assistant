@@ -16,7 +16,14 @@ from homeassistant.helpers.httpx_client import get_async_client
 
 from .const import FALLBACK_BETA, FALLBACK_MODELS, LOGGER
 
-REQUEST_TIMEOUT = 120.0
+REQUEST_TIMEOUT = 120.0  # s at least for one answer
+MAX_REQUEST_TIMEOUT = 600.0
+OUTPUT_TOKENS_PER_S = 30  # slow end of the output speed, thinking included
+
+
+def request_timeout(max_tokens: int) -> float:
+    """Seconds to wait for an answer of up to max_tokens tokens."""
+    return min(MAX_REQUEST_TIMEOUT, max(REQUEST_TIMEOUT, max_tokens / OUTPUT_TOKENS_PER_S))
 
 
 class AiError(Exception):
@@ -118,7 +125,8 @@ class ClaudeClient:
                 output_config=output_config,  # type: ignore[arg-type]
                 extra_headers=extra_headers or None,
                 extra_body=extra_body or None,
-                timeout=REQUEST_TIMEOUT,
+                # A long answer (up to max_tokens) must be able to arrive.
+                timeout=request_timeout(max_tokens),
             )
         except anthropic.AuthenticationError as err:
             raise AiAuthError("authentication failed") from err

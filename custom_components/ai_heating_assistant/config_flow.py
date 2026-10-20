@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import voluptuous as vol
@@ -12,6 +12,7 @@ from homeassistant.config_entries import (
     ConfigEntryState,
     ConfigFlow,
     ConfigFlowResult,
+    ConfigSubentry,
     ConfigSubentryFlow,
     FlowType,
     OptionsFlow,
@@ -735,23 +736,30 @@ def keep_start_values(data: Any) -> dict[str, Any]:
     return {k: data[k] for k in START_KEYS if k in data}
 
 
-def _used_switches(entry: ConfigEntry, exclude: str | None = None) -> set[str]:
-    """Heating circuit switches of the areas of an entry, except one area."""
-    return {
-        sub.data[CONF_SWITCH]
+def _other_areas(entry: ConfigEntry, exclude: str | None = None) -> list[ConfigSubentry]:
+    """The areas of an entry, except one area (the one being changed)."""
+    return [
+        sub
         for sub in entry.subentries.values()
-        if sub.subentry_type == SUBENTRY_AREA
-        and sub.subentry_id != exclude
-        and sub.data.get(CONF_SWITCH)
-    }
+        if sub.subentry_type == SUBENTRY_AREA and sub.subentry_id != exclude
+    ]
 
 
-def _validate_area(data: dict[str, Any], used_switches: set[str] | None = None) -> dict[str, str]:
-    """Errors of an area form; the first problem found is the one reported."""
+def _name_key(name: Any) -> str:
+    return str(name or "").strip().casefold()
+
+
+def _validate_area(data: dict[str, Any], others: Sequence[ConfigSubentry] = ()) -> dict[str, str]:
+    """Errors of an area form, against the other areas of the entry. One error is
+    shown at a time, in this order: name, switch, targets, reference."""
     errors: dict[str, str] = {}
     if not data.get(CONF_AREA_NAME):
         errors[CONF_AREA_NAME] = "name_required"
-    if data.get(CONF_SWITCH) and data[CONF_SWITCH] in (used_switches or set()):
+    elif _name_key(data[CONF_AREA_NAME]) in {_name_key(o.title) for o in others}:
+        # export and import find an area by its name
+        errors[CONF_AREA_NAME] = "name_in_use"
+    used_switches = {o.data[CONF_SWITCH] for o in others if o.data.get(CONF_SWITCH)}
+    if data.get(CONF_SWITCH) and data[CONF_SWITCH] in used_switches:
         # two areas switching one circuit would work against each other
         errors.setdefault("base", "switch_in_use")
     low, high = float(data.get(CONF_MIN_TARGET, 16)), float(data.get(CONF_MAX_TARGET, 24))
@@ -772,7 +780,7 @@ class AreaSubentryFlow(ConfigSubentryFlow):
         values: dict[str, Any] = {}
         if user_input is not None:
             values = _flatten(user_input)
-            errors = _validate_area(values, _used_switches(self._get_entry()))
+            errors = _validate_area(values, _other_areas(self._get_entry()))
             if not errors:
                 return self.async_create_entry(title=values[CONF_AREA_NAME], data=values)
         return self.async_show_form(step_id="user", data_schema=_area_schema(values), errors=errors)
@@ -794,7 +802,7 @@ class AreaSubentryFlow(ConfigSubentryFlow):
             edited = user_input.pop(SECTION_LEARNED, None) or {}
             # the start values were set when the area was created and stay as they are
             values = {**_flatten(user_input), **keep_start_values(subentry.data)}
-            errors = _validate_area(values, _used_switches(entry, subentry.subentry_id))
+            errors = _validate_area(values, _other_areas(entry, subentry.subentry_id))
             if not errors:
                 if coordinator is not None and edited:
                     coordinator.set_learned(subentry.subentry_id, edited)

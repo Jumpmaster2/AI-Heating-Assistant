@@ -266,9 +266,7 @@ class AiCostSensor(GlobalEntity, SensorEntity):
 
     @property
     def native_value(self) -> float:
-        budget = self.coordinator.budget
-        budget.roll(dt_util.now().strftime("%Y-%m"))
-        return round(budget.spent, 4)
+        return round(self.coordinator.budget.spent, 4)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

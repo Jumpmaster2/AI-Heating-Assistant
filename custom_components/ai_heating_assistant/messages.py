@@ -90,6 +90,10 @@ _TEXTS: dict[str, dict[str, str]] = {
         "de": "Außentemperatursensor {entity_id} liefert seit 15 Minuten keinen Wert; Vorhersage und Lernen sind eingeschränkt.",
         "en": "Outdoor temperature sensor {entity_id} has had no value for 15 minutes; prediction and learning are limited.",
     },
+    "limit_clamp": {
+        "de": "{parameter}: {old} -> {new}, weil die KI-Grenzen geändert wurden.",
+        "en": "{parameter}: {old} -> {new} because the AI limits were changed.",
+    },
     "circuit_released": {
         "de": "Schalter {entity_id} gehört zu keinem Heizbereich mehr und wurde ausgeschaltet.",
         "en": "Switch {entity_id} no longer belongs to a heating area and was switched off.",
