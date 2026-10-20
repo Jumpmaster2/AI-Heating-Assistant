@@ -25,7 +25,8 @@ GENERAL = {
 }
 VACATION = {"vacation_entities": [], "vacation_temperature": 18.0, "preheat_reserve": 30}
 DECISION = {"theta_start": 15.5}
-AI = {"model": "claude-sonnet-5-5", "nightly_time": "03:00:00", "monthly_budget": 5.0}
+AI = {"nightly_time": "03:00:00"}
+AI_MODEL = {"model": "claude-sonnet-5-5", "monthly_budget": 5.0}
 
 
 async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> None:
@@ -58,9 +59,9 @@ async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> No
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
     assert entry.data == {"api_key": ""}
-    assert entry.options["model"] == "claude-sonnet-5-5"
-    # prices follow the chosen model
-    assert entry.options["price_input"] == 2.0
+    # without a key no model is asked for: the defaults stay
+    assert entry.options["model"] == "claude-opus-5-5"
+    assert entry.options["price_input"] == 4.0
     assert entry.options["season_start"] == "01.10."
     assert entry.options["theta_start"] == 15.5
     # the flow continues with the first heating area
@@ -95,9 +96,16 @@ async def test_api_key_is_validated(hass: HomeAssistant, base_states) -> None:
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {**AI, "api_key": "good-key"}
         )
+        # with a key: model and budget follow
+        assert result["step_id"] == "ai_model"
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], AI_MODEL)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["result"].data["api_key"] == "good-key"
+    entry = result["result"]
+    assert entry.data["api_key"] == "good-key"
+    assert entry.options["model"] == "claude-sonnet-5-5"
+    assert entry.options["price_input"] == 2.0  # prices follow the chosen model
+    assert entry.options["nightly_time"] == "03:00:00"
 
 
 async def test_subentry_flow_adds_area(hass: HomeAssistant, base_states) -> None:

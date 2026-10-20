@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.12. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.13. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -80,7 +80,7 @@ Per area (also without heating circuit) from the absolute humidity inside and ou
 3. Download **AI Heating Assistant** and restart Home Assistant.
 4. **Settings > Devices & services > Add integration > AI Heating Assistant**.
 
-Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (optional, without a key only the local control runs).
+Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (optional, without a key only the local control runs). During setup the AI step only asks for the key and the time of the nightly run; model and monthly budget follow only once a key was entered and accepted.
 
 ## Configuration
 

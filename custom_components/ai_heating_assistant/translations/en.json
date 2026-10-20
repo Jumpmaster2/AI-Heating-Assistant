@@ -63,17 +63,25 @@
       },
       "ai": {
         "title": "AI (Claude)",
-        "description": "The AI checks the parameters periodically. Without an API key only the local control runs.",
+        "description": "The AI checks the parameters periodically. Without an API key only the local control runs; the nightly run decides with the local rule then.",
         "data": {
           "api_key": "Anthropic API key",
-          "model": "Claude model",
-          "nightly_time": "Time of the nightly run",
-          "monthly_budget": "Monthly budget"
+          "nightly_time": "Time of the nightly run"
         },
         "data_description": {
           "api_key": "Optional. Without a key the local control runs alone. The key is only stored in Home Assistant and never logged.",
+          "nightly_time": "Daily decision whether heating is needed today (also the start of the evaluated day). Runs with and without the AI."
+        }
+      },
+      "ai_model": {
+        "title": "AI model and budget",
+        "description": "The key was accepted. Choose the model and how much the AI may cost per month.",
+        "data": {
+          "model": "Claude model",
+          "monthly_budget": "Monthly budget"
+        },
+        "data_description": {
           "model": "Model for all AI calls. Prices below are suggestions for the selected model and can be changed.",
-          "nightly_time": "Daily decision whether heating is needed today (also the start of the evaluated day).",
           "monthly_budget": "In US dollars, as Anthropic bills. No AI calls once the costs of the month reach this value (until the month changes)."
         }
       },

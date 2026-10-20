@@ -63,17 +63,25 @@
       },
       "ai": {
         "title": "KI (Claude)",
-        "description": "Die KI prüft periodisch die Parameter. Ohne API-Key läuft nur die lokale Regelung.",
+        "description": "Die KI prüft die Parameter regelmäßig. Ohne API-Key läuft nur die lokale Regelung; der Nachtlauf entscheidet dann mit der lokalen Regel.",
         "data": {
           "api_key": "Anthropic API-Key",
-          "model": "Claude-Modell",
-          "nightly_time": "Uhrzeit des Nachtlaufs",
-          "monthly_budget": "Monatsbudget"
+          "nightly_time": "Uhrzeit des Nachtlaufs"
         },
         "data_description": {
           "api_key": "Optional. Ohne Key läuft nur die lokale Regelung. Der Key wird nur in Home Assistant gespeichert und nie protokolliert.",
+          "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des ausgewerteten Tages). Läuft mit und ohne KI."
+        }
+      },
+      "ai_model": {
+        "title": "KI-Modell und Budget",
+        "description": "Der Key wurde angenommen. Wähle das Modell und wie viel die KI im Monat kosten darf.",
+        "data": {
+          "model": "Claude-Modell",
+          "monthly_budget": "Monatsbudget"
+        },
+        "data_description": {
           "model": "Modell für alle KI-Abfragen. Die Preise sind Vorschläge für das gewählte Modell und änderbar.",
-          "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des bewerteten Tages).",
           "monthly_budget": "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel)."
         }
       },

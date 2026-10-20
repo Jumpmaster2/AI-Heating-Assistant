@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.12. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.13. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -80,7 +80,7 @@ Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder ei
 3. **AI Heating Assistant** herunterladen und Home Assistant neu starten.
 4. **Einstellungen > Geräte & Dienste > Integration hinzufügen > AI Heating Assistant**.
 
-Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von Anthropic (optional, ohne Key läuft nur die lokale Regelung).
+Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von Anthropic (optional, ohne Key läuft nur die lokale Regelung). Bei der Einrichtung fragt der KI-Schritt nur den Key und die Uhrzeit des Nachtlaufs; Modell und Monatsbudget folgen erst, wenn ein Key eingegeben und angenommen wurde.
 
 ## Konfiguration
 

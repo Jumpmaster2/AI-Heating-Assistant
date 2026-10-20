@@ -478,6 +478,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
+        self._api_key = ""
 
     @staticmethod
     @callback
@@ -522,29 +523,47 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(step_id="decision", data_schema=_decision_schema({}))
 
     async def async_step_ai(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Key (optional) and the nightly run, which also runs without the AI. Model and
+        budget only follow with a key."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            api_key = str(user_input.pop(CONF_API_KEY, "") or "").strip()
-            options = {**DEFAULTS, **self._options, **user_input}
-            options = _with_price_suggestions({CONF_AI_MODEL: DEFAULTS[CONF_AI_MODEL]}, options)
-            if api_key:
-                error = await _check_api_key(self.hass, api_key, str(options[CONF_AI_MODEL]))
-                if error:
-                    errors["base"] = error
-            if not errors:
-                options[CONF_LIMITS] = default_limits()
-                return self.async_create_entry(
-                    title=NAME, data={CONF_API_KEY: api_key}, options=options
-                )
+            self._api_key = str(user_input.pop(CONF_API_KEY, "") or "").strip()
+            self._options.update(user_input)
+            if not self._api_key:
+                return self._create_entry()
+            error = await _check_api_key(self.hass, self._api_key, str(DEFAULTS[CONF_AI_MODEL]))
+            if error:
+                errors["base"] = error
+            else:
+                return await self.async_step_ai_model()
         schema = vol.Schema(
             {
                 vol.Optional(CONF_API_KEY): TextSelector(
                     TextSelectorConfig(type=TextSelectorType.PASSWORD)
                 ),
-                **_ai_basic_fields(user_input or {}),
+                _req(CONF_NIGHTLY_TIME, user_input or {}): TimeSelector(),
             }
         )
         return self.async_show_form(step_id="ai", data_schema=schema, errors=errors)
+
+    async def async_step_ai_model(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        if user_input is not None:
+            self._options.update(user_input)
+            return self._create_entry()
+        schema = vol.Schema(
+            {k: v for k, v in _ai_basic_fields({}).items() if str(k) != CONF_NIGHTLY_TIME}
+        )
+        return self.async_show_form(step_id="ai_model", data_schema=schema)
+
+    def _create_entry(self) -> ConfigFlowResult:
+        options = {**DEFAULTS, **self._options}
+        options = _with_price_suggestions({CONF_AI_MODEL: DEFAULTS[CONF_AI_MODEL]}, options)
+        options[CONF_LIMITS] = default_limits()
+        return self.async_create_entry(
+            title=NAME, data={CONF_API_KEY: self._api_key}, options=options
+        )
 
     async def async_on_create_entry(self, result: ConfigFlowResult) -> ConfigFlowResult:
         """Directly continue with the first heating area."""
