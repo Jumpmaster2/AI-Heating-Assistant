@@ -180,7 +180,7 @@ from .logic.ventilation import (
     is_blocking,
     recommend,
 )
-from .messages import text
+from .messages import label_of, text
 
 SAVE_DELAY = 30
 HISTORY_DAYS = 60
@@ -586,13 +586,24 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 new = clamp(old, limits[key]["min"], limits[key]["max"])
                 if new != old:
                     setattr(area.params, key, new)
-                    self._log("limit_clamp", area, parameter=key, old=f"{old:g}", new=f"{new:g}")
+                    self._log(
+                        "limit_clamp",
+                        area,
+                        parameter=label_of(self.language, "parameter", key),
+                        old=f"{old:g}",
+                        new=f"{new:g}",
+                    )
         # also the configured start value, as long as nothing was learned
         old = self.theta
         new = clamp(old, limits["theta"]["min"], limits["theta"]["max"])
         if new != old:
             self.day_state["theta"] = new
-            self._log("limit_clamp", parameter="theta", old=f"{old:g}", new=f"{new:g}")
+            self._log(
+                "limit_clamp",
+                parameter=label_of(self.language, "parameter", "theta"),
+                old=f"{old:g}",
+                new=f"{new:g}",
+            )
 
     @callback
     def _release_circuits(self, stored: Any, pending: Any) -> None:
@@ -1714,8 +1725,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._log(
             "heating_day",
             decision=text(self.language, "yes" if heat else "no"),
-            source=source,
-            phase=phase,
+            source=label_of(self.language, "source", source),
+            phase=label_of(self.language, "phase", phase),
             reason=reason,
         )
         if self.heating_day and self.ai_enabled:  # honours a manual override
@@ -1806,10 +1817,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._log(
             "evaluation",
             date=record.date,
-            need=need,
-            err_final=record.err_final or "-",
-            err_rule=record.err_rule or "-",
-            err_ai=record.err_ai or "-",
+            need=label_of(self.language, "need", need),
+            err_final=label_of(self.language, "error", record.err_final),
+            err_rule=label_of(self.language, "error", record.err_rule),
+            # no AI that day: no error to show
+            err_ai="-" if record.ai is None else label_of(self.language, "error", record.err_ai),
         )
 
         phase = self.phase
@@ -1819,7 +1831,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if new_phase != phase:
             self.day_state["phase"] = new_phase
             self.day_state["phase_since"] = dt_util.now().date().isoformat()
-            self._log("phase_change", old=phase, new=new_phase)
+            self._log(
+                "phase_change",
+                old=label_of(self.language, "phase", phase),
+                new=label_of(self.language, "phase", new_phase),
+            )
         for area in self.areas.values():
             area.day = hd.DayAreaStats()
 
@@ -2087,7 +2103,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     self._log(
                         "ai_adjust",
                         area,
-                        parameter=adj.parameter,
+                        parameter=label_of(self.language, "parameter", adj.parameter),
                         old=adj.old,
                         new=adj.new,
                         clamped=text(self.language, "clamped") if adj.clamped else "",

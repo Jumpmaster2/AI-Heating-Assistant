@@ -216,7 +216,7 @@ async def test_periodic_check_adjusts_within_limits(
         assert mock.call_count == 2
     area = next(iter(coordinator.areas.values()))
     assert area.params.hysteresis_on == pytest.approx(0.3)  # 0.2 + max step 0.1
-    assert any("hysteresis_on" in e.data["message"] for e in events)
+    assert any("switch-on hysteresis" in e.data["message"] for e in events)  # readable name
     assert coordinator.ai_state["last_rejected"]
     assert coordinator.ai_state["next_check"] is not None
 

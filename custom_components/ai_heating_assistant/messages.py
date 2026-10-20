@@ -105,6 +105,53 @@ _TEXTS: dict[str, dict[str, str]] = {
 }
 
 
+# Values shown in logbook texts instead of internal keys.
+_VALUES: dict[str, dict[str, dict[str, str]]] = {
+    "source": {
+        "ai": {"de": "KI", "en": "AI"},
+        "rule": {"de": "Regel", "en": "rule"},
+        "rule_fallback": {"de": "Regel ohne KI", "en": "rule without AI"},
+        "agreement": {"de": "Regel und KI einig", "en": "rule and AI agree"},
+        "vacation_rule": {"de": "Regel im Urlaub", "en": "rule on vacation"},
+        "season": {"de": "außerhalb der Heizperiode", "en": "outside the heating period"},
+        "override": {"de": "von Hand", "en": "set by hand"},
+    },
+    "phase": {
+        "ai_leads": {"de": "KI führt", "en": "AI leads"},
+        "shared": {"de": "gemeinsam", "en": "shared"},
+        "rule_leads": {"de": "Regel führt", "en": "rule leads"},
+    },
+    "need": {
+        "yes": {"de": "ja", "en": "yes"},
+        "no": {"de": "nein", "en": "no"},
+        "unclear": {"de": "unklar", "en": "unclear"},
+    },
+    "error": {
+        "A": {"de": "zu kalt ohne Heizen", "en": "too cold without heating"},
+        "B": {"de": "unnötig geheizt", "en": "heated without need"},
+        "": {"de": "keiner", "en": "none"},
+    },
+    "parameter": {
+        "hysteresis_on": {"de": "Einschalt-Hysterese", "en": "switch-on hysteresis"},
+        "hysteresis_off": {"de": "Ausschalt-Hysterese", "en": "switch-off hysteresis"},
+        "overshoot_factor": {"de": "Überschwing-Faktor", "en": "overshoot factor"},
+        "lead_factor": {"de": "Vorlauf-Faktor", "en": "lead factor"},
+        "sun_factor": {"de": "Sonnenfaktor", "en": "sun factor"},
+        "window_delay_min": {"de": "Fensterverzögerung", "en": "window delay"},
+        "recovery_bias_min": {"de": "Erholungszeit-Zuschlag", "en": "recovery time offset"},
+        "puffer": {"de": "Reserve über Sollwert", "en": "margin above target"},
+        "theta": {"de": "Heizgrenze", "en": "heating threshold"},
+    },
+}
+
+
+def label_of(language: str, group: str, key: Any) -> str:
+    """Readable name of an internal value (source, phase, need, error, parameter)."""
+    lang = "de" if language.lower().startswith("de") else "en"
+    entry = _VALUES.get(group, {}).get(str(key or ""))
+    return entry[lang] if entry else str(key)
+
+
 def text(language: str, key: str, **kwargs: Any) -> str:
     """Return the localised text."""
     lang = "de" if language.lower().startswith("de") else "en"
