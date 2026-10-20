@@ -1,0 +1,73 @@
+"""What happens to the circuits when the integration stops controlling them."""
+
+from __future__ import annotations
+
+from datetime import timedelta
+
+from freezegun.api import FrozenDateTimeFactory
+from homeassistant.config_entries import ConfigEntryDisabler
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import (
+    async_capture_events,
+    async_fire_time_changed,
+)
+
+from custom_components.ai_heating_assistant.const import EVENT_LOGBOOK
+
+from .conftest import IN_SEASON, make_entry
+
+CIRCUIT = "input_boolean.heating_circuit_1"
+
+
+async def _setup_heating(hass: HomeAssistant, freezer: FrozenDateTimeFactory):
+    """Set up and run until the circuit of the living room heats (19 °C, target 21 °C)."""
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    for _ in range(11):
+        freezer.tick(timedelta(minutes=1))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(CIRCUIT).state == "on"
+    return entry
+
+
+async def test_disabling_switches_the_circuits_off(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await _setup_heating(hass, freezer)
+    assert await hass.config_entries.async_set_disabled_by(entry.entry_id, ConfigEntryDisabler.USER)
+    await hass.async_block_till_done()
+    assert hass.states.get(CIRCUIT).state == "off"
+
+
+async def test_removing_switches_the_circuits_off(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await _setup_heating(hass, freezer)
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(CIRCUIT).state == "off"
+
+
+async def test_reload_keeps_the_circuits_running(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await _setup_heating(hass, freezer)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(CIRCUIT).state == "on"
+
+
+async def test_circuit_of_a_deleted_area_is_switched_off(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    entry = await _setup_heating(hass, freezer)
+    events = async_capture_events(hass, EVENT_LOGBOOK)
+    living = next(s for s in entry.subentries.values() if s.title == "Living room")
+    hass.config_entries.async_remove_subentry(entry, living.subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(CIRCUIT).state == "off"
+    assert any(CIRCUIT in e.data["message"] for e in events)

@@ -8,8 +8,17 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_PUFFER_DOWN, CONF_THETA_DOWN, DOMAIN, PLATFORMS, STORAGE_VERSION
-from .coordinator import AiHeatingConfigEntry, HeatingCoordinator
+from .const import (
+    CONF_PUFFER_DOWN,
+    CONF_SWITCH,
+    CONF_THETA_DOWN,
+    DOMAIN,
+    LOGGER,
+    PLATFORMS,
+    STORAGE_VERSION,
+    SUBENTRY_AREA,
+)
+from .coordinator import AiHeatingConfigEntry, HeatingCoordinator, async_turn_off_switches
 from .entity import global_device_info
 from .panel import async_register_panel, async_unregister_panel
 from .services import async_setup_services
@@ -65,6 +74,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: AiHeatingConfigEntr
 
 async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> bool:
     """Unload a config entry."""
+    if entry.disabled_by is not None:
+        # Disabled (not a reload): nothing controls the circuits any more.
+        await _async_switch_off_circuits(hass, entry, "disabled")
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         await entry.runtime_data.async_shutdown()
@@ -72,6 +84,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
-    """Delete stored learning data and the panel when the integration is removed."""
+    """Switch off the circuits and delete stored learning data and the panel when the
+    integration is removed."""
+    await _async_switch_off_circuits(hass, entry, "removed")
     async_unregister_panel(hass)
     await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()
+
+
+async def _async_switch_off_circuits(
+    hass: HomeAssistant, entry: AiHeatingConfigEntry, reason: str
+) -> None:
+    """Switch off every circuit of the entry that is on (a circuit left on would heat
+    without limit once nothing controls it)."""
+    switches = [
+        sub.data[CONF_SWITCH]
+        for sub in entry.subentries.values()
+        if sub.subentry_type == SUBENTRY_AREA and sub.data.get(CONF_SWITCH)
+    ]
+    for entity_id in await async_turn_off_switches(hass, switches):
+        LOGGER.info("Switched off %s: %s was %s", entity_id, entry.title, reason)

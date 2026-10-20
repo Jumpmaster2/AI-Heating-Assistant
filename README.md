@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.11.2. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.11.3. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -188,6 +188,12 @@ data:
         params:
           hysteresis_on: 0.2
 ```
+
+## Deaktivieren und Deinstallation
+
+Wird die Integration deaktiviert oder entfernt, schaltet sie alle eingeschalteten Heizkreise aus; sonst würde ein gerade laufender Kreis ohne Grenze weiterheizen. Dasselbe gilt für den Schalter eines gelöschten Heizbereichs und für einen Schalter, der in einem Bereich durch einen anderen ersetzt wurde. Ein Neuladen (z. B. nach einer Änderung der Einstellungen) oder ein Neustart von Home Assistant lässt die Kreise unverändert.
+
+Beim Entfernen werden außerdem die gelernten Werte (`.storage/ai_heating_assistant.<entry_id>`) und die Seite in der Seitenleiste gelöscht. Danach den Ordner `custom_components/ai_heating_assistant` entfernen (bzw. in HACS „Entfernen“ wählen) und Home Assistant neu starten.
 
 ## Entwicklung
 

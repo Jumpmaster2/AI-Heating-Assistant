@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -189,6 +190,7 @@ OUTAGE_ISSUE_S = 15 * 60  # s a sensor or switch may be missing before a repair 
 CMD_RETRY_MIN = (1, 2, 4, 8, 15)  # min before a switch command without effect is repeated
 CMD_ISSUE_ATTEMPTS = 3  # commands without effect before a repair issue
 # Repair issues of this integration (translation keys; the issue id adds the area id).
+SWITCH_OFF_TIMEOUT = 10  # s to wait for a circuit to switch off when control ends
 ISSUE_KEYS = (
     "sensor_unavailable",
     "actuator_unavailable",
@@ -465,6 +467,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 str(self.opt(CONF_AI_EFFORT)),
             )
 
+        self._release_circuits(stored.get("circuits"))
         self._register_listeners()
         nightly = _parse_time(str(self.opt(CONF_NIGHTLY_TIME)))
         self._unsubs.append(
@@ -540,6 +543,25 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 unit=unit,
             )
         area.start = configured
+
+    @callback
+    def _release_circuits(self, stored: Any) -> None:
+        """Switch off circuits of the last run that no area controls any more (area
+        deleted or another switch chosen); otherwise one left on would heat forever."""
+        if not isinstance(stored, dict):
+            return
+        current = {a.cfg[CONF_SWITCH] for a in self.areas.values() if a.has_circuit}
+        dropped = sorted({s for s in stored.values() if isinstance(s, str)} - current)
+        if not dropped:
+            return
+
+        async def release() -> None:
+            for entity_id in await async_turn_off_switches(self.hass, dropped):
+                self._log("circuit_released", entity_id=entity_id)
+
+        self.config_entry.async_create_background_task(
+            self.hass, release(), f"{DOMAIN} release circuits"
+        )
 
     def _forget_check_history(self, area: Area) -> None:
         """Earlier checks of an area say nothing about its values after a reset."""
@@ -802,6 +824,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "day": self.day_state,
             "ai": self.ai_state,
             "sun": {"scale": self.sun_scale.value},
+            # switches controlled by this run: one dropped later is switched off
+            "circuits": {
+                a.area_id: a.cfg[CONF_SWITCH] for a in self.areas.values() if a.has_circuit
+            },
             "meter": self.meter.as_dict(),
         }
 
@@ -2096,6 +2122,32 @@ def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[
             # An imported value is a deliberate one: it counts as an observation, so a
             # later start value only replaces it when the configuration changes.
             ewma.count = max(1, int(counts.get(count_key, 0) or 0))
+
+
+async def async_turn_off_switches(hass: HomeAssistant, entity_ids: list[str]) -> list[str]:
+    """Switch off the given circuits that are on; returns those switched off.
+
+    Used when nothing controls a circuit any more (integration disabled or removed,
+    area deleted): a circuit left on would heat without limit.
+    """
+    switched = []
+    for entity_id in entity_ids:
+        state = hass.states.get(entity_id)
+        if state is None or state.state != STATE_ON:
+            continue
+        try:
+            async with asyncio.timeout(SWITCH_OFF_TIMEOUT):
+                await hass.services.async_call(
+                    entity_id.split(".", 1)[0],
+                    "turn_off",
+                    {ATTR_ENTITY_ID: entity_id},
+                    blocking=True,
+                )
+        except (HomeAssistantError, TimeoutError) as err:
+            LOGGER.warning("Could not switch off %s: %s", entity_id, err)
+            continue
+        switched.append(entity_id)
+    return switched
 
 
 def _parse_time(value: str) -> time:

@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.2. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.3. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -188,6 +188,12 @@ data:
         params:
           hysteresis_on: 0.2
 ```
+
+## Disabling and uninstalling
+
+When the integration is disabled or removed, it switches off every circuit that is on; otherwise a running circuit would keep heating without limit. The same applies to the switch of a deleted heating area and to a switch that was replaced by another one in an area. A reload (e.g. after changing settings) or a restart of Home Assistant leaves the circuits as they are.
+
+Removing the integration also deletes the learned values (`.storage/ai_heating_assistant.<entry_id>`) and the sidebar page. Afterwards remove the folder `custom_components/ai_heating_assistant` (or choose "Remove" in HACS) and restart Home Assistant.
 
 ## Development
 
