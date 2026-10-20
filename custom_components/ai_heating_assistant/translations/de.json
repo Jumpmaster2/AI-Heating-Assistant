@@ -55,10 +55,10 @@
         "title": "Heiztag-Entscheidung",
         "description": "Startwert der Heiztag-Regel. Er wird nur hier beim Einrichten gesetzt; danach wird theta gelernt und der gelernte Wert lässt sich unter „Heiztag-Entscheidung“ bearbeiten.",
         "data": {
-          "theta_start": "Startwert theta"
+          "theta_start": "Heizgrenze theta (Startwert)"
         },
         "data_description": {
-          "theta_start": "Liegt die Prognose-Höchsttemperatur unter theta, wird geheizt."
+          "theta_start": "Geheizt wird, wenn die vorhergesagte Tageshöchsttemperatur darunter liegt (z. B. 16 °C). Wird danach gelernt."
         }
       },
       "ai": {
@@ -108,9 +108,9 @@
     },
     "error": {
       "invalid_day_month": "Bitte ein gültiges Datum angeben (TT.MM., z. B. 01.10.); einen Tag wie den 31.02. gibt es nicht.",
-      "invalid_auth": "Der API-Key wurde abgelehnt.",
-      "cannot_connect": "Keine Verbindung zur Anthropic API.",
-      "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
+      "invalid_auth": "Anthropic hat den API-Key abgelehnt. Prüfe ihn unter console.anthropic.com > API Keys und füge ihn ohne Leerzeichen ein. Ohne Key läuft die lokale Regelung weiter.",
+      "cannot_connect": "Anthropic ist nicht erreichbar. Prüfe Internetverbindung, Proxy und Firewall. Der Key wurde nicht gespeichert.",
+      "max_below_base": "Das maximale Intervall muss mindestens so groß sein wie das Prüfintervall (z. B. alle 4 h prüfen, höchstens alle 48 h).",
       "min_above_max": "Minimum muss unter dem Maximum liegen.",
       "outdoor_required": "Bitte einen Außentemperatursensor oder eine Wetter-Entität wählen."
     }
@@ -174,9 +174,9 @@
         },
         "data_description": {
           "vacation_entities": "Ist eine dieser Entitäten 'an', gilt Urlaub (z. B. ein input_boolean oder ein Kalender).",
-          "vacation_temperature": "Sollwert für alle Bereiche im Urlaub.",
+          "vacation_temperature": "Sollwert für alle Bereiche im Urlaub (z. B. 17 °C).",
           "return_entity": "Optional: input_datetime, Zeitstempel-Sensor oder datetime-Entität. Es wird so rechtzeitig vorgeheizt (gelernte Aufheizzeit), dass bei Rückkehr der normale Sollwert erreicht ist.",
-          "preheat_reserve": "Zusätzliche Zeit zur berechneten Vorheizzeit."
+          "preheat_reserve": "Zusätzliche Zeit zur berechneten Vorheizzeit (z. B. 30 min)."
         }
       },
       "rules": {
@@ -192,7 +192,7 @@
         "data_description": {
           "emergency_enabled": "An Tagen ohne Heizbetrieb darf ein Bereich trotzdem heizen, wenn die nach der Vorlaufzeit erwartete Temperatur lange und deutlich unter dem Sollwert liegt, ohne dass gelüftet wurde.",
           "emergency_delta": "Wie weit die nach der Vorlaufzeit erwartete Temperatur unter dem Sollwert liegen muss (mindestens die Einschalthysterese).",
-          "emergency_duration": "Wie lange die erwartete Temperatur so tief bleiben muss.",
+          "emergency_duration": "Wie lange die erwartete Temperatur so tief bleiben muss (z. B. 45 min).",
           "emergency_window_quiet": "Lüften zählt nicht: die Fenster dürfen sich so lange nicht verändert haben.",
           "force_on_below": "So weit unter dem Sollwert heizt der Kreis unabhängig von jeder Vorhersage und der erwarteten Sonne."
         }
@@ -210,13 +210,13 @@
           "night_end_hour": "Nacht endet um"
         },
         "data_description": {
-          "ventilation_min_ah_advantage": "Die Außenluft muss mindestens so viel weniger Wasser enthalten (g/m³) für 'Jetzt lüften'.",
+          "ventilation_min_ah_advantage": "Absolute Feuchte ist der Wassergehalt der Luft in g/m³, unabhängig von der Temperatur. Die Außenluft muss mindestens so viel weniger Wasser enthalten für 'Jetzt lüften' (z. B. 0,8 g/m³).",
           "ventilation_max_reference_excess": "Trocknen wird nicht empfohlen, wenn es außen um mehr als diesen Wert wärmer ist als innen.",
           "ventilation_min_cooling_advantage": "'Lüften sinnvoll', wenn es innen mindestens so viel wärmer ist als außen (nicht während Heizbetrieb).",
           "ventilation_cooling_margin": "In der Heizperiode wird 'Lüften sinnvoll' (Kühlen) nur empfohlen, wenn der Raum mindestens so viel wärmer ist als sein Sollwert. Außerhalb der Heizperiode gilt das nicht. Bereiche ohne Heizkreis nutzen ihren Start-Sollwert.",
           "ventilation_cooling_min_temp": "'Lüften sinnvoll' (Kühlen) erst ab dieser Raumtemperatur, ganzjährig. 0 = aus. Zusätzlich wird Kühlen nie empfohlen, wenn die Außenluft die relative Feuchte des Raums über seine Feuchte-Schwelle bringen würde.",
           "night_start_hour": "Bei einem anderen Raum als Referenz zählt der Kühlvorteil nur nachts.",
-          "night_end_hour": "Ende der Nacht (Stunde)."
+          "night_end_hour": "Ende der Nacht (Uhrzeit, z. B. 08:00)."
         }
       },
       "ai": {
@@ -224,7 +224,7 @@
         "description": "Modell, Zeiten, Budget und Preise. Der API-Key wird über 'Neu konfigurieren' geändert.",
         "data": {
           "model": "Claude-Modell",
-          "effort": "Denkaufwand (effort)",
+          "effort": "Denkaufwand",
           "nightly_time": "Uhrzeit des Nachtlaufs",
           "check_interval": "Prüfintervall",
           "check_max_interval": "Maximales Prüfintervall",
@@ -237,11 +237,11 @@
         },
         "data_description": {
           "model": "Modell für alle KI-Abfragen. Die Preise sind Vorschläge für das gewählte Modell und änderbar.",
-          "effort": "Weniger Aufwand bedeutet weniger Denk-Tokens und geringere Kosten. 'auto' sendet keinen Wert.",
+          "effort": "Claude denkt vor der Antwort nach. Mehr Aufwand kann bessere Antworten geben, braucht aber mehr Tokens, die als Ausgabe abgerechnet werden. 'auto' überlässt es dem Modell.",
           "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des bewerteten Tages).",
-          "check_interval": "Grundintervall der periodischen KI-Prüfung an Heiztagen. Es verdoppelt sich nach jeder Prüfung ohne relevante Änderung.",
-          "check_max_interval": "Obergrenze für das verdoppelte Intervall.",
-          "monthly_budget": "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel).",
+          "check_interval": "Grundintervall der periodischen KI-Prüfung an Heiztagen (z. B. 4 h). Es verdoppelt sich nach jeder Prüfung ohne relevante Änderung.",
+          "check_max_interval": "Obergrenze für das verdoppelte Intervall (z. B. 48 h).",
+          "monthly_budget": "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel). Eine Prüfung kostet meist wenige Cent, 5 USD reichen also für etwa 100 bis 200 Abfragen.",
           "price_input": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
           "price_output": "US-Dollar pro Million Tokens, wie Anthropic abrechnet (Denken zählt als Ausgabe).",
           "price_cache_write": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
@@ -253,13 +253,13 @@
         "title": "Heiztag-Entscheidung",
         "description": "Gelernte Schwelle, Bewertung, Lernschritte und Phasenwechsel der Heiztag-Entscheidung.",
         "data": {
-          "theta": "theta (gelernt)",
+          "theta": "Heizgrenze theta (gelernt)",
           "too_cold_margin": "Zu kalt unter Sollwert um",
           "too_cold_minutes": "Minuten zu kalt für Heizbedarf",
-          "theta_step_up": "theta Schritt hoch",
-          "theta_step_down": "theta Schritt runter",
-          "puffer_step_up": "puffer Schritt hoch",
-          "puffer_step_down": "puffer Schritt runter",
+          "theta_step_up": "Heizgrenze: Schritt nach oben",
+          "theta_step_down": "Heizgrenze: Schritt nach unten",
+          "puffer_step_up": "Reserve über Sollwert: Schritt nach oben",
+          "puffer_step_down": "Reserve über Sollwert: Schritt nach unten",
           "phase_shared_min_days": "Tage bis gemeinsame Entscheidung",
           "phase_shared_min_agreement": "Übereinstimmung für gemeinsam",
           "phase_rule_min_days": "Tage bis Regel führt",
@@ -272,11 +272,11 @@
           "theta": "Aktuelle Schwelle der Heiztag-Regel: liegt die Prognose-Höchsttemperatur darunter, wird geheizt. Eine Änderung ersetzt den gelernten Wert; danach wird von hier aus weiter gelernt.",
           "too_cold_margin": "Bewertung: ein Bereich gilt als zu kalt unter Sollwert minus diesem Wert (Lüften ausgenommen).",
           "too_cold_minutes": "Bewertung: so viele Minuten zu kalt bedeuten Heizbedarf.",
-          "theta_step_up": "Nach Fehler A (zu kalt ohne Heizbetrieb).",
-          "theta_step_down": "Nach Fehler B (Heizbetrieb ohne Bedarf).",
+          "theta_step_up": "Nach Fehler A, also wenn es an einem Tag ohne Heizen zu kalt wurde (z. B. 1,0 K).",
+          "theta_step_down": "Nach Fehler B, also wenn geheizt wurde, obwohl es nicht nötig war (z. B. 1,0 K).",
           "puffer_step_up": "Nach Fehler A für den kalten Bereich.",
           "puffer_step_down": "Nach Fehler B.",
-          "phase_shared_min_days": "Phase 'KI führt' -> 'gemeinsam' nach so vielen bewerteten Tagen.",
+          "phase_shared_min_days": "Wer über den Heiztag entscheidet: zuerst führt die KI, dann entscheiden KI und Regel gemeinsam, zuletzt führt die Regel. 'KI führt' -> 'gemeinsam' nach so vielen bewerteten Tagen (z. B. 14).",
           "phase_shared_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
           "phase_rule_min_days": "Phase 'gemeinsam' -> 'Regel führt' nach so vielen Tagen in 'gemeinsam'.",
           "phase_rule_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
@@ -346,7 +346,7 @@
             }
           },
           "puffer": {
-            "name": "Puffer",
+            "name": "Reserve über Sollwert (puffer)",
             "data": {
               "min": "Minimum",
               "max": "Maximum",
@@ -354,7 +354,7 @@
             }
           },
           "theta": {
-            "name": "theta",
+            "name": "Heizgrenze (theta)",
             "data": {
               "min": "Minimum",
               "max": "Maximum",
@@ -366,10 +366,10 @@
     },
     "error": {
       "invalid_day_month": "Bitte ein gültiges Datum angeben (TT.MM., z. B. 01.10.); einen Tag wie den 31.02. gibt es nicht.",
-      "invalid_auth": "Der API-Key wurde abgelehnt.",
-      "cannot_connect": "Keine Verbindung zur Anthropic API.",
-      "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
-      "min_above_max": "Minimum muss unter dem Maximum liegen.",
+      "invalid_auth": "Anthropic hat den API-Key abgelehnt. Prüfe ihn unter console.anthropic.com > API Keys und füge ihn ohne Leerzeichen ein. Ohne Key läuft die lokale Regelung weiter.",
+      "cannot_connect": "Anthropic ist nicht erreichbar. Prüfe Internetverbindung, Proxy und Firewall. Der Key wurde nicht gespeichert.",
+      "max_below_base": "Das maximale Intervall muss mindestens so groß sein wie das Prüfintervall (z. B. alle 4 h prüfen, höchstens alle 48 h).",
+      "min_above_max": "Bei jedem Parameter darf das Minimum nicht über dem Maximum liegen. Bitte die Grenzen des betroffenen Parameters korrigieren.",
       "outdoor_required": "Bitte einen Außentemperatursensor oder eine Wetter-Entität wählen."
     }
   },
@@ -431,14 +431,14 @@
               "data": {
                 "window_delay": "Fensterverzögerung (Startwert)",
                 "recovery_time": "Erholungszeit nach Lüften (Startwert)",
-                "dead_time": "Totzeit (Startwert)",
-                "puffer": "Puffer (Startwert)"
+                "dead_time": "Totzeit bis der Raum wärmer wird (Startwert)",
+                "puffer": "Reserve über Sollwert (Startwert)"
               },
               "data_description": {
                 "window_delay": "So lange offen pausiert die Heizung. Die KI darf den Wert anpassen.",
                 "recovery_time": "Nach dem Schließen wird so lange gewartet, weil Estrich und Wände den Raum oft selbst aufheizen. Wird danach gelernt.",
-                "dead_time": "Zeit, bis der Raum nach dem Einschalten wärmer wird. Wird danach gelernt.",
-                "puffer": "Heiztag-Regel: nötiger Abstand über dem Sollwert beim Nachtlauf. Wird danach gelernt."
+                "dead_time": "Zeit vom Einschalten, bis der Raum wärmer wird; bei Fußbodenheizung oft 30-90 min, bei Heizkörpern 5-20 min. Wird danach gelernt.",
+                "puffer": "Heiztag-Regel: wie weit ein Bereich beim Nachtlauf über dem Sollwert liegen muss, um einen Tag ohne Heizen zu überstehen (z. B. 0,7 K). Wird danach gelernt."
               }
             },
             "ventilation": {
@@ -508,8 +508,8 @@
               "data": {
                 "window_delay": "Fensterverzögerung",
                 "recovery_time": "Erholungszeit nach Lüften",
-                "dead_time": "Totzeit",
-                "puffer": "Puffer"
+                "dead_time": "Totzeit bis der Raum wärmer wird",
+                "puffer": "Reserve über Sollwert"
               },
               "data_description": {
                 "window_delay": "So lange offen pausiert die Heizung. Die KI darf den Wert anpassen.",
@@ -540,9 +540,9 @@
         "name_required": "Bitte einen Namen angeben.",
         "name_in_use": "Ein anderer Bereich heißt schon so. Bitte einen eindeutigen Namen wählen (Export und Import finden Bereiche über den Namen).",
         "switch_in_use": "Dieser Schalter steuert bereits einen anderen Heizbereich. Jeder Heizkreis gehört zu genau einem Bereich: wähle einen anderen Schalter oder entferne ihn zuerst aus dem anderen Bereich.",
-        "min_above_max": "Der kleinste Sollwert muss unter dem größten liegen.",
-        "target_out_of_range": "Der Start-Sollwert muss zwischen kleinstem und größtem Sollwert liegen.",
-        "reference_incomplete": "Referenz-Temperatur und Referenz-Feuchte gehen nur zusammen."
+        "min_above_max": "Der kleinste Sollwert muss kleiner sein als der größte. Bitte einen der beiden Werte ändern (beide in °C).",
+        "target_out_of_range": "Der Start-Sollwert muss zwischen dem kleinsten und dem größten Sollwert liegen. Bitte ihn oder die Grenzen anpassen.",
+        "reference_incomplete": "Referenztemperatur und Referenzfeuchte gehen nur zusammen: beide Sensoren wählen oder keinen."
       }
     }
   },

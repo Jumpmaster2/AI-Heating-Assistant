@@ -55,10 +55,10 @@
         "title": "Heating day decision",
         "description": "Start value of the heating day rule. It is only set here during setup; afterwards theta is learned and the learned value can be edited under 'Heating day decision'.",
         "data": {
-          "theta_start": "Start value theta"
+          "theta_start": "Heating threshold theta (start value)"
         },
         "data_description": {
-          "theta_start": "If the forecast maximum is below theta, heating is needed."
+          "theta_start": "Heating is needed when the forecast maximum of the day is below this value (e.g. 16 °C). Learned afterwards."
         }
       },
       "ai": {
@@ -108,9 +108,9 @@
     },
     "error": {
       "invalid_day_month": "Please enter a valid date (DD.MM., e.g. 01.10.); a day like 31.02. does not exist.",
-      "invalid_auth": "The API key was rejected.",
-      "cannot_connect": "Cannot connect to the Anthropic API.",
-      "max_below_base": "The maximum interval must not be smaller than the check interval.",
+      "invalid_auth": "Anthropic rejected the API key. Check it at console.anthropic.com under API keys and paste it without spaces. Without a key the local control keeps running.",
+      "cannot_connect": "Anthropic cannot be reached. Check the internet connection, proxy and firewall. The key was not saved.",
+      "max_below_base": "The maximum interval must be at least the check interval (e.g. check every 4 h, at most every 48 h).",
       "min_above_max": "Minimum must be below maximum.",
       "outdoor_required": "Choose an outdoor temperature sensor or a weather entity."
     }
@@ -174,9 +174,9 @@
         },
         "data_description": {
           "vacation_entities": "Any of these entities being 'on' means vacation (e.g. an input_boolean or a calendar).",
-          "vacation_temperature": "Target for all areas during vacation.",
+          "vacation_temperature": "Target for all areas during vacation (e.g. 17 °C).",
           "return_entity": "Optional input_datetime, timestamp sensor or datetime entity. Heating starts early enough (learned heat-up time) to reach the normal target on return.",
-          "preheat_reserve": "Additional time added to the calculated preheating time."
+          "preheat_reserve": "Additional time added to the calculated preheating time (e.g. 30 min)."
         }
       },
       "rules": {
@@ -192,7 +192,7 @@
         "data_description": {
           "emergency_enabled": "On days without heating, an area may still heat if the temperature expected after the lead time is long and clearly below its target, without airing.",
           "emergency_delta": "How far below the target the temperature expected after the lead time has to be (at least the switch-on hysteresis).",
-          "emergency_duration": "How long the expected temperature has to stay that low.",
+          "emergency_duration": "How long the expected temperature has to stay that low (e.g. 45 min).",
           "emergency_window_quiet": "Airing does not count: windows must not have changed for this time.",
           "force_on_below": "Below target by this much the circuit heats regardless of every prediction and the expected sun."
         }
@@ -210,13 +210,13 @@
           "night_end_hour": "Night ends at"
         },
         "data_description": {
-          "ventilation_min_ah_advantage": "Outside air must contain at least this much less water (g/m³) for 'ventilate now'.",
+          "ventilation_min_ah_advantage": "Absolute humidity is the water content of the air in g/m³, independent of temperature. Outside air must contain at least this much less water for 'ventilate now' (e.g. 0.8 g/m³).",
           "ventilation_max_reference_excess": "Drying is not recommended if outside is warmer than inside by more than this.",
           "ventilation_min_cooling_advantage": "'Ventilation useful' if inside is warmer than outside by at least this (not while heating).",
           "ventilation_cooling_margin": "Within the heating period 'ventilation useful' (cooling) is only recommended if the room is at least this much warmer than its target. Not used outside the heating period. Areas without a heating circuit use their initial target.",
           "ventilation_cooling_min_temp": "'Ventilation useful' (cooling) only from this room temperature on, all year. 0 = off. In addition cooling is never recommended if the outside air would raise the relative humidity of the room above its humidity threshold.",
           "night_start_hour": "Used when the reference is another room: cooling advantage only counts at night.",
-          "night_end_hour": "End of the night (hour)."
+          "night_end_hour": "End of the night (time, e.g. 08:00)."
         }
       },
       "ai": {
@@ -224,7 +224,7 @@
         "description": "Model, times, budget and prices. The API key is changed via 'Reconfigure'.",
         "data": {
           "model": "Claude model",
-          "effort": "Effort",
+          "effort": "Thinking effort",
           "nightly_time": "Time of the nightly run",
           "check_interval": "Check interval",
           "check_max_interval": "Maximum check interval",
@@ -237,11 +237,11 @@
         },
         "data_description": {
           "model": "Model for all AI calls. Prices below are suggestions for the selected model and can be changed.",
-          "effort": "Lower effort means fewer thinking tokens and lower costs. 'auto' sends no value.",
+          "effort": "Claude thinks before it answers. More effort can give better answers but uses more tokens, which are billed as output. 'auto' leaves it to the model.",
           "nightly_time": "Daily decision whether heating is needed today (also the start of the evaluated day).",
-          "check_interval": "Base interval of the periodic AI check on heating days. It doubles after every check without relevant change.",
-          "check_max_interval": "Upper limit for the doubled interval.",
-          "monthly_budget": "In US dollars, as Anthropic bills. No AI calls once the costs of the month reach this value (until the month changes).",
+          "check_interval": "Base interval of the periodic AI check on heating days (e.g. 4 h). It doubles after every check without relevant change.",
+          "check_max_interval": "Upper limit for the doubled interval (e.g. 48 h).",
+          "monthly_budget": "In US dollars, as Anthropic bills. No AI calls once the costs of the month reach this value (until the month changes). A check usually costs a few cents, so 5 USD allow about 100 to 200 calls.",
           "price_input": "US dollars per million tokens, as Anthropic bills.",
           "price_output": "US dollars per million tokens, as Anthropic bills (thinking counts as output).",
           "price_cache_write": "US dollars per million tokens, as Anthropic bills.",
@@ -253,13 +253,13 @@
         "title": "Heating day decision",
         "description": "Learned threshold, evaluation, learning steps and phase changes of the heating day decision.",
         "data": {
-          "theta": "theta (learned)",
+          "theta": "Heating threshold theta (learned)",
           "too_cold_margin": "Too cold below target by",
           "too_cold_minutes": "Too cold minutes for heating need",
-          "theta_step_up": "theta step up",
-          "theta_step_down": "theta step down",
-          "puffer_step_up": "puffer step up",
-          "puffer_step_down": "puffer step down",
+          "theta_step_up": "Heating threshold: step up",
+          "theta_step_down": "Heating threshold: step down",
+          "puffer_step_up": "Margin above target: step up",
+          "puffer_step_down": "Margin above target: step down",
           "phase_shared_min_days": "Days until shared decision",
           "phase_shared_min_agreement": "Agreement for shared decision",
           "phase_rule_min_days": "Days until rule leads",
@@ -272,11 +272,11 @@
           "theta": "Current threshold of the heating day rule: if the forecast maximum is below it, heating is needed. A change replaces the learned value; learning continues from there.",
           "too_cold_margin": "Evaluation: an area counts as too cold below target minus this (airing excluded).",
           "too_cold_minutes": "Evaluation: this many minutes too cold mean heating was needed.",
-          "theta_step_up": "After error A (too cold without heating).",
-          "theta_step_down": "After error B (heating without need).",
+          "theta_step_up": "After error A, i.e. it got too cold on a day without heating (e.g. 1.0 K).",
+          "theta_step_down": "After error B, i.e. heating ran although it was not needed (e.g. 1.0 K).",
           "puffer_step_up": "After error A for the cold area.",
           "puffer_step_down": "After error B.",
-          "phase_shared_min_days": "Phase 'AI leads' -> 'shared' after this many evaluated days.",
+          "phase_shared_min_days": "Who decides the heating day: first the AI leads, then AI and rule decide together, finally the rule leads. 'AI leads' -> 'shared' after this many evaluated days (e.g. 14).",
           "phase_shared_min_agreement": "Minimum agreement of rule and AI.",
           "phase_rule_min_days": "Phase 'shared' -> 'rule leads' after this many days in phase 'shared'.",
           "phase_rule_min_agreement": "Minimum agreement of rule and AI.",
@@ -346,7 +346,7 @@
             }
           },
           "puffer": {
-            "name": "Puffer",
+            "name": "Margin above target (puffer)",
             "data": {
               "min": "Minimum",
               "max": "Maximum",
@@ -354,7 +354,7 @@
             }
           },
           "theta": {
-            "name": "theta",
+            "name": "Heating threshold (theta)",
             "data": {
               "min": "Minimum",
               "max": "Maximum",
@@ -366,10 +366,10 @@
     },
     "error": {
       "invalid_day_month": "Please enter a valid date (DD.MM., e.g. 01.10.); a day like 31.02. does not exist.",
-      "invalid_auth": "The API key was rejected.",
-      "cannot_connect": "Cannot connect to the Anthropic API.",
-      "max_below_base": "The maximum interval must not be smaller than the check interval.",
-      "min_above_max": "Minimum must be below maximum.",
+      "invalid_auth": "Anthropic rejected the API key. Check it at console.anthropic.com under API keys and paste it without spaces. Without a key the local control keeps running.",
+      "cannot_connect": "Anthropic cannot be reached. Check the internet connection, proxy and firewall. The key was not saved.",
+      "max_below_base": "The maximum interval must be at least the check interval (e.g. check every 4 h, at most every 48 h).",
+      "min_above_max": "For each parameter the minimum must not be above the maximum. Please correct the limits of the parameter concerned.",
       "outdoor_required": "Choose an outdoor temperature sensor or a weather entity."
     }
   },
@@ -431,14 +431,14 @@
               "data": {
                 "window_delay": "Window delay (start value)",
                 "recovery_time": "Recovery time after airing (start value)",
-                "dead_time": "Dead time (start value)",
-                "puffer": "Puffer (start value)"
+                "dead_time": "Dead time until the room warms (start value)",
+                "puffer": "Margin above target (start value)"
               },
               "data_description": {
                 "window_delay": "Window open this long pauses heating. The AI may adjust it.",
                 "recovery_time": "After closing, heating waits this long because floor and walls often reheat the room. Learned afterwards.",
-                "dead_time": "Time until the room warms up after switching on. Learned afterwards.",
-                "puffer": "Heating day rule: needed margin above the target at the nightly run. Learned afterwards."
+                "dead_time": "Time from switching on until the room gets warmer; underfloor heating often 30-90 min, radiators 5-20 min. Learned afterwards.",
+                "puffer": "Heating day rule: how far above the target an area must be at the nightly run to manage a day without heating (e.g. 0.7 K). Learned afterwards."
               }
             },
             "ventilation": {
@@ -508,8 +508,8 @@
               "data": {
                 "window_delay": "Window delay",
                 "recovery_time": "Recovery time after airing",
-                "dead_time": "Dead time",
-                "puffer": "Puffer"
+                "dead_time": "Dead time until the room warms",
+                "puffer": "Margin above target"
               },
               "data_description": {
                 "window_delay": "Window open this long pauses heating. The AI may adjust it.",
@@ -540,9 +540,9 @@
         "name_required": "Please enter a name.",
         "name_in_use": "Another area already has this name. Please choose a unique name (export and import find areas by name).",
         "switch_in_use": "This switch already controls another heating area. Each circuit can belong to one area only: choose another switch, or remove it from the other area first.",
-        "min_above_max": "The minimum target must be below the maximum target.",
-        "target_out_of_range": "The initial target must be between minimum and maximum.",
-        "reference_incomplete": "Reference temperature and reference humidity are only possible together."
+        "min_above_max": "The smallest target must be below the largest target. Please change one of the two values (both in °C).",
+        "target_out_of_range": "The start target must lie between the smallest and the largest target. Please adjust it or the limits.",
+        "reference_incomplete": "Reference temperature and reference humidity only work together: choose both sensors or neither."
       }
     }
   },
