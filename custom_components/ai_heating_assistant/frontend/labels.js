@@ -42,6 +42,22 @@ export const LABELS = {
     "Vertrauen in die Sonnenprognose",
     "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt)."
    ],
+   "season_start_day": [
+    "Heizperiode beginnt: Tag",
+    "Ab diesem Datum darf geheizt werden (z. B. 1. Oktober)."
+   ],
+   "season_start_month": [
+    "Heizperiode beginnt: Monat",
+    ""
+   ],
+   "season_end_day": [
+    "Heizperiode endet: Tag",
+    "Letzter Tag der Heizperiode (z. B. 31. März); die Periode darf über den Jahreswechsel gehen."
+   ],
+   "season_end_month": [
+    "Heizperiode endet: Monat",
+    ""
+   ],
    "vacation_entities": [
     "Urlaubs-Entitäten",
     "Ist eine dieser Entitäten 'an', gilt Urlaub (z. B. ein input_boolean oder ein Kalender)."
@@ -344,7 +360,7 @@ export const LABELS = {
    "step": "Max. Änderung je Prüfung"
   },
   "errors": {
-   "invalid_day_month": "Bitte im Format TT.MM. angeben (z. B. 01.10.).",
+   "invalid_day_month": "Bitte ein gültiges Datum angeben (TT.MM., z. B. 01.10.); einen Tag wie den 31.02. gibt es nicht.",
    "invalid_auth": "Der API-Key wurde abgelehnt.",
    "cannot_connect": "Keine Verbindung zur Anthropic API.",
    "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
@@ -449,6 +465,22 @@ export const LABELS = {
    "forecast_trust": [
     "Trust in the sun forecast",
     "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts)."
+   ],
+   "season_start_day": [
+    "Heating period starts: day",
+    "Heating is possible from this date (e.g. 1 October)."
+   ],
+   "season_start_month": [
+    "Heating period starts: month",
+    ""
+   ],
+   "season_end_day": [
+    "Heating period ends: day",
+    "Last day of the heating period (e.g. 31 March); the period may span the turn of the year."
+   ],
+   "season_end_month": [
+    "Heating period ends: month",
+    ""
    ],
    "vacation_entities": [
     "Vacation entities",
@@ -752,7 +784,7 @@ export const LABELS = {
    "step": "Max. change per check"
   },
   "errors": {
-   "invalid_day_month": "Please use the format DD.MM. (e.g. 01.10.).",
+   "invalid_day_month": "Please enter a valid date (DD.MM., e.g. 01.10.); a day like 31.02. does not exist.",
    "invalid_auth": "The API key was rejected.",
    "cannot_connect": "Cannot connect to the Anthropic API.",
    "max_below_base": "The maximum interval must not be smaller than the check interval.",

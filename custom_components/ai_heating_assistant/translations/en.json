@@ -14,7 +14,11 @@
           "season_start": "Heating period start (DD.MM.)",
           "season_end": "Heating period end (DD.MM.)",
           "frost_temperature": "Frost protection temperature",
-          "forecast_trust": "Trust in the sun forecast"
+          "forecast_trust": "Trust in the sun forecast",
+          "season_start_day": "Heating period starts: day",
+          "season_start_month": "Heating period starts: month",
+          "season_end_day": "Heating period ends: day",
+          "season_end_month": "Heating period ends: month"
         },
         "data_description": {
           "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors). Without it the current temperature of the weather entity is used.",
@@ -26,7 +30,9 @@
           "season_start": "Outside the heating period all circuits stay off (frost protection only) and the AI is not asked.",
           "season_end": "Last day of the heating period, may be in the next year (e.g. 31.03.).",
           "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat.",
-          "forecast_trust": "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts)."
+          "forecast_trust": "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts).",
+          "season_start_day": "Heating is possible from this date (e.g. 1 October).",
+          "season_end_day": "Last day of the heating period (e.g. 31 March); the period may span the turn of the year."
         }
       },
       "vacation": {
@@ -93,7 +99,7 @@
       }
     },
     "error": {
-      "invalid_day_month": "Please use the format DD.MM. (e.g. 01.10.).",
+      "invalid_day_month": "Please enter a valid date (DD.MM., e.g. 01.10.); a day like 31.02. does not exist.",
       "invalid_auth": "The API key was rejected.",
       "cannot_connect": "Cannot connect to the Anthropic API.",
       "max_below_base": "The maximum interval must not be smaller than the check interval.",
@@ -128,7 +134,11 @@
           "season_start": "Heating period start (DD.MM.)",
           "season_end": "Heating period end (DD.MM.)",
           "frost_temperature": "Frost protection temperature",
-          "forecast_trust": "Trust in the sun forecast"
+          "forecast_trust": "Trust in the sun forecast",
+          "season_start_day": "Heating period starts: day",
+          "season_start_month": "Heating period starts: month",
+          "season_end_day": "Heating period ends: day",
+          "season_end_month": "Heating period ends: month"
         },
         "data_description": {
           "outdoor_temperature": "Sensor for the outdoor temperature (e.g. a helper combining several sensors). Without it the current temperature of the weather entity is used.",
@@ -140,7 +150,9 @@
           "season_start": "Outside the heating period all circuits stay off (frost protection only) and the AI is not asked.",
           "season_end": "Last day of the heating period, may be in the next year (e.g. 31.03.).",
           "frost_temperature": "Always applies, also outside the heating period and with a switched-off thermostat.",
-          "forecast_trust": "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts)."
+          "forecast_trust": "Share of the expected PV power the control relies on when it holds back heating (100 % = full forecast, 0 % = only the current PV power counts).",
+          "season_start_day": "Heating is possible from this date (e.g. 1 October).",
+          "season_end_day": "Last day of the heating period (e.g. 31 March); the period may span the turn of the year."
         }
       },
       "vacation": {
@@ -345,7 +357,7 @@
       }
     },
     "error": {
-      "invalid_day_month": "Please use the format DD.MM. (e.g. 01.10.).",
+      "invalid_day_month": "Please enter a valid date (DD.MM., e.g. 01.10.); a day like 31.02. does not exist.",
       "invalid_auth": "The API key was rejected.",
       "cannot_connect": "Cannot connect to the Anthropic API.",
       "max_below_base": "The maximum interval must not be smaller than the check interval.",
@@ -540,6 +552,22 @@
         "underfloor": "Underfloor heating",
         "radiator": "Radiators",
         "other": "Other (e.g. wall heating)"
+      }
+    },
+    "month": {
+      "options": {
+        "1": "January",
+        "2": "February",
+        "3": "March",
+        "4": "April",
+        "5": "May",
+        "6": "June",
+        "7": "July",
+        "8": "August",
+        "9": "September",
+        "10": "October",
+        "11": "November",
+        "12": "December"
       }
     }
   },

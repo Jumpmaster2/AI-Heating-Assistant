@@ -186,7 +186,53 @@ def _req(key: str, values: dict[str, Any]) -> vol.Required:
 # ---------------------------------------------------------------- global schemas
 
 
-def _general_schema(v: dict[str, Any]) -> vol.Schema:
+# The dialogs ask for the heating period as day and month; stored is "DD.MM.".
+SEASON_PARTS = {
+    CONF_SEASON_START: ("season_start_day", "season_start_month"),
+    CONF_SEASON_END: ("season_end_day", "season_end_month"),
+}
+MONTHS = [str(m) for m in range(1, 13)]
+
+
+def _season_fields(v: dict[str, Any]) -> dict[Any, Any]:
+    fields: dict[Any, Any] = {}
+    for key, (day_key, month_key) in SEASON_PARTS.items():
+        try:
+            day, month = parse_day_month(str(v.get(key, DEFAULTS[key])))
+        except ValueError:
+            # keep what was entered (e.g. 31.02.) so it can be corrected
+            parts = str(v.get(key, "")).split(".")
+            try:
+                day, month = int(parts[0]), int(parts[1])
+            except (IndexError, ValueError):
+                day, month = parse_day_month(str(DEFAULTS[key]))
+        fields[vol.Required(day_key, default=v.get(day_key, day))] = _number(1, 31, 1)
+        fields[vol.Required(month_key, default=str(v.get(month_key, month)))] = SelectSelector(
+            SelectSelectorConfig(
+                options=MONTHS, translation_key="month", mode=SelectSelectorMode.DROPDOWN
+            )
+        )
+    return fields
+
+
+def _join_season(user_input: dict[str, Any]) -> dict[str, Any]:
+    """Day and month fields back into "DD.MM." (values already in that form stay)."""
+    values = dict(user_input)
+    for key, (day_key, month_key) in SEASON_PARTS.items():
+        if day_key in values or month_key in values:
+            day, month = values.pop(day_key, 0), values.pop(month_key, 0)
+            values[key] = f"{int(float(day)):02d}.{int(month):02d}."
+    return values
+
+
+def _general_schema(v: dict[str, Any], season_text: bool = False) -> vol.Schema:
+    """``season_text``: the period as text fields (the panel); the dialogs use day and
+    month fields."""
+    season = (
+        {_req(CONF_SEASON_START, v): TextSelector(), _req(CONF_SEASON_END, v): TextSelector()}
+        if season_text
+        else _season_fields(v)
+    )
     return vol.Schema(
         {
             _opt_entity(CONF_OUTDOOR_TEMP, v): _sensor("temperature", TEMP_UNITS),
@@ -202,8 +248,7 @@ def _general_schema(v: dict[str, Any]) -> vol.Schema:
             ),
             _req(CONF_FORECAST_TRUST, v): _number(0, 100, 5, "%"),
             _opt_entity(CONF_HEAT_METER, v): _sensor("energy", ENERGY_UNITS),
-            _req(CONF_SEASON_START, v): TextSelector(),
-            _req(CONF_SEASON_END, v): TextSelector(),
+            **season,
             _req(CONF_FROST_TEMP, v): _number(0, 15, 0.5, "°C"),
         }
     )
@@ -364,11 +409,11 @@ def _validate_general(user_input: dict[str, Any]) -> dict[str, str]:
     if not user_input.get(CONF_OUTDOOR_TEMP) and not user_input.get(CONF_WEATHER):
         # the outdoor temperature drives prediction and learning
         errors[CONF_OUTDOOR_TEMP] = "outdoor_required"
-    for key in (CONF_SEASON_START, CONF_SEASON_END):
+    for key, (day_key, _) in SEASON_PARTS.items():
         try:
             parse_day_month(str(user_input.get(key, "")))
         except ValueError:
-            errors[key] = "invalid_day_month"
+            errors[day_key] = "invalid_day_month"  # e.g. 31.02.
     return errors
 
 
@@ -449,6 +494,7 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
+            user_input = _join_season(user_input)
             errors = _validate_general(user_input)
             if not errors:
                 self._options.update(_clean(user_input))
@@ -599,6 +645,7 @@ class AiHeatingOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
+            user_input = _join_season(user_input)
             errors = _validate_general(user_input)
             if not errors:
                 return self._save(

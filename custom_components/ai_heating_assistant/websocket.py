@@ -127,7 +127,7 @@ def option_fields() -> dict[str, Selector]:
     values: dict[str, Any] = dict(DEFAULTS)
     fields: dict[str, Selector] = {}
     for schema in (
-        _general_schema(values),
+        _general_schema(values, season_text=True),
         _vacation_schema(values),
         _rules_schema(values),
         _ventilation_schema(values),

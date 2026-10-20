@@ -17,8 +17,10 @@ from .conftest import make_entry
 
 GENERAL = {
     "outdoor_temperature": "sensor.outdoor_temperature",
-    "season_start": "01.10.",
-    "season_end": "31.03.",
+    "season_start_day": 1,
+    "season_start_month": "10",
+    "season_end_day": 31,
+    "season_end_month": "3",
     "frost_temperature": 7.0,
 }
 VACATION = {"vacation_entities": [], "vacation_temperature": 18.0, "preheat_reserve": 30}
@@ -31,9 +33,12 @@ async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> No
     assert result["type"] is FlowResultType.FORM and result["step_id"] == "user"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {**GENERAL, "season_start": "1.13."}
+        result["flow_id"], {**GENERAL, "season_start_day": 31, "season_start_month": "2"}
     )
-    assert result["errors"] == {"season_start": "invalid_day_month"}
+    assert result["errors"] == {"season_start_day": "invalid_day_month"}
+    # the entry is kept for correction
+    defaults = {str(k): k.default() for k in result["data_schema"].schema if callable(k.default)}
+    assert (defaults["season_start_day"], defaults["season_start_month"]) == (31, "2")
     # an outdoor sensor or a weather entity is needed
     without_outdoor = {
         k: v for k, v in GENERAL.items() if k not in ("outdoor_temperature", "weather")
@@ -426,7 +431,11 @@ async def test_heating_period_suggested_by_hemisphere(
     hass.config.latitude = latitude
     result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
     defaults = {str(k): k.default() for k in result["data_schema"].schema if callable(k.default)}
-    assert (defaults["season_start"], defaults["season_end"]) == (start, end)
+    shown = tuple(
+        f"{int(defaults[f'{k}_day']):02d}.{int(defaults[f'{k}_month']):02d}."
+        for k in ("season_start", "season_end")
+    )
+    assert shown == (start, end)
 
 
 async def test_options_can_switch_to_the_weather_temperature(
@@ -444,8 +453,10 @@ async def test_options_can_switch_to_the_weather_temperature(
     )
     values = {
         "weather": "weather.home",
-        "season_start": "01.10.",
-        "season_end": "31.03.",
+        "season_start_day": 15,
+        "season_start_month": "9",
+        "season_end_day": 30,
+        "season_end_month": "4",
         "frost_temperature": 7.0,
         "forecast_trust": 70,
     }
@@ -453,6 +464,7 @@ async def test_options_can_switch_to_the_weather_temperature(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert "outdoor_temperature" not in entry.options
+    assert (entry.options["season_start"], entry.options["season_end"]) == ("15.09.", "30.04.")
 
 
 def test_entity_fields_offer_matching_entities_but_accept_others() -> None:

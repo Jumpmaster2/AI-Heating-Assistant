@@ -14,7 +14,11 @@
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
           "frost_temperature": "Frostschutz-Mindesttemperatur",
-          "forecast_trust": "Vertrauen in die Sonnenprognose"
+          "forecast_trust": "Vertrauen in die Sonnenprognose",
+          "season_start_day": "Heizperiode beginnt: Tag",
+          "season_start_month": "Heizperiode beginnt: Monat",
+          "season_end_day": "Heizperiode endet: Tag",
+          "season_end_month": "Heizperiode endet: Monat"
         },
         "data_description": {
           "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
@@ -26,7 +30,9 @@
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
           "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.",
-          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt)."
+          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt).",
+          "season_start_day": "Ab diesem Datum darf geheizt werden (z. B. 1. Oktober).",
+          "season_end_day": "Letzter Tag der Heizperiode (z. B. 31. März); die Periode darf über den Jahreswechsel gehen."
         }
       },
       "vacation": {
@@ -93,7 +99,7 @@
       }
     },
     "error": {
-      "invalid_day_month": "Bitte im Format TT.MM. angeben (z. B. 01.10.).",
+      "invalid_day_month": "Bitte ein gültiges Datum angeben (TT.MM., z. B. 01.10.); einen Tag wie den 31.02. gibt es nicht.",
       "invalid_auth": "Der API-Key wurde abgelehnt.",
       "cannot_connect": "Keine Verbindung zur Anthropic API.",
       "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
@@ -128,7 +134,11 @@
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
           "frost_temperature": "Frostschutz-Mindesttemperatur",
-          "forecast_trust": "Vertrauen in die Sonnenprognose"
+          "forecast_trust": "Vertrauen in die Sonnenprognose",
+          "season_start_day": "Heizperiode beginnt: Tag",
+          "season_start_month": "Heizperiode beginnt: Monat",
+          "season_end_day": "Heizperiode endet: Tag",
+          "season_end_month": "Heizperiode endet: Monat"
         },
         "data_description": {
           "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
@@ -140,7 +150,9 @@
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
           "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.",
-          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt)."
+          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt).",
+          "season_start_day": "Ab diesem Datum darf geheizt werden (z. B. 1. Oktober).",
+          "season_end_day": "Letzter Tag der Heizperiode (z. B. 31. März); die Periode darf über den Jahreswechsel gehen."
         }
       },
       "vacation": {
@@ -345,7 +357,7 @@
       }
     },
     "error": {
-      "invalid_day_month": "Bitte im Format TT.MM. angeben (z. B. 01.10.).",
+      "invalid_day_month": "Bitte ein gültiges Datum angeben (TT.MM., z. B. 01.10.); einen Tag wie den 31.02. gibt es nicht.",
       "invalid_auth": "Der API-Key wurde abgelehnt.",
       "cannot_connect": "Keine Verbindung zur Anthropic API.",
       "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
@@ -540,6 +552,22 @@
         "underfloor": "Fußbodenheizung",
         "radiator": "Heizkörper",
         "other": "Andere (z. B. Wandheizung)"
+      }
+    },
+    "month": {
+      "options": {
+        "1": "Januar",
+        "2": "Februar",
+        "3": "März",
+        "4": "April",
+        "5": "Mai",
+        "6": "Juni",
+        "7": "Juli",
+        "8": "August",
+        "9": "September",
+        "10": "Oktober",
+        "11": "November",
+        "12": "Dezember"
       }
     }
   },
