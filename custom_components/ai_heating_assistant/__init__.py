@@ -129,6 +129,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
         await entry.runtime_data.async_shutdown()
         await _async_switch_off_circuits(hass, entry, "disabled")
         async_delete_issues(hass)
+        async_unregister_panel(hass)  # nothing to show while disabled
     return unloaded
 
 

@@ -437,6 +437,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
   async _load(quiet = false) {
     try {
       this._cfg = await this._hass.callWS({ type: `${DOMAIN}/config` });
+      this._statsAt = 0; // configuration changed: learned values again
       this._error = null;
     } catch (err) {
       this._error = err.message || String(err);
@@ -1259,6 +1260,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
         if (confirm(this.ui.confirmDelete)) {
           try {
             this._cfg = await this._ws({ type: `${DOMAIN}/delete_area`, subentry_id: this._edit.id });
+            this._statsAt = 0;
             this._edit = null;
             this._render();
             this._toast(this.ui.saved);
@@ -1297,6 +1299,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     button.disabled = true;
     try {
       this._cfg = await this._ws(msg);
+      this._statsAt = 0;
       delete this._drafts[cardId];
       this._rerenderContent();
       this._toast(this.ui.saved);
@@ -1320,6 +1323,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     try {
       const result = await this._ws(msg);
       this._cfg = result.config;
+      this._statsAt = 0;
       this._edit = null;
       this._render();
       this._toast(this.ui.saved);

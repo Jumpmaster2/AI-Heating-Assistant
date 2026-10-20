@@ -1124,3 +1124,51 @@ async def test_night_hours_of_an_old_entry_become_times(
         "22:00:00",
         "06:00:00",
     )
+
+
+async def test_changing_services_need_an_admin(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory, hass_read_only_user
+) -> None:
+    from homeassistant.core import Context
+    from homeassistant.exceptions import Unauthorized
+
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    area_entity = "climate.living_room"
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(
+            DOMAIN,
+            "reset_learned",
+            {"entity_id": area_entity, "include_parameters": False},
+            blocking=True,
+            context=Context(user_id=hass_read_only_user.id),
+        )
+    # automations and scripts run without a user
+    await hass.services.async_call(
+        DOMAIN,
+        "reset_learned",
+        {"entity_id": area_entity, "include_parameters": False},
+        blocking=True,
+    )
+
+
+async def test_import_reports_bad_data_but_not_programming_errors(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from homeassistant.exceptions import ServiceValidationError
+
+    from custom_components.ai_heating_assistant.coordinator import HeatingCoordinator
+
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "import_parameters", {"data": {"areas": 5}}, blocking=True, return_response=True
+        )
+    with (
+        patch.object(HeatingCoordinator, "import_parameters", side_effect=AttributeError("bug")),
+        pytest.raises(AttributeError),
+    ):
+        await hass.services.async_call(
+            DOMAIN, "import_parameters", {"data": {}}, blocking=True, return_response=True
+        )

@@ -215,3 +215,18 @@ async def test_area_device_is_placed_in_the_area_of_its_sensor(
     area_id = next(iter(entry.subentries))
     device = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, area_id), entry.entry_id)
     assert device is not None and device.area_id == lounge.id
+
+
+async def test_disabling_removes_the_panel(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    import custom_components.ai_heating_assistant as integration
+
+    entry = await _setup_heating(hass, freezer)
+
+    with patch.object(integration, "async_unregister_panel") as unregister:
+        assert await hass.config_entries.async_set_disabled_by(
+            entry.entry_id, ConfigEntryDisabler.USER
+        )
+        await hass.async_block_till_done()
+    unregister.assert_called_once()

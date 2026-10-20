@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.12.18. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.12.19. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -176,6 +176,8 @@ Alle wichtigen Entscheidungen und jede KI-Anpassung mit Begründung stehen im **
 
 ## Dienste
 
+`import_parameters`, `reset_learned` und `run_ai_check` (kostet Geld) dürfen nur Administratoren aufrufen; Automationen und Skripte ohne Benutzer dürfen sie weiter nutzen.
+
 | Dienst | Zweck |
 |---|---|
 | `ai_heating_assistant.export_parameters` | Lernwerte und Parameter als JSON (Antwort des Dienstes) |
@@ -202,7 +204,7 @@ data:
 
 ## Deaktivieren und Deinstallation
 
-Wird die Integration deaktiviert oder entfernt, schaltet sie alle eingeschalteten Heizkreise aus; sonst würde ein gerade laufender Kreis ohne Grenze weiterheizen. Dasselbe gilt für den Schalter eines gelöschten Heizbereichs und für einen Schalter, der in einem Bereich durch einen anderen ersetzt wurde. Ein Neuladen (z. B. nach einer Änderung der Einstellungen) oder ein Neustart von Home Assistant lässt die Kreise unverändert.
+Wird die Integration deaktiviert oder entfernt, verschwindet ihre Seite aus der Seitenleiste, und sie schaltet alle eingeschalteten Heizkreise aus; sonst würde ein gerade laufender Kreis ohne Grenze weiterheizen. Dasselbe gilt für den Schalter eines gelöschten Heizbereichs und für einen Schalter, der in einem Bereich durch einen anderen ersetzt wurde. Ein Neuladen (z. B. nach einer Änderung der Einstellungen) oder ein Neustart von Home Assistant lässt die Kreise unverändert.
 
 Beim Entfernen werden außerdem die gelernten Werte (`.storage/ai_heating_assistant.<entry_id>`) und die Seite in der Seitenleiste gelöscht. Danach den Ordner `custom_components/ai_heating_assistant` entfernen (bzw. in HACS „Entfernen“ wählen) und Home Assistant neu starten.
 

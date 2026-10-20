@@ -670,7 +670,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     @callback
     def _on_input_change(self, event: Event[EventStateChangedData]) -> None:
-        self.hass.async_create_task(self.async_request_refresh(), eager_start=True)
+        self.config_entry.async_create_task(self.hass, self.async_request_refresh())
 
     @callback
     def _on_switch_change(self, event: Event[EventStateChangedData]) -> None:
@@ -708,7 +708,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 "external_switch", area, state=text(self.language, "on" if turned_on else "off")
             )
         self._save()
-        self.hass.async_create_task(self.async_request_refresh(), eager_start=True)
+        self.config_entry.async_create_task(self.hass, self.async_request_refresh())
 
     async def async_shutdown(self) -> None:
         if self._shut_down:  # also registered with the entry: runs once only
