@@ -117,7 +117,7 @@ async def test_switch_that_does_not_follow_is_asked_again_with_pauses(
     assert coordinator.areas[_area_id(entry)].cmd_attempts == 0
 
 
-async def test_unload_removes_the_repairs(
+async def test_dismissed_repair_survives_a_reload_and_removal_deletes_it(
     hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
 ) -> None:
     freezer.move_to(IN_SEASON)
@@ -126,6 +126,28 @@ async def test_unload_removes_the_repairs(
     hass.states.async_set("sensor.outdoor_temperature", "unavailable")
     await _advance(hass, freezer, 16)
     assert _issue(hass, "outdoor_unavailable") is not None
-    assert await hass.config_entries.async_unload(entry.entry_id)
+    ir.async_ignore_issue(hass, DOMAIN, "outdoor_unavailable", True)
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await _advance(hass, freezer, 16)
+    issue = _issue(hass, "outdoor_unavailable")
+    assert issue is not None and issue.dismissed_version is not None
+
+    await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
-    assert _issue(hass, "outdoor_unavailable") is None
+    assert [i for (d, i) in ir.async_get(hass).issues if d == DOMAIN] == []
+
+
+async def test_issue_of_a_deleted_area_is_dropped(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    await _setup(hass, entry)
+    issue_id = f"sensor_unavailable_{_area_id(entry)}"
+    hass.states.async_set("sensor.living_room_temperature", "unavailable")
+    await _advance(hass, freezer, 16)
+    assert _issue(hass, issue_id) is not None
+    hass.config_entries.async_remove_subentry(entry, _area_id(entry))
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert _issue(hass, issue_id) is None

@@ -14,6 +14,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_UNIT_OF_MEASUREMENT,
     CONF_API_KEY,
+    STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
@@ -341,6 +342,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._tick_count = 0
         self._shut_down = False
         self._unit_warned: set[str] = set()  # entities already warned about an odd unit
+        # switches no area controls any more that are not known to be off yet
+        self._pending_release: list[str] = []
         self._missing_since: dict[str, float] = {}  # repair issue id -> start of the outage
         self._issues: set[str] = set()  # repair issues raised by this coordinator
 
@@ -442,9 +445,6 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     async def _async_setup(self) -> None:
         """Load stored state, build areas, start timers and listeners."""
-        # Outages are judged afresh: issues of an earlier run (or of an area that no
-        # longer exists) would otherwise stay.
-        self._clear_issues()
         stored = await self.store.async_load() or {}
         self.day_state = stored.get("day", {})
         self.ai_state = stored.get("ai", {})
@@ -473,7 +473,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 str(self.opt(CONF_AI_EFFORT)),
             )
 
-        self._release_circuits(stored.get("circuits"))
+        self._release_circuits(stored.get("circuits"), stored.get("release"))
+        self._drop_stale_issues()
         self._register_listeners()
         nightly = _parse_time(str(self.opt(CONF_NIGHTLY_TIME)))
         self._unsubs.append(
@@ -551,19 +552,32 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         area.start = configured
 
     @callback
-    def _release_circuits(self, stored: Any) -> None:
+    def _release_circuits(self, stored: Any, pending: Any) -> None:
         """Switch off circuits of the last run that no area controls any more (area
-        deleted or another switch chosen); otherwise one left on would heat forever."""
-        if not isinstance(stored, dict):
-            return
+        deleted or another switch chosen); otherwise one left on would heat forever.
+        A switch not reachable now is tried again at the next start."""
+        previous = (
+            {s for s in stored.values() if isinstance(s, str)}
+            if isinstance(stored, dict)
+            else set()
+        )
+        if isinstance(pending, list):
+            previous.update(s for s in pending if isinstance(s, str))
         current = {a.cfg[CONF_SWITCH] for a in self.areas.values() if a.has_circuit}
-        dropped = sorted({s for s in stored.values() if isinstance(s, str)} - current)
+        dropped = sorted(previous - current)
+        self._pending_release = dropped
         if not dropped:
             return
 
         async def release() -> None:
             for entity_id in await async_turn_off_switches(self.hass, dropped):
                 self._log("circuit_released", entity_id=entity_id)
+            self._pending_release = [
+                e
+                for e in dropped
+                if (st := self.hass.states.get(e)) is None or st.state != STATE_OFF
+            ]
+            self._save()
 
         self.config_entry.async_create_background_task(
             self.hass, release(), f"{DOMAIN} release circuits"
@@ -650,7 +664,6 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if self._unsub_check:
             self._unsub_check()
             self._unsub_check = None
-        self._clear_issues()
         await self.store.async_save(self._data_to_save())
         await super().async_shutdown()
 
@@ -690,18 +703,27 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     @callback
     def _clear_issue(self, issue_id: str) -> None:
-        if issue_id in self._issues:
-            self._issues.discard(issue_id)
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        # Also an issue of an earlier run: after a restart it is only inactive, and it
+        # keeps a dismissal until the source is back.
+        self._issues.discard(issue_id)
+        ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     @callback
-    def _clear_issues(self) -> None:
-        """Remove every repair issue of this integration."""
-        for domain, issue_id in list(ir.async_get(self.hass).issues):
-            if domain == DOMAIN and issue_id.startswith(ISSUE_KEYS):
+    def _drop_stale_issues(self) -> None:
+        """Remove issues of an area without a circuit (deleted, or the switch removed)
+        and of a source no longer configured. All others stay until their source is
+        back, so a dismissal survives a restart."""
+        valid = {
+            f"{key}_{area.area_id}"
+            for area in self.areas.values()
+            if area.has_circuit
+            for key in ISSUE_KEYS
+        }
+        if self.opt(CONF_OUTDOOR_TEMP):
+            valid.add("outdoor_unavailable")
+        for issue_id in integration_issues(self.hass):
+            if issue_id not in valid:
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
-        self._issues.clear()
-        self._missing_since.clear()
 
     @callback
     def _command_done(self, area: Area) -> None:
@@ -837,6 +859,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "circuits": {
                 a.area_id: a.cfg[CONF_SWITCH] for a in self.areas.values() if a.has_circuit
             },
+            "release": self._pending_release,
             "meter": self.meter.as_dict(),
         }
 
@@ -2136,6 +2159,23 @@ def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[
             ewma.count = max(1, int(counts.get(count_key, 0) or 0))
 
 
+@callback
+def integration_issues(hass: HomeAssistant) -> list[str]:
+    """Ids of the repair issues this integration raises."""
+    return [
+        issue_id
+        for domain, issue_id in ir.async_get(hass).issues
+        if domain == DOMAIN and issue_id.startswith(ISSUE_KEYS)
+    ]
+
+
+@callback
+def async_delete_issues(hass: HomeAssistant) -> None:
+    """Remove every repair issue of this integration (nothing is controlled any more)."""
+    for issue_id in integration_issues(hass):
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
 async def async_turn_off_switches(hass: HomeAssistant, entity_ids: list[str]) -> list[str]:
     """Switch off the given circuits that are on; returns those switched off.
 
@@ -2157,6 +2197,9 @@ async def async_turn_off_switches(hass: HomeAssistant, entity_ids: list[str]) ->
                 )
         except (HomeAssistantError, TimeoutError) as err:
             LOGGER.warning("Could not switch off %s: %s", entity_id, err)
+            continue
+        except Exception:  # a faulty switch must not keep the others on
+            LOGGER.exception("Could not switch off %s", entity_id)
             continue
         switched.append(entity_id)
     return switched

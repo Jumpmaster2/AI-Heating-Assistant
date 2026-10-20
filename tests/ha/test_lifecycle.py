@@ -106,3 +106,21 @@ async def test_failed_first_refresh_leaves_no_listeners(
     assert entry.state is ConfigEntryState.SETUP_RETRY
     failed = started[0]
     assert failed._unsubs == [] and failed._unsub_check is None
+
+
+async def test_released_circuit_not_reachable_is_tried_again(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """A dropped switch that cannot be switched off now is not forgotten."""
+    entry = await _setup_heating(hass, freezer)
+    living = next(s for s in entry.subentries.values() if s.title == "Living room")
+    hass.states.async_set(CIRCUIT, "unavailable")
+    hass.config_entries.async_remove_subentry(entry, living.subentry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert entry.runtime_data._data_to_save()["release"] == [CIRCUIT]
+
+    hass.states.async_set(CIRCUIT, "on")
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert hass.states.get(CIRCUIT).state == "off"
+    assert entry.runtime_data._data_to_save()["release"] == []

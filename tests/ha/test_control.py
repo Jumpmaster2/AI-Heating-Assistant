@@ -647,3 +647,30 @@ async def test_rejected_api_key_starts_reauth_and_control_goes_on(
     assert [f["context"]["source"] for f in flows] == ["reauth"]
     await _advance(hass, freezer, 11)
     assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+
+
+async def test_thermostat_in_fahrenheit_moves_by_tenths_and_accepts_its_limits(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """In °F the target is shown in tenths and the limits shown can be set."""
+    freezer.move_to(IN_SEASON)
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    await _setup(hass, make_entry())
+    attrs = hass.states.get("climate.living_room").attributes
+    assert (attrs["min_temp"], attrs["max_temp"]) == (60.8, 75.2)  # 16 / 24 °C
+
+    async def set_temp(value: float) -> float:
+        await hass.services.async_call(
+            "climate",
+            "set_temperature",
+            {"entity_id": "climate.living_room", "temperature": value},
+            blocking=True,
+        )
+        await hass.async_block_till_done(wait_background_tasks=True)
+        return hass.states.get("climate.living_room").attributes["temperature"]
+
+    assert await set_temp(70.1) == 70.1
+    assert await set_temp(75.2) == 75.2
+    assert await set_temp(60.8) == 60.8
+    area = hass.config_entries.async_entries(DOMAIN)[0].runtime_data.areas
+    assert next(a.target for a in area.values() if a.has_circuit) == 16.0

@@ -18,7 +18,12 @@ from .const import (
     STORAGE_VERSION,
     SUBENTRY_AREA,
 )
-from .coordinator import AiHeatingConfigEntry, HeatingCoordinator, async_turn_off_switches
+from .coordinator import (
+    AiHeatingConfigEntry,
+    HeatingCoordinator,
+    async_delete_issues,
+    async_turn_off_switches,
+)
 from .entity import global_device_info
 from .panel import async_register_panel, async_unregister_panel
 from .services import async_setup_services
@@ -81,6 +86,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
         # circuit on again, then nothing controls the circuits any more.
         await entry.runtime_data.async_shutdown()
         await _async_switch_off_circuits(hass, entry, "disabled")
+        async_delete_issues(hass)
     return unloaded
 
 
@@ -88,6 +94,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
     """Switch off the circuits and delete stored learning data and the panel when the
     integration is removed."""
     await _async_switch_off_circuits(hass, entry, "removed")
+    async_delete_issues(hass)
     async_unregister_panel(hass)
     await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()
 
