@@ -582,6 +582,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             )
         area.start = configured
 
+    @property
+    def pending_release(self) -> list[str]:
+        """Switches dropped from the areas that are not known to be off yet."""
+        return list(self._pending_release)
+
     def _clamp_to_limits(self) -> None:
         """Bring the parameters into the AI limits, which may have been narrowed."""
         limits = self.limits
@@ -631,12 +636,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return
 
         async def release() -> None:
-            for entity_id in await async_turn_off_switches(self.hass, dropped):
+            switched = await async_turn_off_switches(self.hass, dropped)
+            for entity_id in switched:
                 self._log("circuit_released", entity_id=entity_id)
+            # A switch that took the command counts as released, even if its state still
+            # reads "on" for a moment (the device reports back later).
             self._pending_release = [
                 e
                 for e in dropped
-                if (st := self.hass.states.get(e)) is None or st.state != STATE_OFF
+                if e not in switched
+                and ((st := self.hass.states.get(e)) is None or st.state != STATE_OFF)
             ]
             self._save()
 

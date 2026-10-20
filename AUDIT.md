@@ -238,7 +238,7 @@ Jeder Schritt hat Tests, ruff (Prüfung und Format) sowie Übersetzungen de/en u
 | Fund | Stand | Commit(s) |
 |---|---|---|
 | F-01 Temperatureinheiten | behoben | `f9227b3`, `cf7cc33` (Thermostat in °F) |
-| F-02 Kreise beim Deaktivieren/Entfernen aus | behoben | `efa3744`, `cf7cc33` (Wiederholung beim nächsten Start) |
+| F-02 Kreise beim Deaktivieren/Entfernen aus | behoben | `efa3744`, `cf7cc33` (Wiederholung beim nächsten Start), Nachprüfung: noch nicht ausgeschaltete freigegebene Kreise auch beim Entfernen und Deaktivieren |
 | F-03 Ausfall Sensor/Aktor, Repairs | behoben | `b8a6770`, `cf7cc33` (ignorierte Meldungen bleiben). Ein Notbetrieb bei Sensorausfall ist **nicht** eingebaut (zu prüfen, ob gewünscht). |
 | F-04 Reauth | behoben | `9df0cfc` |
 | F-05 USD | behoben | `2fd4f72` |

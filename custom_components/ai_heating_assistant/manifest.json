@@ -11,5 +11,5 @@
   "loggers": ["anthropic"],
   "requirements": ["anthropic==0.125.0"],
   "single_config_entry": true,
-  "version": "0.12.22"
+  "version": "0.12.23"
 }
