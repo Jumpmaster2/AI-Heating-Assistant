@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.8. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.9. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 

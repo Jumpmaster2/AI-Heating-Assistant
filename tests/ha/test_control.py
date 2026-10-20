@@ -1054,6 +1054,7 @@ async def test_forecast_trust_scales_the_expected_sun(
     freezer.move_to(IN_SEASON)
     hass.states.async_set("sensor.pv_power", "0", {"unit_of_measurement": "W"})
     hass.states.async_set("sensor.pv_energy_next_hour", "3.0", {"unit_of_measurement": "kWh"})
+    hass.config.latitude, hass.config.longitude = 52.4, 4.9  # daylight at 10:00 CET
     expected = {}
     for trust in (100, 50, 0):
         entry = make_entry(
@@ -1080,7 +1081,7 @@ async def test_forecast_trust_scales_the_expected_sun(
     # the expected sun over the lead time too
     assert plan[100] > 0 and plan[0] == 0
     # whether a missing PV value counts as 0 does not depend on the option
-    assert negligible[0] == negligible[100]
+    assert negligible[0] is negligible[100] is False
 
 
 async def test_pv_thresholds_follow_the_size_of_the_plant(

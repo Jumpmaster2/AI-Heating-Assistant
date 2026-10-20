@@ -161,13 +161,13 @@ from .logic.physics import clamp, in_season, parse_day_month
 from .logic.prompts import check_messages, nightly_messages, r
 from .logic.start_values import LEARNED_BOUNDS, apply_start_values, read_record
 from .logic.sun import (
+    FORECAST_TRUST,
     Point,
     SunScale,
     clear_sky_index,
     cloud_factor,
     cloud_pct,
     expected_now,
-    FORECAST_TRUST,
     planning_pv,
     sensor_point,
     solar_elevation,
