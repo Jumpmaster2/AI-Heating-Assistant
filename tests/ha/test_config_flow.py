@@ -467,7 +467,9 @@ def test_entity_fields_offer_matching_entities_but_accept_others() -> None:
     temp = by_name["temperature_sensor"]
     assert {"domain": ["sensor"], "device_class": ["temperature"]} in temp.config["filter"]
     assert temp("sensor.without_device_class") == "sensor.without_device_class"
-    windows = by_name["window_sensors"]
+    humidity = by_name["humidity_sensor"]
+    assert {"domain": ["sensor"], "unit_of_measurement": ["%"]} in humidity.config["filter"]
+    windows = by_name["window_sensors"]  # contacts often have no device class: no filter
     assert windows(["input_boolean.window"]) == ["input_boolean.window"]
     block = by_name["ventilation_block_entity"]
     assert block("sensor.anything") == "sensor.anything"  # existing values stay valid

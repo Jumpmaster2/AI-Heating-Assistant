@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.10. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.11. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -84,7 +84,7 @@ Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (
 
 ## Configuration
 
-The entity fields only offer matching entities (e.g. temperature sensors with the temperature device class or the unit °C/°F/K, window and door contacts). Entities chosen earlier outside this choice stay valid.
+The entity fields only offer matching entities (e.g. temperature sensors with the temperature device class or the unit °C/°F/K, humidity sensors in %). Entities chosen earlier outside this choice stay valid.
 
 ### Dashboard
 

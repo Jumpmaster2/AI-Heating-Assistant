@@ -169,6 +169,9 @@ def _sensor(device_class: str, units: list[str] | None = None) -> EntitySelector
 TEMP_UNITS = ["°C", "°F", "K"]
 POWER_UNITS = ["W", "kW", "MW"]
 ENERGY_UNITS = ["Wh", "kWh", "MWh", "MJ", "GJ"]
+HUMIDITY_UNITS = ["%"]
+# units the PV forecast is read in (see logic.sun.sensor_point)
+PV_FORECAST_UNITS = ["Wh", "kWh", "MWh", *POWER_UNITS]
 
 
 def _opt_entity(key: str, values: dict[str, Any]) -> vol.Optional:
@@ -187,14 +190,14 @@ def _general_schema(v: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
             _opt_entity(CONF_OUTDOOR_TEMP, v): _sensor("temperature", TEMP_UNITS),
-            _opt_entity(CONF_OUTDOOR_HUMIDITY, v): _sensor("humidity"),
+            _opt_entity(CONF_OUTDOOR_HUMIDITY, v): _sensor("humidity", HUMIDITY_UNITS),
             _opt_entity(CONF_WEATHER, v): _entity(["weather"]),
             _opt_entity(CONF_PV_POWER, v): _sensor("power", POWER_UNITS),
             _opt_entity(CONF_PV_FORECAST, v): _entity(
                 ["sensor"],
                 filters=[
                     {"domain": "sensor", "device_class": ["energy", "power"]},
-                    {"domain": "sensor", "unit_of_measurement": ENERGY_UNITS + POWER_UNITS},
+                    {"domain": "sensor", "unit_of_measurement": PV_FORECAST_UNITS},
                 ],
             ),
             _req(CONF_FORECAST_TRUST, v): _number(0, 100, 5, "%"),
@@ -701,17 +704,10 @@ def _area_schema(
                         vol.Required(CONF_TEMP_SENSOR, default=v.get(CONF_TEMP_SENSOR)): _sensor(
                             "temperature", TEMP_UNITS
                         ),
-                        _opt_entity(CONF_HUMIDITY_SENSOR, v): _sensor("humidity"),
+                        _opt_entity(CONF_HUMIDITY_SENSOR, v): _sensor("humidity", HUMIDITY_UNITS),
                         vol.Optional(CONF_WINDOWS, default=v.get(CONF_WINDOWS, [])): _entity(
                             ["binary_sensor", "input_boolean"],
                             multiple=True,
-                            filters=[
-                                {
-                                    "domain": "binary_sensor",
-                                    "device_class": ["window", "door", "opening"],
-                                },
-                                {"domain": "input_boolean"},
-                            ],
                         ),
                     }
                 ),
@@ -743,7 +739,7 @@ def _area_schema(
                     {
                         req(CONF_VENT_RH): _number(30, 95, 1, "%"),
                         _opt_entity(CONF_REF_TEMP, v): _sensor("temperature", TEMP_UNITS),
-                        _opt_entity(CONF_REF_HUMIDITY, v): _sensor("humidity"),
+                        _opt_entity(CONF_REF_HUMIDITY, v): _sensor("humidity", HUMIDITY_UNITS),
                         # any domain stays valid; the dialog offers the ones judged by
                         # their state (see logic.ventilation.is_blocking)
                         _opt_entity(CONF_VENT_BLOCK, v): _entity(
