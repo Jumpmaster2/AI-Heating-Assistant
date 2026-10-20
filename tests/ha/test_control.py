@@ -1063,10 +1063,24 @@ async def test_forecast_trust_scales_the_expected_sun(
         )
         await _setup(hass, entry)
         await _advance(hass, freezer, 1)
-        expected[trust] = entry.runtime_data._pv_estimate(dt_util.utcnow().timestamp())
+        coordinator = entry.runtime_data
+        ts = dt_util.utcnow().timestamp()
+        area = next(a for a in coordinator.areas.values() if a.has_circuit)
+        expected[trust] = (
+            coordinator._pv_estimate(ts),
+            coordinator._learned_values(area, 0.0, ts).pv_plan_kw,
+            coordinator._pv_negligible(ts),
+        )
         assert await hass.config_entries.async_remove(entry.entry_id)
-    assert expected[100] > 0 and expected[0] == 0
-    assert expected[50] == pytest.approx(expected[100] / 2)
+    now, plan, negligible = (
+        dict(zip(expected, v, strict=True)) for v in zip(*expected.values(), strict=True)
+    )
+    assert now[100] > 0 and now[0] == 0
+    assert now[50] == pytest.approx(now[100] / 2)
+    # the expected sun over the lead time too
+    assert plan[100] > 0 and plan[0] == 0
+    # whether a missing PV value counts as 0 does not depend on the option
+    assert negligible[0] == negligible[100]
 
 
 async def test_pv_thresholds_follow_the_size_of_the_plant(

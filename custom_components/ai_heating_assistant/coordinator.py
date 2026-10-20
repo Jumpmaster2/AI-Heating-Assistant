@@ -167,6 +167,7 @@ from .logic.sun import (
     cloud_factor,
     cloud_pct,
     expected_now,
+    FORECAST_TRUST,
     planning_pv,
     sensor_point,
     solar_elevation,
@@ -1128,10 +1129,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return None
         return cloud_pct({"condition": weather.state, **weather.attributes})
 
-    def _pv_estimate(self, ts: float) -> float | None:
+    def _pv_estimate(self, ts: float, trust: float | None = None) -> float | None:
         """PV power expected now: from the forecast points, else from sun position, clouds
-        and the learned clear sky scale; None without any basis."""
-        if (expected := expected_now(self._pv_points, ts, self._trust)) is not None:
+        and the learned clear sky scale; None without any basis. ``trust`` defaults to
+        the option the control relies on."""
+        trust = self._trust if trust is None else trust
+        if (expected := expected_now(self._pv_points, ts, trust)) is not None:
             return expected
         scale = self.sun_scale.value
         index = self._sun_index(ts)
@@ -1140,7 +1143,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if index <= 0:
             return 0.0
         cloud = self._cloud_now()
-        return scale * index * cloud_factor(100.0 if cloud is None else cloud) * self._trust
+        return scale * index * cloud_factor(100.0 if cloud is None else cloud) * trust
 
     @property
     def _trust(self) -> float:
@@ -1158,7 +1161,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         """A missing PV value may be read as zero: the sun is low or little is expected."""
         if self._sun_index(ts) < TWILIGHT_INDEX:
             return True
-        expected = self._pv_estimate(ts)
+        # Judged with the fixed trust: the option only sets how much the control relies
+        # on the sun; otherwise at 0 % a sunny sensor gap would be learned as no sun.
+        expected = self._pv_estimate(ts, FORECAST_TRUST)
         return expected is not None and expected < self._pv_threshold(
             PV_NEGLIGIBLE_KW, PV_NEGLIGIBLE_SHARE
         )
