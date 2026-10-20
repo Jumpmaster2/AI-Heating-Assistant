@@ -262,12 +262,12 @@ const TABS = [
 // Settings cards per tab (types and ranges come from the option specs)
 const SETTINGS = {
   general: [
-    { id: "sensors", icon: "mdi:thermometer", fields: ["outdoor_temperature", "outdoor_humidity", "weather", "pv_power", "pv_forecast", "heat_meter"] },
+    { id: "sensors", icon: "mdi:thermometer", fields: ["outdoor_temperature", "outdoor_humidity", "weather", "pv_power", "pv_forecast", "forecast_trust", "heat_meter"] },
     { id: "season", icon: "mdi:calendar-range", fields: ["season_start", "season_end", "frost_temperature"] },
     { id: "vacation", icon: "mdi:bag-suitcase-outline", fields: ["vacation_entities", "vacation_temperature", "return_entity", "preheat_reserve"] },
   ],
   rules: [
-    { id: "emergency", icon: "mdi:alert-outline", fields: ["emergency_enabled", "emergency_delta", "emergency_duration", "emergency_window_quiet"] },
+    { id: "emergency", icon: "mdi:alert-outline", fields: ["emergency_enabled", "emergency_delta", "emergency_duration", "emergency_window_quiet", "force_on_below"] },
     {
       id: "ventilation",
       icon: "mdi:weather-windy",
@@ -286,7 +286,7 @@ const SETTINGS = {
     { id: "apikey", icon: "mdi:key-outline", special: "apikey" },
     { id: "model", icon: "mdi:robot-outline", fields: ["model", "effort", "max_output_tokens"] },
     { id: "schedule", icon: "mdi:clock-outline", fields: ["nightly_time", "check_interval", "check_max_interval"] },
-    { id: "costs", icon: "mdi:currency-eur", fields: ["monthly_budget", "price_input", "price_output", "price_cache_write", "price_cache_read"] },
+    { id: "costs", icon: "mdi:currency-usd", fields: ["monthly_budget", "price_input", "price_output", "price_cache_write", "price_cache_read"] },
     { id: "limits", icon: "mdi:arrow-expand-horizontal", special: "limits" },
   ],
   decision: [
@@ -313,7 +313,7 @@ const SETTINGS = {
 // The start values only when an area is created; an existing one shows its learned values.
 const AREA_GROUPS = [
   ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors"], false],
-  ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time"], false],
+  ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time", "heating_type"], false],
   ["start_values", ["window_delay", "recovery_time", "dead_time", "puffer"], true],
   ["learned_values", ["window_delay", "recovery_time", "dead_time", "puffer"], false],
   ["ventilation", ["ventilation_rh_threshold", "reference_temperature", "reference_humidity", "ventilation_block_entity"], true],
@@ -337,6 +337,7 @@ const STATUS_PILL = {
   window_open: "muted",
   recovery: "muted",
   sensor_error: "bad",
+  actuator_unavailable: "bad",
   idle: "ok",
 };
 const VENT_PILL = { ventilate_now: "warn", close_window: "warn", ventilation_useful: "ok" };
@@ -364,22 +365,29 @@ class AiHeatingAssistantPanel extends HTMLElement {
     this.shadowRoot.addEventListener("input", (ev) => this._onInput(ev));
     this.shadowRoot.addEventListener("change", (ev) => this._onInput(ev, true));
     this.shadowRoot.addEventListener("keydown", (ev) => this._onKey(ev));
+    this.shadowRoot.addEventListener("value-changed", (ev) => this._onSelector(ev));
   }
 
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
     if (first) {
+      this._entitiesRef = hass.entities;
       this._count = this._entityCount();
       this._load();
       return;
     }
-    // new or removed entities (e.g. after adding an area): load the entity ids again
-    const count = this._entityCount();
-    if (count !== this._count) {
-      this._count = count;
-      if (this._cfg) this._load(true);
+    // new or removed entities (e.g. after adding an area): load the entity ids again.
+    // The registry object only changes with the registry, so most updates skip the count.
+    if (hass.entities !== this._entitiesRef) {
+      this._entitiesRef = hass.entities;
+      const count = this._entityCount();
+      if (count !== this._count) {
+        this._count = count;
+        if (this._cfg) this._load(true);
+      }
     }
+    for (const el of this.shadowRoot.querySelectorAll("ha-selector[data-k]")) el.hass = hass;
     this._live();
   }
 
@@ -434,6 +442,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
   async _load(quiet = false) {
     try {
       this._cfg = await this._hass.callWS({ type: `${DOMAIN}/config` });
+      this._statsAt = 0; // configuration changed: learned values again
       this._error = null;
     } catch (err) {
       this._error = err.message || String(err);
@@ -501,6 +510,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
       <div class="content">${this._content()}</div>
       <div class="datalists">${this._datalists()}</div>
       <div class="toast" hidden></div>`;
+    this._upgradeSelectors();
     this._sig = this._signature();
   }
 
@@ -515,7 +525,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
   }
 
   _datalists() {
-    if (!this._hass) return "";
+    // suggestions for the plain text fields only; ha-selector brings its own picker
+    if (!this._hass || customElements.get("ha-selector")) return "";
     const option = (id) => `<option value="${esc(id)}">${esc(this._name(id))}</option>`;
     const all = Object.keys(this._hass.states).sort();
     let html = `<datalist id="dl-all">${all.map(option).join("")}</datalist>`;
@@ -549,7 +560,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const ids = [
       ...Object.values(this._cfg.entities || {}),
       ...this._cfg.areas.flatMap((a) => [...Object.values(a.entities || {}), a.data.temperature_sensor]),
-      this._cfg.options.outdoor_temperature,
+      this._cfg.options.outdoor_temperature || this._cfg.options.weather,
     ];
     return ids
       .map((id) => {
@@ -576,14 +587,18 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const sensor = this._state(area.data.temperature_sensor);
     const current = climate ? climate.attributes.current_temperature : this._ok(sensor) ? sensor.state : null;
     const target = climate ? climate.attributes.temperature : null;
-    return [current, target, climate];
+    // the thermostat shows the unit system of HA, a plain sensor its own unit
+    const unit = climate
+      ? this._hass.config?.unit_system?.temperature || "°C"
+      : sensor?.attributes?.unit_of_measurement || this._hass.config?.unit_system?.temperature || "°C";
+    return [current, target, climate, unit];
   }
 
-  _tempHtml(current, target) {
+  _tempHtml(current, target, unit) {
     // each value stays on one line; a narrow column breaks before the arrow
-    const now = `<span class="temp">${esc(`${this._num(current)} °C`)}</span>`;
+    const now = `<span class="temp">${esc(`${this._num(current)} ${unit}`)}</span>`;
     if (target === null || target === undefined) return now;
-    return `${now} <span class="temp">${esc(`→ ${this._num(target)} °C`)}</span>`;
+    return `${now} <span class="temp">${esc(`→ ${this._num(target)} ${unit}`)}</span>`;
   }
 
   _areaStatus(area) {
@@ -641,11 +656,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     // areas
     const areaRows = this._cfg.areas
       .map((area) => {
-        const [current, target, climate] = this._areaTemps(area);
+        const [current, target, climate, unit] = this._areaTemps(area);
         const heating = climate?.attributes?.hvac_action === "heating";
         const [statusText, statusCls] = this._areaStatus(area);
         const vent = this._areaVent(area);
-        const temp = this._tempHtml(current, target);
+        const temp = this._tempHtml(current, target, unit);
         const action = area.entities.climate ? `data-action="more-info" data-entity="${esc(area.entities.climate)}"` : `data-edit="${esc(area.id)}"`;
         return `<button class="row link" ${action}>
           <ha-icon icon="${heating ? "mdi:fire" : area.entities.climate ? "mdi:home-thermometer-outline" : "mdi:weather-windy"}" style="${heating ? "color:var(--warning-color, #ffa600)" : ""}"></ha-icon>
@@ -684,7 +699,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
           <div class="row"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="grow">${esc(ui.nextCheck)}</span><span class="muted">${esc(this._ok(next) ? this._time(next.state) : ui.none)}</span></div>
           <div class="row"><ha-icon icon="mdi:weather-night"></ha-icon><span class="grow">${esc(ui.nextNightly)}</span><span class="muted">${esc(this._time(attrs.next_decision))}</span></div>
           <div class="row"><ha-icon icon="mdi:calendar-check-outline"></ha-icon><span class="grow">${esc(ui.lastDecision)}</span><span class="muted">${esc(decision)}</span></div>
-          <div class="row"><ha-icon icon="mdi:currency-eur"></ha-icon><span class="grow">${esc(ui.costMonth)}</span><span class="muted">${esc(`${this._num(this._ok(cost) ? cost.state : 0, 2)} € / ${this._num(budget, 2)} €`)}</span></div>
+          <div class="row"><ha-icon icon="mdi:currency-usd"></ha-icon><span class="grow">${esc(ui.costMonth)}</span><span class="muted">${esc(`${this._num(this._ok(cost) ? cost.state : 0, 2)} USD / ${this._num(budget, 2)} USD`)}</span></div>
         </div>
       </div>`;
 
@@ -724,11 +739,18 @@ class AiHeatingAssistantPanel extends HTMLElement {
 
     // at a glance
     const g = ui.glanceRows;
+    // without an outdoor sensor the weather entity provides the outdoor temperature
     const outdoor = this._state(o.outdoor_temperature);
+    const weather = o.outdoor_temperature ? null : this._state(o.weather);
+    const outdoorText = this._ok(outdoor)
+      ? `${this._num(outdoor.state)} ${outdoor.attributes.unit_of_measurement || ""}`
+      : weather && typeof weather.attributes.temperature === "number"
+        ? `${this._num(weather.attributes.temperature)} ${weather.attributes.temperature_unit || ""} (${this._name(o.weather)})`
+        : o.outdoor_temperature || ui.none;
     const effort = this.labels.effort[o.effort] || o.effort;
     const glanceRows = [
       ["areas", "mdi:home-thermometer-outline", g.areas, this._cfg.areas.map((a) => a.title).join(", ") || ui.none],
-      ["general", "mdi:thermometer", g.outdoor, this._ok(outdoor) ? `${this._num(outdoor.state)} ${outdoor.attributes.unit_of_measurement || ""}` : o.outdoor_temperature || ui.none],
+      ["general", "mdi:thermometer", g.outdoor, outdoorText],
       ["general", "mdi:calendar-range", g.season, `${o.season_start} – ${o.season_end}`],
       ["general", "mdi:bag-suitcase-outline", g.vacation, (o.vacation_entities || []).map((id) => this._name(id)).join(", ") || ui.none],
       ["rules", "mdi:alert-outline", g.emergency, o.emergency_enabled ? ui.on : ui.off],
@@ -769,11 +791,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const [title, desc] = ui.cards.areas;
     const rows = this._cfg.areas
       .map((area) => {
-        const [current, target] = this._areaTemps(area);
+        const [current, target, , unit] = this._areaTemps(area);
         const [statusText, statusCls] = this._areaStatus(area);
         const vent = this._areaVent(area);
         const circuit = area.data.heater_switch ? this._name(area.data.heater_switch) : ui.noCircuit;
-        const temp = this._tempHtml(current, target);
+        const temp = this._tempHtml(current, target, unit);
         return `<tr data-edit="${esc(area.id)}">
           <td class="c-icon"><ha-icon icon="${area.data.heater_switch ? "mdi:home-thermometer-outline" : "mdi:weather-windy"}"></ha-icon></td>
           <td class="c-name"><div>${esc(area.title)}</div><div class="muted small entity-id">${esc(area.data.temperature_sensor)}</div></td>
@@ -804,6 +826,33 @@ class AiHeatingAssistantPanel extends HTMLElement {
     return `${text} ${st.attributes.unit_of_measurement || ""}`.trim();
   }
 
+  // Learned rates come from the integration: their sensors are disabled by default.
+  _learnedStats() {
+    const now = Date.now();
+    if (!this._statsLoading && (!this._statsAt || now - this._statsAt > 60000)) {
+      this._statsLoading = true;
+      this._ws({ type: `${DOMAIN}/learned` })
+        .then((stats) => {
+          this._stats = stats;
+          this._statsAt = Date.now();
+        })
+        .catch(() => {
+          this._statsAt = Date.now(); // not running: try again later
+        })
+        .finally(() => {
+          this._statsLoading = false;
+          if (this._tab === "learned" && this._stats) this._rerenderContent();
+        });
+    }
+    return this._stats || {};
+  }
+
+  _learnedText(entityId, stat, digits) {
+    if (this._ok(this._state(entityId))) return this._formatState(entityId, digits);
+    if (!stat || typeof stat.value !== "number") return this.ui.none;
+    return `${this._num(stat.value, digits)} ${stat.unit || ""}`.trim();
+  }
+
   _learnedTab() {
     const ui = this.ui;
     const heating = this._cfg.areas.filter((a) => a.entities.learning_progress);
@@ -821,10 +870,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const cards = heating
       .map((area) => {
         const progress = this._state(area.entities.learning_progress);
-        const cells = LEARNED.filter(([key]) => area.entities[key])
+        const stats = this._learnedStats()[area.id] || {};
+        const cells = LEARNED.filter(([key]) => area.entities[key] || stats[key])
           .map(
             ([key, icon, digits]) => `<div class="learn-cell"><span class="lbl small"><ha-icon icon="${icon}"></ha-icon>${esc(ui.learnedNames[key])}</span>
-              <span>${esc(this._formatState(area.entities[key], digits))}</span></div>`,
+              <span>${esc(this._learnedText(area.entities[key], stats[key], digits))}</span></div>`,
           )
           .join("");
         const params = Object.entries(progress?.attributes?.parameters || {})
@@ -990,6 +1040,12 @@ class AiHeatingAssistantPanel extends HTMLElement {
           </select>${helpHtml}</label>`;
       }
       case "entity": {
+        // Home Assistant's own entity picker (names, areas, filters) when available
+        if (customElements.get("ha-selector")) {
+          this._selectors = this._selectors || new Map();
+          this._selectors.set(`${cardId}|${key}`, { spec, value, name });
+          return `<div class="field"><ha-selector ${attrs("selector")}></ha-selector>${helpHtml}</div>`;
+        }
         if (spec.multiple) {
           const list = Array.isArray(value) ? value : [];
           const chips = list
@@ -1038,6 +1094,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
 
   _onInput(ev, isChange = false) {
     const el = ev.target;
+    // typing in the search of a picker is no value; ha-selector reports value-changed
+    if (el.localName === "ha-selector") return;
     if (el.dataset.limit) {
       const draft = (this._drafts.limits = this._drafts.limits || { limits: clone(this._cfg.options.limits) });
       draft.limits[el.dataset.limit] = { ...draft.limits[el.dataset.limit], [el.dataset.part]: el.value === "" ? null : Number(el.value) };
@@ -1074,6 +1132,32 @@ class AiHeatingAssistantPanel extends HTMLElement {
     this._setValue(cardId, key, value);
   }
 
+  // Configure the ha-selector elements of the rendered content (properties, not attributes).
+  _upgradeSelectors() {
+    for (const el of this.shadowRoot.querySelectorAll("ha-selector[data-k]")) {
+      const { cardId, k: key } = el.dataset;
+      const field = this._selectors?.get(`${cardId}|${key}`);
+      if (!field) continue;
+      const { selector, ...config } = field.spec || {};
+      el.hass = this._hass;
+      el.selector = { [selector || "entity"]: config };
+      el.label = field.name;
+      el.value = field.value ?? (config.multiple ? [] : "");
+      el.required = false;
+    }
+  }
+
+  _onSelector(ev) {
+    const el = ev.target;
+    if (el?.localName !== "ha-selector" || !el.dataset.k) return;
+    ev.stopPropagation();
+    const value = ev.detail?.value;
+    el.value = value;
+    const field = this._selectors?.get(`${el.dataset.cardId}|${el.dataset.k}`);
+    if (field) field.value = value;
+    this._setValue(el.dataset.cardId, el.dataset.k, value === undefined || value === "" ? null : value);
+  }
+
   _onKey(ev) {
     const el = ev.target;
     if (ev.key === "Enter" && el.dataset.add) {
@@ -1108,6 +1192,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     }
     const scroll = content.scrollTop;
     content.innerHTML = this._content();
+    this._upgradeSelectors();
     content.scrollTop = scroll;
     if (focusSelector) content.querySelector(focusSelector)?.focus();
   }
@@ -1183,6 +1268,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
         if (confirm(this.ui.confirmDelete)) {
           try {
             this._cfg = await this._ws({ type: `${DOMAIN}/delete_area`, subentry_id: this._edit.id });
+            this._statsAt = 0;
             this._edit = null;
             this._render();
             this._toast(this.ui.saved);
@@ -1221,6 +1307,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     button.disabled = true;
     try {
       this._cfg = await this._ws(msg);
+      this._statsAt = 0;
       delete this._drafts[cardId];
       this._rerenderContent();
       this._toast(this.ui.saved);
@@ -1244,6 +1331,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     try {
       const result = await this._ws(msg);
       this._cfg = result.config;
+      this._statsAt = 0;
       this._edit = null;
       this._render();
       this._toast(this.ui.saved);

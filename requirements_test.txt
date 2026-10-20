@@ -1,2 +1,2 @@
 pytest-homeassistant-custom-component
-anthropic>=0.125.0
+anthropic==0.125.0

@@ -16,7 +16,7 @@ from typing import Any
 COMPONENT = Path(__file__).resolve().parent.parent / "custom_components" / "ai_heating_assistant"
 TARGET = COMPONENT / "frontend" / "labels.js"
 LANGUAGES = ("de", "en")
-OPTION_STEPS = ("general", "vacation", "rules", "ventilation", "ai", "advanced")
+OPTION_STEPS = ("general", "vacation", "rules", "ventilation", "ai", "decision")
 HEADER = (
     "// Generated from the translation files by scripts/build_labels.py, do not edit by hand.\n"
 )
@@ -33,6 +33,8 @@ def labels(translation: dict[str, Any]) -> dict[str, Any]:
     options = translation["options"]["step"]
     for step in OPTION_STEPS:
         _add(fields, options[step])
+        for sec in options[step].get("sections", {}).values():
+            _add(fields, sec)
     setup_ai = translation["config"]["step"]["ai"]
     fields["api_key"] = [
         setup_ai["data"]["api_key"],
@@ -68,6 +70,7 @@ def labels(translation: dict[str, Any]) -> dict[str, Any]:
             "override": entity["select"]["heating_day_override"]["state"],
         },
         "effort": translation["selector"]["effort"]["options"],
+        "heating_type": translation["selector"]["heating_type"]["options"],
     }
 
 

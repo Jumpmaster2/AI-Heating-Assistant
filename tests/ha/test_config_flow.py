@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from homeassistant.config_entries import SOURCE_USER, FlowType
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -16,13 +17,16 @@ from .conftest import make_entry
 
 GENERAL = {
     "outdoor_temperature": "sensor.outdoor_temperature",
-    "season_start": "01.10.",
-    "season_end": "31.03.",
+    "season_start_day": 1,
+    "season_start_month": "10",
+    "season_end_day": 31,
+    "season_end_month": "3",
     "frost_temperature": 7.0,
 }
 VACATION = {"vacation_entities": [], "vacation_temperature": 18.0, "preheat_reserve": 30}
 DECISION = {"theta_start": 15.5}
-AI = {"model": "claude-sonnet-5-5", "nightly_time": "03:00:00", "monthly_budget": 5.0}
+AI = {"nightly_time": "03:00:00"}
+AI_MODEL = {"model": "claude-sonnet-5-5", "monthly_budget": 5.0}
 
 
 async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> None:
@@ -30,9 +34,18 @@ async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> No
     assert result["type"] is FlowResultType.FORM and result["step_id"] == "user"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {**GENERAL, "season_start": "1.13."}
+        result["flow_id"], {**GENERAL, "season_start_day": 31, "season_start_month": "2"}
     )
-    assert result["errors"] == {"season_start": "invalid_day_month"}
+    assert result["errors"] == {"season_start_day": "invalid_day_month"}
+    # the entry is kept for correction
+    defaults = {str(k): k.default() for k in result["data_schema"].schema if callable(k.default)}
+    assert (defaults["season_start_day"], defaults["season_start_month"]) == (31, "2")
+    # an outdoor sensor or a weather entity is needed
+    without_outdoor = {
+        k: v for k, v in GENERAL.items() if k not in ("outdoor_temperature", "weather")
+    }
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], without_outdoor)
+    assert result["errors"] == {"outdoor_temperature": "outdoor_required"}
 
     result = await hass.config_entries.flow.async_configure(result["flow_id"], GENERAL)
     assert result["step_id"] == "vacation"
@@ -46,9 +59,9 @@ async def test_full_user_flow_without_ai(hass: HomeAssistant, base_states) -> No
     assert result["type"] is FlowResultType.CREATE_ENTRY
     entry = result["result"]
     assert entry.data == {"api_key": ""}
-    assert entry.options["model"] == "claude-sonnet-5-5"
-    # prices follow the chosen model
-    assert entry.options["price_input"] == 2.0
+    # without a key no model is asked for: the defaults stay
+    assert entry.options["model"] == "claude-opus-5-5"
+    assert entry.options["price_input"] == 4.0
     assert entry.options["season_start"] == "01.10."
     assert entry.options["theta_start"] == 15.5
     # the flow continues with the first heating area
@@ -83,9 +96,16 @@ async def test_api_key_is_validated(hass: HomeAssistant, base_states) -> None:
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {**AI, "api_key": "good-key"}
         )
+        # with a key: model and budget follow
+        assert result["step_id"] == "ai_model"
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], AI_MODEL)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["result"].data["api_key"] == "good-key"
+    entry = result["result"]
+    assert entry.data["api_key"] == "good-key"
+    assert entry.options["model"] == "claude-sonnet-5-5"
+    assert entry.options["price_input"] == 2.0  # prices follow the chosen model
+    assert entry.options["nightly_time"] == "03:00:00"
 
 
 async def test_subentry_flow_adds_area(hass: HomeAssistant, base_states) -> None:
@@ -218,14 +238,15 @@ async def test_options_ventilation_cooling_margin(hass: HomeAssistant, base_stat
         "ventilation_min_cooling_advantage": 1.0,
         "ventilation_cooling_margin": 1.5,
         "ventilation_cooling_min_temp": 23.5,
-        "night_start_hour": 20,
-        "night_end_hour": 8,
+        "night_start_hour": "21:30:00",
+        "night_end_hour": "07:00:00",
     }
     result = await hass.config_entries.options.async_configure(result["flow_id"], values)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options["ventilation_cooling_margin"] == 1.5
     assert entry.options["ventilation_cooling_min_temp"] == 23.5
+    assert entry.options["night_start_hour"] == "21:30:00"
 
 
 async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, base_states) -> None:
@@ -326,17 +347,160 @@ async def test_options_edit_learned_theta(hass: HomeAssistant, base_states) -> N
     entry.runtime_data.day_state["theta"] = 14.0
     result = await hass.config_entries.options.async_init(entry.entry_id)
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"next_step_id": "advanced"}
+        result["flow_id"], {"next_step_id": "decision"}
     )
     schema = result["data_schema"].schema
     keys = {str(k): k for k in schema}
     assert "theta_start" not in keys
     assert keys["theta"].default() == 14.0
-    values = {str(k): k.default() for k in schema}
+    # expert values sit in collapsed sections and come back nested
+    values = {str(k): k.default() for k in schema if callable(k.default)}
+    phases = {str(k): k.default() for k in schema["phases"].schema.schema}
+    learning = {str(k): k.default() for k in schema["learning_steps"].schema.schema}
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {**values, "theta": 13.5}
+        result["flow_id"],
+        {
+            **values,
+            "theta": 13.5,
+            "phases": {**phases, "phase_shared_min_days": 21},
+            "learning_steps": learning,
+        },
     )
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert "theta" not in entry.options
     assert entry.runtime_data.theta == 13.5
+    assert entry.options["phase_shared_min_days"] == 21  # flattened again
+    assert "phases" not in entry.options
+
+
+async def test_switch_of_another_area_is_rejected(hass: HomeAssistant, base_states) -> None:
+    """Two areas must not switch the same circuit (audit F-07)."""
+    entry = make_entry()
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    result = await hass.config_entries.subentries.async_init(
+        (entry.entry_id, SUBENTRY_AREA), context={"source": SOURCE_USER}
+    )
+    user_input = {
+        "name": "Kitchen",
+        "sensors": {"temperature_sensor": "sensor.storage_temperature", "window_sensors": []},
+        "heating": {
+            "heater_switch": "input_boolean.heating_circuit_1",
+            "default_target": 21.0,
+            "min_target": 16.0,
+            "max_target": 24.0,
+            "min_on_time": 10,
+            "min_off_time": 10,
+        },
+        "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 30, "puffer": 0.7},
+        "ventilation": {"ventilation_rh_threshold": 60},
+    }
+    result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
+    assert result["errors"] == {"base": "switch_in_use"}
+    # the name comes first, whatever its case and spaces
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {**user_input, "name": " living ROOM"}
+    )
+    assert result["errors"] == {"name": "name_in_use", "base": "switch_in_use"}
+
+    # the area that owns the switch keeps it when it is changed
+    living = next(s for s in entry.subentries.values() if s.title == "Living room")
+    result = await entry.start_subentry_reconfigure_flow(hass, living.subentry_id)
+    learned = result["data_schema"].schema["learned_values"].schema.schema
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"],
+        {
+            **{k: v for k, v in user_input.items() if k != "start_values"},
+            "name": "Living room",
+            "sensors": {"temperature_sensor": "sensor.living_room_temperature"},
+            "learned_values": {str(k): k.default() for k in learned},
+        },
+    )
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["reason"] == "reconfigure_successful"
+
+
+async def test_reauth_flow_replaces_the_key(hass: HomeAssistant, base_states) -> None:
+    entry = make_entry(api_key="old-key")
+    entry.add_to_hass(hass)
+    result = await entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM and result["step_id"] == "reauth_confirm"
+    target = "custom_components.ai_heating_assistant.config_flow.ClaudeClient.validate"
+    with patch(target, side_effect=AiAuthError("authentication failed")):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_key": "still-wrong"}
+        )
+    assert result["errors"] == {"base": "invalid_auth"}
+    with patch(target):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_key": " new-key "}
+        )
+    assert result["type"] is FlowResultType.ABORT and result["reason"] == "reauth_successful"
+    assert entry.data["api_key"] == "new-key"
+
+
+@pytest.mark.parametrize(
+    ("latitude", "start", "end"), [(52.5, "01.10.", "31.03."), (-33.9, "01.05.", "30.09.")]
+)
+async def test_heating_period_suggested_by_hemisphere(
+    hass: HomeAssistant, latitude: float, start: str, end: str
+) -> None:
+    hass.config.latitude = latitude
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
+    defaults = {str(k): k.default() for k in result["data_schema"].schema if callable(k.default)}
+    shown = tuple(
+        f"{int(defaults[f'{k}_day']):02d}.{int(defaults[f'{k}_month']):02d}."
+        for k in ("season_start", "season_end")
+    )
+    assert shown == (start, end)
+
+
+async def test_options_can_switch_to_the_weather_temperature(
+    hass: HomeAssistant, base_states
+) -> None:
+    """Clearing the outdoor sensor with a weather entity set removes it from the options."""
+    entry = make_entry(weather="weather.home")
+    hass.states.async_set("weather.home", "cloudy", {"temperature": 5, "temperature_unit": "°C"})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "general"}
+    )
+    values = {
+        "weather": "weather.home",
+        "season_start_day": 15,
+        "season_start_month": "9",
+        "season_end_day": 30,
+        "season_end_month": "4",
+        "frost_temperature": 7.0,
+        "forecast_trust": 70,
+    }
+    result = await hass.config_entries.options.async_configure(result["flow_id"], values)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert "outdoor_temperature" not in entry.options
+    assert (entry.options["season_start"], entry.options["season_end"]) == ("15.09.", "30.04.")
+
+
+def test_entity_fields_offer_matching_entities_but_accept_others() -> None:
+    """Filters narrow the choice in the dialog; saving still checks the domain only."""
+    from custom_components.ai_heating_assistant.config_flow import area_schema
+
+    fields = {}
+    for key, value in area_schema({}).schema.items():
+        inner = getattr(value, "schema", None)
+        fields.update(inner.schema if inner is not None else {str(key): value})
+    by_name = {str(k): v for k, v in fields.items()}
+    temp = by_name["temperature_sensor"]
+    assert {"domain": ["sensor"], "device_class": ["temperature"]} in temp.config["filter"]
+    assert temp("sensor.without_device_class") == "sensor.without_device_class"
+    humidity = by_name["humidity_sensor"]
+    assert {"domain": ["sensor"], "unit_of_measurement": ["%"]} in humidity.config["filter"]
+    windows = by_name["window_sensors"]  # contacts often have no device class: no filter
+    assert windows(["input_boolean.window"]) == ["input_boolean.window"]
+    block = by_name["ventilation_block_entity"]
+    assert block("sensor.anything") == "sensor.anything"  # existing values stay valid

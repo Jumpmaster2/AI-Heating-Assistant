@@ -9,16 +9,24 @@ from .ai_schema import PARAMS
 
 LANGUAGES = {"de": "German", "en": "English"}
 
+# How the heating type of an area (field "type") behaves.
+TYPES_HINT = (
+    "Each area has a type: underfloor (the floor stores heat for hours, so rooms cool slowly "
+    "and react late), radiator (heats and cools within minutes to an hour, little stored heat) "
+    "or other (in between, e.g. wall heating). "
+)
+
 NIGHTLY_SYSTEM = (
-    "You decide once per night whether an underfloor heating system is needed today "
+    "You decide once per night whether a heating system is needed today "
     "(from now until the same time tomorrow). Each area has its own on/off circuit; "
     "the local controller keeps every area at its target on heating days. On a no-heating day "
     "all circuits stay off except frost protection and an emergency rule (temperature expected "
-    "after the lead time long and clearly below target, without airing). Floors store a lot of "
-    "heat, so rooms cool slowly; "
-    "cool_kph is the learned cooling in K per hour without heating. Goal: every area at least "
+    "after the lead time long and clearly below target, without airing). "
+    + TYPES_HINT
+    + "cool_kph is the learned cooling in K per hour without heating. Goal: every area at least "
     "at its target all day; comfort has priority, but every unnecessary heating day costs energy. "
-    "With enough margin the stored floor heat often carries a day without heating. "
+    "With enough margin the stored heat (rooms, and floors in particular) often carries a day "
+    "without heating. "
     "The local rule (theta = forecast maximum below which heating is needed, puffer = margin above "
     "target an area needs now) and the evaluated history (error A = no heating although too cold, "
     "error B = heating although unnecessary; manual = the day ran under a manual override, "
@@ -31,9 +39,10 @@ NIGHTLY_SYSTEM = (
 )
 
 CHECK_SYSTEM = (
-    "You tune a local underfloor heating controller to use as little heat as possible while "
+    "You tune a local heating controller to use as little heat as possible while "
     "every area stays at its target. You never switch anything; you only propose parameter values. "
-    "Per area the controller switches on when the predicted temperature "
+    + TYPES_HINT
+    + "Per area the controller switches on when the predicted temperature "
     "(after dead_time_min * lead_factor, using the learned cooling rate) falls below "
     "target - hysteresis_on, and switches off when temperature + expected overshoot * overshoot_factor "
     "reaches target + hysteresis_off. Heating pauses after a window was open window_delay_min and "
@@ -59,7 +68,13 @@ CHECK_SYSTEM = (
 
 
 def _lang_hint(language: str) -> str:
-    return f" Write all reasons and the summary in {LANGUAGES.get(language, 'English')}."
+    """Language of the free text answers: the Home Assistant language, regional
+    variants included (de-CH is German); another code is passed on as it is."""
+    code = (language or "en").strip()
+    name = LANGUAGES.get(code.split("-")[0].split("_")[0].lower())
+    if name is None:
+        name = f"the language with the code '{code}'"
+    return f" Write all reasons and the summary in {name}."
 
 
 def nightly_messages(payload: dict[str, Any], language: str) -> tuple[str, str]:

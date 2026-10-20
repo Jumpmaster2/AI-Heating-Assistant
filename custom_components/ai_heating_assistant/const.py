@@ -34,6 +34,8 @@ CONF_HEAT_METER = "heat_meter"
 CONF_SEASON_START = "season_start"
 CONF_SEASON_END = "season_end"
 CONF_FROST_TEMP = "frost_temperature"
+CONF_FORECAST_TRUST = "forecast_trust"
+CONF_FORCE_ON_BELOW = "force_on_below"
 
 CONF_VACATION_ENTITIES = "vacation_entities"
 CONF_VACATION_TEMP = "vacation_temperature"
@@ -84,6 +86,8 @@ CONF_AI_CHECK_DAYS = "phase_ai_check_every_days"
 # ---------- area (subentry) ----------
 CONF_AREA_NAME = "name"
 CONF_SWITCH = "heater_switch"
+CONF_HEATING_TYPE = "heating_type"
+HEATING_TYPES: Final = ("underfloor", "radiator", "other")
 CONF_TEMP_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_WINDOWS = "window_sensors"
@@ -122,11 +126,15 @@ FALLBACK_MODELS: Final = {"claude-opus-5-5", "claude-sonnet-5-5"}
 FALLBACK_BETA: Final = "server-side-fallback-2026-07-01"
 
 DEFAULT_MODEL: Final = "claude-opus-5-5"
+# Heating period suggested south of the equator (the defaults below are northern).
+SOUTHERN_SEASON: Final = {"season_start": "01.05.", "season_end": "30.09."}
 
 DEFAULTS: Final[dict[str, object]] = {
     CONF_SEASON_START: "01.10.",
     CONF_SEASON_END: "31.03.",
     CONF_FROST_TEMP: 7.0,
+    CONF_FORECAST_TRUST: 70,
+    CONF_FORCE_ON_BELOW: 1.0,
     CONF_VACATION_ENTITIES: [],
     CONF_VACATION_TEMP: 18.0,
     CONF_PREHEAT_RESERVE: 30,
@@ -139,8 +147,8 @@ DEFAULTS: Final[dict[str, object]] = {
     CONF_VENT_MIN_COOLING: 1.0,
     CONF_VENT_COOL_MARGIN: 1.0,
     CONF_VENT_COOL_MIN_TEMP: 0.0,
-    CONF_NIGHT_START: 20,
-    CONF_NIGHT_END: 8,
+    CONF_NIGHT_START: "20:00:00",
+    CONF_NIGHT_END: "08:00:00",
     CONF_AI_MODEL: DEFAULT_MODEL,
     CONF_AI_EFFORT: "low",
     CONF_NIGHTLY_TIME: "03:00:00",
@@ -151,7 +159,7 @@ DEFAULTS: Final[dict[str, object]] = {
     CONF_PRICE_OUTPUT: 20.0,
     CONF_PRICE_CACHE_WRITE: 5.0,
     CONF_PRICE_CACHE_READ: 0.2,
-    CONF_MAX_OUTPUT_TOKENS: 4000,
+    CONF_MAX_OUTPUT_TOKENS: 16000,
     CONF_THETA_START: 16.0,
     CONF_TOO_COLD_MARGIN: 0.5,
     CONF_TOO_COLD_MINUTES: 15,
@@ -175,6 +183,7 @@ AREA_DEFAULTS: Final[dict[str, object]] = {
     CONF_MAX_TARGET: 24.0,
     CONF_MIN_ON: 10,
     CONF_MIN_OFF: 10,
+    CONF_HEATING_TYPE: "underfloor",
     CONF_WINDOW_DELAY: 5,
     CONF_RECOVERY: 30,
     CONF_DEAD_TIME: 30,

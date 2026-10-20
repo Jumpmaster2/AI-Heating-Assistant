@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -13,14 +14,17 @@ from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_UNIT_OF_MEASUREMENT,
     CONF_API_KEY,
+    STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
     UnitOfPower,
+    UnitOfTemperature,
 )
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, State, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.event import (
     async_track_point_in_utc_time,
@@ -30,8 +34,9 @@ from homeassistant.helpers.event import (
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
+from homeassistant.util.unit_conversion import PowerConverter, TemperatureConverter
 
-from .ai_client import AiError, ClaudeClient
+from .ai_client import AiAuthError, AiError, ClaudeClient
 from .const import (
     CONF_AI_CHECK_DAYS,
     CONF_AI_EFFORT,
@@ -46,8 +51,11 @@ from .const import (
     CONF_EMERGENCY_ENABLED,
     CONF_EMERGENCY_QUIET,
     CONF_FALLBACK_ERRORS,
+    CONF_FORCE_ON_BELOW,
+    CONF_FORECAST_TRUST,
     CONF_FROST_TEMP,
     CONF_HEAT_METER,
+    CONF_HEATING_TYPE,
     CONF_HUMIDITY_SENSOR,
     CONF_LIMITS,
     CONF_MAX_OUTPUT_TOKENS,
@@ -102,6 +110,7 @@ from .const import (
     DOMAIN,
     EVENT_LOGBOOK,
     LOGGER,
+    MODEL_PRICE_SUGGESTIONS,
     NAME,
     STORAGE_VERSION,
     SUBENTRY_AREA,
@@ -111,7 +120,7 @@ from .logic import heating_day as hd
 from .logic.ai_policy import (
     Budget,
     Prices,
-    cost_eur,
+    cost_usd,
     estimate_cost,
     next_interval_hours,
     overheat_issue,
@@ -164,8 +173,14 @@ from .logic.sun import (
     solar_elevation,
     weather_points,
 )
-from .logic.ventilation import VentilationInput, VentilationResult, VentilationSettings, recommend
-from .messages import text
+from .logic.ventilation import (
+    VentilationInput,
+    VentilationResult,
+    VentilationSettings,
+    is_blocking,
+    recommend,
+)
+from .messages import label_of, text
 
 SAVE_DELAY = 30
 HISTORY_DAYS = 60
@@ -180,8 +195,27 @@ WEATHER_PV_REFRESH_S = 1800  # s between hourly forecast requests for the expect
 VIRTUAL_MIN_COOL_UPDATES = 24  # model updates without heating before the virtual room is trusted
 TWILIGHT_INDEX = 0.05  # clear sky index (about 5 degrees elevation) below which PV counts as 0
 PV_NEGLIGIBLE_KW = 0.05  # expected PV power below which a missing PV value counts as 0
+# Once the clear sky PV power of the plant is learned, the thresholds above are taken
+# relative to it, so they fit small and large plants alike.
+SUN_OVERHEAT_SHARE = 0.1
+PV_NEGLIGIBLE_SHARE = 0.02
+MIN_SUN_OVERHEAT_KW = 0.05
 PV_MISSING_WARN_MIN = 60.0  # daytime minutes without a PV value before a warning
-INACTIVE_STATES = {"off", "idle", STATE_UNAVAILABLE, STATE_UNKNOWN, "none", ""}
+OUTAGE_ISSUE_S = 15 * 60  # s a sensor or switch may be missing before a repair issue
+CMD_RETRY_MIN = (1, 2, 4, 8, 15)  # min before a switch command without effect is repeated
+CMD_ISSUE_ATTEMPTS = 3  # commands without effect before a repair issue
+# Repair issues of this integration (translation keys; the issue id adds the area id).
+SWITCH_OFF_TIMEOUT = 10  # s to wait for a circuit to switch off when control ends
+TEMP_RANGE = (-50.0, 80.0)  # °C a temperature sensor can plausibly report
+FORECAST_TIMEOUT = 10  # s to wait for the weather service
+TARGET_CHANGE_K = 0.5  # target change that makes the AI look again soon
+DECIDE_RETRY_S = 15 * 60  # pause after a failed heating day decision before the next try
+ISSUE_KEYS = (
+    "sensor_unavailable",
+    "actuator_unavailable",
+    "actuator_not_responding",
+    "outdoor_unavailable",
+)
 
 
 @dataclass
@@ -209,6 +243,8 @@ class Area:
     on_since: float | None = None
     off_at: float | None = None  # last real switch-off seen (not restored after a restart)
     commanded: tuple[bool, float] | None = None
+    cmd_attempts: int = 0  # commands sent that the switch has not followed yet
+    next_cmd_at: float | None = None  # earliest time to repeat such a command
     effective_target: float | None = None
     vacation: bool = False
     preheat: bool = False
@@ -315,14 +351,25 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._unsubs: list[Callable[[], None]] = []
         self._unsub_check: Callable[[], None] | None = None
         self._deciding = False
+        self._opts: dict[str, Any] | None = None
+        self._decide_failed_at: float | None = None
         self._checking = False
         self._tick_count = 0
+        self._shut_down = False
+        self._warned: set[str] = set()  # entities already warned about an odd unit or value
+        # switches no area controls any more that are not known to be off yet
+        self._pending_release: list[str] = []
+        self._missing_since: dict[str, float] = {}  # repair issue id -> start of the outage
+        self._issues: set[str] = set()  # repair issues raised by this coordinator
 
     # ------------------------------------------------------------------ config
 
     @property
     def opts(self) -> dict[str, Any]:
-        return {**DEFAULTS, **self.config_entry.options}
+        # Built once per run: a change of the options reloads the entry.
+        if self._opts is None:
+            self._opts = {**DEFAULTS, **self.config_entry.options}
+        return self._opts
 
     def opt(self, key: str) -> Any:
         return self.opts.get(key, DEFAULTS.get(key))
@@ -386,6 +433,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return True
         return bool(current.get("heat", True))
 
+    @property
+    def heats_now(self) -> bool:
+        """Heating is allowed: within the heating period, or "heat today" chosen by hand
+        outside it (for that day only; the AI stays off outside the period)."""
+        return self.season_active or self.day_state.get("override") == hd.Override.HEAT
+
     def _eval_settings(self) -> hd.EvalSettings:
         limits = self.limits
         return hd.EvalSettings(
@@ -420,6 +473,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.day_state = stored.get("day", {})
         self.ai_state = stored.get("ai", {})
         self.budget = Budget.from_dict(self.ai_state.get("budget"))
+        # Judged again at the next call: the budget may have been raised meanwhile.
+        self.budget.blocked = False
         self.meter = HeatMeter.from_dict(stored.get("meter"))
         scale = (stored.get("sun") or {}).get("scale")
         self.sun_scale = SunScale(float(scale) if isinstance(scale, int | float) else None)
@@ -444,6 +499,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 str(self.opt(CONF_AI_EFFORT)),
             )
 
+        self._clamp_to_limits()
+        self._release_circuits(stored.get("circuits"), stored.get("release"))
+        self._drop_stale_issues()
         self._register_listeners()
         nightly = _parse_time(str(self.opt(CONF_NIGHTLY_TIME)))
         self._unsubs.append(
@@ -474,6 +532,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             emergency_delta=float(self.opt(CONF_EMERGENCY_DELTA)),
             emergency_duration_s=float(self.opt(CONF_EMERGENCY_DURATION)) * 60,
             emergency_window_quiet_s=float(self.opt(CONF_EMERGENCY_QUIET)) * 60,
+            force_on_below=float(self.opt(CONF_FORCE_ON_BELOW)),
         )
         learner = (
             AreaLearner.from_dict(stored.get("learner"), start["dead_time"], start["recovery"])
@@ -520,6 +579,68 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             )
         area.start = configured
 
+    def _clamp_to_limits(self) -> None:
+        """Bring the parameters into the AI limits, which may have been narrowed."""
+        limits = self.limits
+        for area in self.areas.values():
+            for key, spec in PARAMS.items():
+                if spec.scope != "area" or key not in limits:
+                    continue
+                old = float(getattr(area.params, key))
+                new = clamp(old, limits[key]["min"], limits[key]["max"])
+                if new != old:
+                    setattr(area.params, key, new)
+                    self._log(
+                        "limit_clamp",
+                        area,
+                        parameter=label_of(self.language, "parameter", key),
+                        old=f"{old:g}",
+                        new=f"{new:g}",
+                    )
+        # also the configured start value, as long as nothing was learned
+        old = self.theta
+        new = clamp(old, limits["theta"]["min"], limits["theta"]["max"])
+        if new != old:
+            self.day_state["theta"] = new
+            self._log(
+                "limit_clamp",
+                parameter=label_of(self.language, "parameter", "theta"),
+                old=f"{old:g}",
+                new=f"{new:g}",
+            )
+
+    @callback
+    def _release_circuits(self, stored: Any, pending: Any) -> None:
+        """Switch off circuits of the last run that no area controls any more (area
+        deleted or another switch chosen); otherwise one left on would heat forever.
+        A switch not reachable now is tried again at the next start."""
+        previous = (
+            {s for s in stored.values() if isinstance(s, str)}
+            if isinstance(stored, dict)
+            else set()
+        )
+        if isinstance(pending, list):
+            previous.update(s for s in pending if isinstance(s, str))
+        current = {a.cfg[CONF_SWITCH] for a in self.areas.values() if a.has_circuit}
+        dropped = sorted(previous - current)
+        self._pending_release = dropped
+        if not dropped:
+            return
+
+        async def release() -> None:
+            for entity_id in await async_turn_off_switches(self.hass, dropped):
+                self._log("circuit_released", entity_id=entity_id)
+            self._pending_release = [
+                e
+                for e in dropped
+                if (st := self.hass.states.get(e)) is None or st.state != STATE_OFF
+            ]
+            self._save()
+
+        self.config_entry.async_create_background_task(
+            self.hass, release(), f"{DOMAIN} release circuits"
+        )
+
     def _forget_check_history(self, area: Area) -> None:
         """Earlier checks of an area say nothing about its values after a reset."""
         for entry in self.ai_state.get("check_history", []):
@@ -530,6 +651,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         for key in (CONF_OUTDOOR_TEMP, CONF_RETURN_ENTITY):
             if self.opt(key):
                 watched.add(self.opt(key))
+        if not self.opt(CONF_OUTDOOR_TEMP) and self.opt(CONF_WEATHER):
+            watched.add(self.opt(CONF_WEATHER))  # the outdoor temperature comes from it
         watched.update(self.opt(CONF_VACATION_ENTITIES) or [])
         switches: dict[str, str] = {}
         for area in self.areas.values():
@@ -551,7 +674,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     @callback
     def _on_input_change(self, event: Event[EventStateChangedData]) -> None:
-        self.hass.async_create_task(self.async_request_refresh(), eager_start=True)
+        self.config_entry.async_create_task(self.hass, self.async_request_refresh())
 
     @callback
     def _on_switch_change(self, event: Event[EventStateChangedData]) -> None:
@@ -573,6 +696,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             area.learner.on_switch(ts, area.temp, turned_on, run_hours)
         area.on_since = ts if turned_on else None
         area.off_at = None if turned_on else ts
+        self._command_done(area)
         if turned_on:
             area.check["cycles"] = area.check.get("cycles", 0) + 1
         own = (
@@ -588,19 +712,87 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 "external_switch", area, state=text(self.language, "on" if turned_on else "off")
             )
         self._save()
-        self.hass.async_create_task(self.async_request_refresh(), eager_start=True)
+        self.config_entry.async_create_task(self.hass, self.async_request_refresh())
 
     async def async_shutdown(self) -> None:
+        if self._shut_down:  # also registered with the entry: runs once only
+            return
+        self._shut_down = True
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
         if self._unsub_check:
             self._unsub_check()
             self._unsub_check = None
+        if self.client:
+            await self.client.close()
         await self.store.async_save(self._data_to_save())
         await super().async_shutdown()
 
     # ------------------------------------------------------------------ helpers
+
+    @callback
+    def _track_outage(
+        self, key: str, area: Area | None, entity_id: str, missing: bool, ts: float
+    ) -> None:
+        """Raise a repair issue once a source has been missing for a while and remove
+        it again as soon as the source is back."""
+        issue_id = f"{key}_{area.area_id}" if area else key
+        if not missing:
+            self._missing_since.pop(issue_id, None)
+            self._clear_issue(issue_id)
+            return
+        since = self._missing_since.setdefault(issue_id, ts)
+        if ts - since >= OUTAGE_ISSUE_S:
+            self._raise_issue(key, area, entity_id)
+
+    @callback
+    def _raise_issue(self, key: str, area: Area | None, entity_id: str) -> None:
+        issue_id = f"{key}_{area.area_id}" if area else key
+        if issue_id in self._issues:
+            return
+        self._issues.add(issue_id)
+        ir.async_create_issue(
+            self.hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key=key,
+            translation_placeholders={"area": area.name if area else NAME, "entity_id": entity_id},
+        )
+        self._log(key, area, entity_id=entity_id)
+
+    @callback
+    def _clear_issue(self, issue_id: str) -> None:
+        # Also an issue of an earlier run: after a restart it is only inactive, and it
+        # keeps a dismissal until the source is back.
+        self._issues.discard(issue_id)
+        ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    @callback
+    def _drop_stale_issues(self) -> None:
+        """Remove issues of an area without a circuit (deleted, or the switch removed)
+        and of a source no longer configured. All others stay until their source is
+        back, so a dismissal survives a restart."""
+        valid = {
+            f"{key}_{area.area_id}"
+            for area in self.areas.values()
+            if area.has_circuit
+            for key in ISSUE_KEYS
+        }
+        if self.opt(CONF_OUTDOOR_TEMP) or self.opt(CONF_WEATHER):
+            valid.add("outdoor_unavailable")
+        for issue_id in integration_issues(self.hass):
+            if issue_id not in valid:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+
+    @callback
+    def _command_done(self, area: Area) -> None:
+        """The switch follows the commands (again)."""
+        area.cmd_attempts = 0
+        area.next_cmd_at = None
+        self._clear_issue(f"actuator_not_responding_{area.area_id}")
 
     def _state(self, entity_id: str | None) -> State | None:
         return self.hass.states.get(entity_id) if entity_id else None
@@ -610,18 +802,82 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE, ""):
             return None
         try:
-            return float(state.state)
+            value = float(state.state)
         except ValueError:
             return None
+        return value if math.isfinite(value) else None
+
+    def _humidity(self, entity_id: str | None) -> float | None:
+        """Relative humidity in %, None outside 0-100 (defective sensor)."""
+        value = self._float(entity_id)
+        return value if value is None or 0 <= value <= 100 else self._implausible(entity_id, value)
+
+    def _implausible(self, entity_id: str | None, value: float) -> None:
+        """Ignore an impossible reading; warn once per entity."""
+        self._warn_once(
+            f"{entity_id} value",
+            "%s reports the implausible value %s; it is ignored",
+            entity_id,
+            value,
+        )
+        return None
+
+    def _temp(self, entity_id: str | None) -> float | None:
+        """Temperature of a sensor in °C, whatever unit the sensor reports."""
+        value = self._float(entity_id)
+        if value is None:
+            return None
+        state = self._state(entity_id)
+        unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
+        celsius = self._to_celsius(value, unit, str(entity_id))
+        if celsius is not None and not TEMP_RANGE[0] <= celsius <= TEMP_RANGE[1]:
+            return self._implausible(entity_id, value)
+        return celsius
+
+    def _to_celsius(self, value: float, unit: str | None, source: str) -> float | None:
+        """Convert a temperature to °C. Without a unit the unit system of HA applies;
+        a unit that is no temperature unit makes the value unknown (warned once)."""
+        unit = unit or self.hass.config.units.temperature_unit
+        if unit == UnitOfTemperature.CELSIUS:
+            return value
+        try:
+            return TemperatureConverter.convert(value, unit, UnitOfTemperature.CELSIUS)
+        except HomeAssistantError:
+            self._warn_once(
+                source,
+                "%s reports the unit %r instead of a temperature unit (°C, °F or K); "
+                "its value is ignored",
+                source,
+                unit,
+            )
+            return None
+
+    def _weather_temp(self) -> float | None:
+        """Current temperature of the weather entity in °C (in its temperature_unit)."""
+        weather_id = self.opt(CONF_WEATHER)
+        state = self._state(weather_id)
+        if state is None or state.state in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            return None
+        value = state.attributes.get("temperature")
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            return None
+        if not math.isfinite(value):
+            return None
+        celsius = self._to_celsius(
+            float(value), state.attributes.get("temperature_unit"), weather_id
+        )
+        if celsius is not None and not TEMP_RANGE[0] <= celsius <= TEMP_RANGE[1]:
+            return self._implausible(weather_id, value)
+        return celsius
 
     def _is_on(self, entity_id: str | None) -> bool:
         state = self._state(entity_id)
         return state is not None and state.state == STATE_ON
 
-    def _is_active(self, entity_id: str | None) -> bool:
-        """True for 'on' and any running state (e.g. an air conditioner in cool mode)."""
+    def _is_blocking(self, entity_id: str | None) -> bool:
+        """Does the ventilation block entity block right now (see ``is_blocking``)?"""
         state = self._state(entity_id)
-        return state is not None and state.state not in INACTIVE_STATES
+        return state is not None and is_blocking(state.domain, state.state)
 
     def _pv_kw(self) -> float | None:
         """Current PV power in kW. None if the sensor is configured but has no value."""
@@ -633,11 +889,26 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if value is None:
             return None
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
-        if unit == UnitOfPower.KILO_WATT:
-            return max(0.0, value)
-        if unit == UnitOfPower.MEGA_WATT:
-            return max(0.0, value * 1000)
-        return max(0.0, value / 1000)
+        if not unit:
+            self._warn_once(entity_id, "%s reports no unit; its value is read as W", entity_id)
+            unit = UnitOfPower.WATT
+        try:
+            kw = PowerConverter.convert(value, unit, UnitOfPower.KILO_WATT)
+        except HomeAssistantError:
+            self._warn_once(
+                entity_id,
+                "%s reports the unit %r instead of a power unit (W, kW); its value is ignored",
+                entity_id,
+                unit,
+            )
+            return None
+        return max(0.0, kw)
+
+    def _warn_once(self, key: str, message: str, *args: Any) -> None:
+        """A sensor reporting odd units or values is logged once, not every minute."""
+        if key not in self._warned:
+            self._warned.add(key)
+            LOGGER.warning(message, *args)
 
     def _return_ts(self) -> float | None:
         state = self._state(self.opt(CONF_RETURN_ENTITY))
@@ -697,6 +968,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "day": self.day_state,
             "ai": self.ai_state,
             "sun": {"scale": self.sun_scale.value},
+            # switches controlled by this run: one dropped later is switched off
+            "circuits": {
+                a.area_id: a.cfg[CONF_SWITCH] for a in self.areas.values() if a.has_circuit
+            },
+            "release": self._pending_release,
             "meter": self.meter.as_dict(),
         }
 
@@ -711,7 +987,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         minutes = 0.0 if self._last_tick is None else clamp((ts - self._last_tick) / 60, 0.0, 5.0)
         self._last_tick = ts
 
-        self.outdoor_temp = self._float(self.opt(CONF_OUTDOOR_TEMP))
+        # without an outdoor sensor the current temperature of the weather entity
+        outdoor_id = self.opt(CONF_OUTDOOR_TEMP)
+        self.outdoor_temp = self._temp(outdoor_id) if outdoor_id else self._weather_temp()
+        if source := outdoor_id or self.opt(CONF_WEATHER):
+            self._track_outage("outdoor_unavailable", None, source, self.outdoor_temp is None, ts)
         self.pv_kw = self._pv_kw()
         self._pv_measured = self.pv_kw is not None
         await self._update_pv_forecast(ts)
@@ -723,6 +1003,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             self._pv_missing_min, self._pv_warned = 0.0, False
         self.pv_assumed = self.pv_kw if self.pv_kw is not None else (self._pv_estimate(ts) or 0.0)
         self.season_active = self._season()
+        self.budget.roll(dt_util.now().strftime("%Y-%m"))  # the cost sensor shows the new month
         self.vacation = any(self._is_on(e) for e in self.opt(CONF_VACATION_ENTITIES) or [])
         return_ts = self._return_ts() if self.vacation else None
         heating_day = self.heating_day
@@ -732,8 +1013,18 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._update_meter(ts, minutes)
 
         # Missing or expired decision (first start, HA was down at the nightly run).
-        # Started after the areas were read so the decision sees current values.
-        if self.season_active and not self._deciding and self._decision_expired(now):
+        # Started after the areas were read so the decision sees current values. Outside
+        # the heating period only to end a manual override of a past day, which would
+        # otherwise keep heating until the next nightly run.
+        if (
+            (
+                self.season_active
+                or self.day_state.get("override", hd.Override.AUTO) != hd.Override.AUTO
+            )
+            and not self._deciding
+            and (self._decide_failed_at is None or ts - self._decide_failed_at >= DECIDE_RETRY_S)
+            and self._decision_expired(now)
+        ):
             self.config_entry.async_create_background_task(
                 self.hass, self.async_decide_heating_day("startup"), f"{DOMAIN} heating day"
             )
@@ -776,6 +1067,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         state = self._state(entity_id)
         unit = state.attributes.get(ATTR_UNIT_OF_MEASUREMENT) if state else None
         kwh = None if value is None else to_kwh(value, unit)
+        if value is not None and kwh is None:
+            self._warn_once(
+                entity_id,
+                "%s reports the unit %r instead of an energy unit (Wh, kWh, MWh, MJ, GJ); "
+                "the heat is not counted",
+                entity_id,
+                unit,
+            )
         if kwh is not None:
             self.meter.update(kwh, ts)
             for name in ("check", "day", "today", "month"):  # periods start with the first reading
@@ -822,9 +1121,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if self.sun_scale.value is None:
             return
         if self._hourly_ts is None or ts - self._hourly_ts >= WEATHER_PV_REFRESH_S:
+            # In the background: a slow weather service must not hold up the control.
+            # The time stamp keeps a second refresh from starting meanwhile.
             self._hourly_ts = ts
-            self._hourly = await self._forecast("hourly")
+            self.config_entry.async_create_background_task(
+                self.hass, self._refresh_hourly(), f"{DOMAIN} hourly forecast"
+            )
         self._pv_points = weather_points(self._hourly, self.sun_scale.value, lat, lon)
+
+    async def _refresh_hourly(self) -> None:
+        self._hourly = await self._forecast("hourly")
 
     def _sun_index(self, ts: float) -> float:
         """Clear sky index at the configured location (0 while the sun is down)."""
@@ -838,10 +1144,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             return None
         return cloud_pct({"condition": weather.state, **weather.attributes})
 
-    def _pv_estimate(self, ts: float) -> float | None:
+    def _pv_estimate(self, ts: float, trust: float | None = None) -> float | None:
         """PV power expected now: from the forecast points, else from sun position, clouds
-        and the learned clear sky scale; None without any basis."""
-        if (expected := expected_now(self._pv_points, ts)) is not None:
+        and the learned clear sky scale; None without any basis. ``trust`` defaults to
+        the option the control relies on."""
+        trust = self._trust if trust is None else trust
+        if (expected := expected_now(self._pv_points, ts, trust)) is not None:
             return expected
         scale = self.sun_scale.value
         index = self._sun_index(ts)
@@ -850,14 +1158,30 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if index <= 0:
             return 0.0
         cloud = self._cloud_now()
-        return scale * index * cloud_factor(100.0 if cloud is None else cloud) * FORECAST_TRUST
+        return scale * index * cloud_factor(100.0 if cloud is None else cloud) * trust
+
+    @property
+    def _trust(self) -> float:
+        """Share of the expected sun that is relied on (forecasts are uncertain)."""
+        return float(self.opt(CONF_FORECAST_TRUST)) / 100
+
+    def _pv_threshold(self, absolute_kw: float, share: float, minimum: float = 0.0) -> float:
+        """A PV power threshold: a share of the learned clear sky power, else absolute."""
+        scale = self.sun_scale.value
+        if scale is None or scale <= 0:
+            return absolute_kw
+        return max(minimum, share * scale)
 
     def _pv_negligible(self, ts: float) -> bool:
         """A missing PV value may be read as zero: the sun is low or little is expected."""
         if self._sun_index(ts) < TWILIGHT_INDEX:
             return True
-        expected = self._pv_estimate(ts)
-        return expected is not None and expected < PV_NEGLIGIBLE_KW
+        # Judged with the fixed trust: the option only sets how much the control relies
+        # on the sun; otherwise at 0 % a sunny sensor gap would be learned as no sun.
+        expected = self._pv_estimate(ts, FORECAST_TRUST)
+        return expected is not None and expected < self._pv_threshold(
+            PV_NEGLIGIBLE_KW, PV_NEGLIGIBLE_SHARE
+        )
 
     def _pv_missing(self, minutes: float, ts: float) -> None:
         """Warn once when the PV sensor has had no value for a while by day."""
@@ -887,7 +1211,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         # current PV power. Heating rates (preheating) keep the current value.
         pv_now = self.pv_assumed
         lead_s = learner.dead_time.value * area.params.lead_factor
-        pv_plan = planning_pv(ts, pv_now, self._pv_points, lead_s)
+        pv_plan = planning_pv(ts, pv_now, self._pv_points, lead_s, self._trust)
         return LearnedValues(
             cool_rate_kph=model.cool_rate(diff, pv_plan, area.params.sun_factor),
             heat_rate_kph=model.heat_rate(diff, pv_now, area.params.sun_factor),
@@ -901,8 +1225,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self, area: Area, ts: float, minutes: float, heating_day: bool, return_ts: float | None
     ) -> None:
         cfg = area.cfg
-        area.temp = self._float(cfg.get(CONF_TEMP_SENSOR))
-        area.humidity = self._float(cfg.get(CONF_HUMIDITY_SENSOR))
+        area.temp = self._temp(cfg.get(CONF_TEMP_SENSOR))
+        area.humidity = self._humidity(cfg.get(CONF_HUMIDITY_SENSOR))
         area.window_open = any(self._is_on(w) for w in cfg.get(CONF_WINDOWS) or [])
 
         if area.has_circuit:
@@ -914,6 +1238,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             )
             if area.switch_on and area.on_since is None:
                 area.on_since = area.last_switch_change
+            sensor_id, switch_id = cfg[CONF_TEMP_SENSOR], cfg[CONF_SWITCH]
+            self._track_outage("sensor_unavailable", area, sensor_id, area.temp is None, ts)
+            self._track_outage(
+                "actuator_unavailable", area, switch_id, not area.switch_available, ts
+            )
             await self._control_area(area, ts, minutes, heating_day, return_ts)
         else:
             area.status = AreaStatus.NO_CIRCUIT
@@ -959,7 +1288,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 temp=area.temp,
                 target=target,
                 hvac_on=area.hvac_on,
-                season_active=self.season_active,
+                season_active=self.heats_now,
                 heating_day=heating_day or area.preheat,
                 frost_temp=float(self.opt(CONF_FROST_TEMP)),
                 window_open=area.window_open,
@@ -975,9 +1304,17 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         )
         area.decision = decision
         area.status = decision.status
+        if not area.switch_available:
+            area.status = AreaStatus.ACTUATOR_UNAVAILABLE
         self._handle_events(area, ts, window_open_since, temp_before)
 
-        if area.switch_available and decision.want_on != area.switch_on and decision.may_switch:
+        if area.switch_available and decision.want_on == area.switch_on:
+            self._command_done(area)
+        elif (
+            area.switch_available
+            and decision.may_switch
+            and (area.next_cmd_at is None or ts >= area.next_cmd_at)
+        ):
             await self._switch(area, decision.want_on, ts)
 
         area.learner.add_sample(
@@ -1036,6 +1373,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         entity_id = area.cfg[CONF_SWITCH]
         domain = entity_id.split(".", 1)[0]
         area.commanded = (turn_on, ts)
+        # A switch that does not follow is asked again with growing pauses.
+        area.cmd_attempts += 1
+        wait_min = CMD_RETRY_MIN[min(area.cmd_attempts, len(CMD_RETRY_MIN)) - 1]
+        area.next_cmd_at = ts + wait_min * 60
+        if area.cmd_attempts >= CMD_ISSUE_ATTEMPTS:
+            self._raise_issue("actuator_not_responding", area, entity_id)
         try:
             await self.hass.services.async_call(
                 domain,
@@ -1073,7 +1416,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 over = excess * minutes / 60
                 day.over_kh += over
                 check["over_kh"] = check.get("over_kh", 0.0) + over
-                if self.pv_assumed >= SUN_OVERHEAT_KW:
+                if self.pv_assumed >= self._pv_threshold(
+                    SUN_OVERHEAT_KW, SUN_OVERHEAT_SHARE, MIN_SUN_OVERHEAT_KW
+                ):
                     check["sun_over_kh"] = check.get("sun_over_kh", 0.0) + over
             if self.outdoor_temp is not None and target > self.outdoor_temp:
                 check["deg_h"] = (
@@ -1111,20 +1456,19 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         cfg = area.cfg
         indoor_ref = bool(cfg.get(CONF_REF_TEMP))
         if indoor_ref:
-            ref_temp = self._float(cfg.get(CONF_REF_TEMP))
-            ref_hum = self._float(cfg.get(CONF_REF_HUMIDITY))
+            ref_temp = self._temp(cfg.get(CONF_REF_TEMP))
+            ref_hum = self._humidity(cfg.get(CONF_REF_HUMIDITY))
         else:
             ref_temp = self.outdoor_temp
-            ref_hum = self._float(self.opt(CONF_OUTDOOR_HUMIDITY))
+            ref_hum = self._humidity(self.opt(CONF_OUTDOOR_HUMIDITY))
             if ref_hum is None and (weather := self._state(self.opt(CONF_WEATHER))):
                 humidity = weather.attributes.get("humidity")
                 ref_hum = float(humidity) if isinstance(humidity, int | float) else None
-        hour = dt_util.now().hour
-        start, end = int(self.opt(CONF_NIGHT_START)), int(self.opt(CONF_NIGHT_END))
-        is_night = (hour >= start or hour < end) if start > end else (start <= hour < end)
-        heating_active = (
-            self.season_active and heating_day and (area.hvac_on or not area.has_circuit)
-        )
+        now = dt_util.now().time()
+        start = _night_time(self.opt(CONF_NIGHT_START), 20)
+        end = _night_time(self.opt(CONF_NIGHT_END), 8)
+        is_night = (now >= start or now < end) if start > end else (start <= now < end)
+        heating_active = self.heats_now and heating_day and (area.hvac_on or not area.has_circuit)
         area.ventilation = recommend(
             VentilationInput(
                 temp=area.temp,
@@ -1133,7 +1477,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 ref_humidity=ref_hum,
                 window_open=area.window_open,
                 heating_active=heating_active,
-                blocked=self._is_active(cfg.get(CONF_VENT_BLOCK)),
+                blocked=self._is_blocking(cfg.get(CONF_VENT_BLOCK)),
                 reference_is_indoor=indoor_ref,
                 is_night=is_night,
                 target=area.effective_target or area.target,
@@ -1153,8 +1497,13 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     async def async_set_target(self, area_id: str, value: float) -> None:
         area = self.areas[area_id]
-        area.target = round(float(value), 2)
-        self._config_changed()
+        old, area.target = area.target, round(float(value), 2)
+        if round(abs(area.target - old), 2) >= TARGET_CHANGE_K:  # 16.4 - 15.9 < 0.5
+            self._config_changed()
+        else:
+            # Small steps (often from automations) would otherwise keep the AI interval
+            # from ever growing.
+            self._save()
         self.async_update_listeners()
         await self.async_request_refresh()
 
@@ -1228,20 +1577,41 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if not weather or self._state(weather) is None:
             return []
         try:
-            response = await self.hass.services.async_call(
-                "weather",
-                "get_forecasts",
-                {"type": kind},
-                target={ATTR_ENTITY_ID: weather},
-                blocking=True,
-                return_response=True,
-            )
+            async with asyncio.timeout(FORECAST_TIMEOUT):
+                response = await self.hass.services.async_call(
+                    "weather",
+                    "get_forecasts",
+                    {"type": kind},
+                    target={ATTR_ENTITY_ID: weather},
+                    blocking=True,
+                    return_response=True,
+                )
         except (HomeAssistantError, ValueError) as err:
             LOGGER.debug("No %s forecast from %s: %s", kind, weather, err)
             return []
+        except TimeoutError:
+            LOGGER.debug("No %s forecast from %s within %s s", kind, weather, FORECAST_TIMEOUT)
+            return []
         data = (response or {}).get(weather, {})
         forecast = data.get("forecast") if isinstance(data, dict) else None
-        return forecast if isinstance(forecast, list) else []
+        if not isinstance(forecast, list):
+            return []
+        # The service answers in the temperature unit of the weather entity (the unit
+        # system of HA unless set per entity); the logic works in °C.
+        state = self._state(weather)
+        unit = state.attributes.get("temperature_unit") if state else None
+        items = []
+        for item in forecast:
+            if not isinstance(item, dict):
+                continue
+            item = dict(item)
+            for key in ("temperature", "templow"):
+                value = item.get(key)
+                if isinstance(value, int | float) and not isinstance(value, bool):
+                    celsius = self._to_celsius(float(value), unit, weather)
+                    item[key] = None if celsius is None else round(celsius, 1)
+            items.append(item)
+        return items
 
     async def async_decide_heating_day(self, trigger: str, use_ai: bool = True) -> None:
         """Evaluate the previous day and decide whether today is a heating day."""
@@ -1250,6 +1620,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._deciding = True
         try:
             await self._decide(trigger, use_ai)
+            self._decide_failed_at = None
+        except Exception:
+            # Otherwise the next tick would start the same failing decision again,
+            # every minute. A manual run shows the error to the caller.
+            self._decide_failed_at = dt_util.utcnow().timestamp()
+            if trigger == "manual":
+                raise
+            LOGGER.exception("Heating day decision (%s) failed", trigger)
         finally:
             self._deciding = False
             self._save()
@@ -1351,8 +1729,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._log(
             "heating_day",
             decision=text(self.language, "yes" if heat else "no"),
-            source=source,
-            phase=phase,
+            source=label_of(self.language, "source", source),
+            phase=label_of(self.language, "phase", phase),
             reason=reason,
         )
         if self.heating_day and self.ai_enabled:  # honours a manual override
@@ -1443,10 +1821,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._log(
             "evaluation",
             date=record.date,
-            need=need,
-            err_final=record.err_final or "-",
-            err_rule=record.err_rule or "-",
-            err_ai=record.err_ai or "-",
+            need=label_of(self.language, "need", need),
+            err_final=label_of(self.language, "error", record.err_final),
+            err_rule=label_of(self.language, "error", record.err_rule),
+            # no AI that day: no error to show
+            err_ai="-" if record.ai is None else label_of(self.language, "error", record.err_ai),
         )
 
         phase = self.phase
@@ -1456,7 +1835,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if new_phase != phase:
             self.day_state["phase"] = new_phase
             self.day_state["phase_since"] = dt_util.now().date().isoformat()
-            self._log("phase_change", old=phase, new=new_phase)
+            self._log(
+                "phase_change",
+                old=label_of(self.language, "phase", phase),
+                new=label_of(self.language, "phase", new_phase),
+            )
         for area in self.areas.values():
             area.day = hd.DayAreaStats()
 
@@ -1481,6 +1864,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 {
                     "id": a.prompt_id,
                     "name": a.name,
+                    "type": a.cfg.get(CONF_HEATING_TYPE, "underfloor"),
                     "temp": r(a.temp),
                     "target": a.effective_target or a.target,
                     "puffer": a.params.puffer,
@@ -1543,7 +1927,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.budget.roll(month)
         limit = float(self.opt(CONF_BUDGET))
         max_tokens = int(self.opt(CONF_MAX_OUTPUT_TOKENS))
-        estimate = estimate_cost(len(system) + len(user), max_tokens, self.prices)
+        estimate = estimate_cost(
+            len(system) + len(user), max_tokens, self.prices, self.budget.avg_output
+        )
         if not self.budget.can_spend(estimate, limit):
             if self.ai_state.get("budget_logged") != month:
                 self.ai_state["budget_logged"] = month
@@ -1558,13 +1944,28 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             usage = err.usage
             self._ai_failed(kind, str(err))
             data = None
+            if isinstance(err, AiAuthError):
+                # The key was rejected: ask for a new one; the local control goes on.
+                self.config_entry.async_start_reauth(self.hass)
         finally:
             if usage:
-                self.budget.add(cost_eur(usage, self.prices), usage)
+                self.budget.add(cost_usd(usage, self._served_prices()), usage)
             self._save()
         if data is not None:
             self.ai_state["last_error"] = None
         return data
+
+    def _served_prices(self) -> Prices:
+        """Prices of the model that answered: the server may fall back to another model,
+        then its list price applies instead of the configured prices."""
+        served = self.client.served_model if self.client else None
+        selected = str(self.opt(CONF_AI_MODEL))
+        if not served or served == selected or served.startswith(f"{selected}-"):
+            return self.prices
+        for model, prices in MODEL_PRICE_SUGGESTIONS.items():
+            if served == model or served.startswith(f"{model}-"):
+                return Prices(*prices)
+        return self.prices
 
     def _ai_failed(self, kind: str, error: str) -> None:
         self.ai_state["last_error"] = f"{kind}: {error}"
@@ -1625,6 +2026,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 {
                     "id": area.prompt_id,
                     "name": area.name,
+                    "type": area.cfg.get(CONF_HEATING_TYPE, "underfloor"),
                     "target": area.effective_target or area.target,
                     "temp": r(area.temp),
                     "status": area.status,
@@ -1705,7 +2107,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     self._log(
                         "ai_adjust",
                         area,
-                        parameter=adj.parameter,
+                        parameter=label_of(self.language, "parameter", adj.parameter),
                         old=adj.old,
                         new=adj.new,
                         clamped=text(self.language, "clamped") if adj.clamped else "",
@@ -1800,7 +2202,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     def import_parameters(
         self, data: dict[str, Any], area_ids: list[str] | None = None
     ) -> list[str]:
-        if not isinstance(data, dict) or not isinstance(data.get("areas", {}), dict):
+        if not _valid_import(data):
+            # checked before anything changes: no half applied import
             raise HomeAssistantError("invalid parameter data")
         limits = self.limits
         theta = (data.get("global") or {}).get("theta")
@@ -1850,6 +2253,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             area.start = start  # the configuration is in effect again
             self._forget_check_history(area)
             self._log("reset", area)
+        if include_parameters:
+            self._clamp_to_limits()  # start values may lie outside narrowed limits
         self._config_changed()
 
     # --------------------------------------------------------- learned values (user edits)
@@ -1923,6 +2328,21 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.async_update_listeners()
 
 
+def _valid_import(data: Any) -> bool:
+    """Shape of exported parameters: the nested parts are objects (or missing)."""
+
+    def obj(value: Any) -> bool:
+        return value is None or isinstance(value, dict)
+
+    if not isinstance(data, dict) or not obj(data.get("global")) or not obj(data.get("areas")):
+        return False
+    return all(
+        not isinstance(values, dict)
+        or all(obj(values.get(k)) for k in ("params", "learned", "counts"))
+        for values in (data.get("areas") or {}).values()
+    )
+
+
 def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[str, Any]) -> None:
     def num(key: str) -> float | None:
         value = learned.get(key)
@@ -1951,6 +2371,62 @@ def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[
             # An imported value is a deliberate one: it counts as an observation, so a
             # later start value only replaces it when the configuration changes.
             ewma.count = max(1, int(counts.get(count_key, 0) or 0))
+
+
+@callback
+def integration_issues(hass: HomeAssistant) -> list[str]:
+    """Ids of the repair issues this integration raises."""
+    return [
+        issue_id
+        for domain, issue_id in ir.async_get(hass).issues
+        if domain == DOMAIN and issue_id.startswith(ISSUE_KEYS)
+    ]
+
+
+@callback
+def async_delete_issues(hass: HomeAssistant) -> None:
+    """Remove every repair issue of this integration (nothing is controlled any more)."""
+    for issue_id in integration_issues(hass):
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+
+
+async def async_turn_off_switches(hass: HomeAssistant, entity_ids: list[str]) -> list[str]:
+    """Switch off the given circuits that are on; returns those switched off.
+
+    Used when nothing controls a circuit any more (integration disabled or removed,
+    area deleted): a circuit left on would heat without limit.
+    """
+    switched = []
+    for entity_id in entity_ids:
+        state = hass.states.get(entity_id)
+        if state is None or state.state != STATE_ON:
+            continue
+        try:
+            async with asyncio.timeout(SWITCH_OFF_TIMEOUT):
+                await hass.services.async_call(
+                    entity_id.split(".", 1)[0],
+                    "turn_off",
+                    {ATTR_ENTITY_ID: entity_id},
+                    blocking=True,
+                )
+        except (HomeAssistantError, TimeoutError) as err:
+            LOGGER.warning("Could not switch off %s: %s", entity_id, err)
+            continue
+        except Exception:  # a faulty switch must not keep the others on
+            LOGGER.exception("Could not switch off %s", entity_id)
+            continue
+        switched.append(entity_id)
+    return switched
+
+
+def _night_time(value: Any, default_hour: int) -> time:
+    """Night start or end: a time ("HH:MM:SS"), or an hour of an older entry."""
+    if isinstance(value, int | float):
+        return time(int(value) % 24)
+    try:
+        return time.fromisoformat(str(value))
+    except ValueError:
+        return time(default_hour)
 
 
 def _parse_time(value: str) -> time:

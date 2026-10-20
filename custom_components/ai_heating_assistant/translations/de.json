@@ -13,18 +13,26 @@
           "heat_meter": "Wärmezähler",
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
-          "frost_temperature": "Frostschutz-Mindesttemperatur"
+          "frost_temperature": "Frostschutz-Mindesttemperatur",
+          "forecast_trust": "Vertrauen in die Sonnenprognose",
+          "season_start_day": "Heizperiode beginnt: Tag",
+          "season_start_month": "Heizperiode beginnt: Monat",
+          "season_end_day": "Heizperiode endet: Tag",
+          "season_end_month": "Heizperiode endet: Monat"
         },
         "data_description": {
-          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst).",
+          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
           "outdoor_humidity": "Optional. Für die Lüftungsempfehlung; ohne Sensor wird die Luftfeuchte der Wetter-Entität genutzt.",
-          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt.",
+          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt. Ohne Außensensor gilt ihre aktuelle Temperatur als Außentemperatur.",
           "pv_power": "Optional. PV-Leistung (W oder kW) als Indikator für Sonne. Daraus wird der Sonneneinfluss je Bereich gelernt.",
           "pv_forecast": "Optional, nur zusammen mit dem PV-Leistungssensor. Erwartete PV-Energie der nächsten Stunde (Wh oder kWh, z. B. Forecast.Solar) oder erwartete Leistung in einer Stunde (W oder kW). Ohne diesen Sensor wird die Sonne aus der stündlichen Wettervorhersage und dem Sonnenstand geschätzt.",
           "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
-          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat."
+          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.",
+          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt).",
+          "season_start_day": "Ab diesem Datum darf geheizt werden (z. B. 1. Oktober).",
+          "season_end_day": "Letzter Tag der Heizperiode (z. B. 31. März); die Periode darf über den Jahreswechsel gehen."
         }
       },
       "vacation": {
@@ -47,26 +55,34 @@
         "title": "Heiztag-Entscheidung",
         "description": "Startwert der Heiztag-Regel. Er wird nur hier beim Einrichten gesetzt; danach wird theta gelernt und der gelernte Wert lässt sich unter „Heiztag-Entscheidung“ bearbeiten.",
         "data": {
-          "theta_start": "Startwert theta"
+          "theta_start": "Heizgrenze theta (Startwert)"
         },
         "data_description": {
-          "theta_start": "Liegt die Prognose-Höchsttemperatur unter theta, wird geheizt."
+          "theta_start": "Geheizt wird, wenn die vorhergesagte Tageshöchsttemperatur darunter liegt (z. B. 16 °C). Wird danach gelernt."
         }
       },
       "ai": {
         "title": "KI (Claude)",
-        "description": "Die KI prüft periodisch die Parameter. Ohne API-Key läuft nur die lokale Regelung.",
+        "description": "Die KI prüft die Parameter regelmäßig. Ohne API-Key läuft nur die lokale Regelung; der Nachtlauf entscheidet dann mit der lokalen Regel.",
         "data": {
           "api_key": "Anthropic API-Key",
-          "model": "Claude-Modell",
-          "nightly_time": "Uhrzeit des Nachtlaufs",
-          "monthly_budget": "Monatsbudget"
+          "nightly_time": "Uhrzeit des Nachtlaufs"
         },
         "data_description": {
           "api_key": "Optional. Ohne Key läuft nur die lokale Regelung. Der Key wird nur in Home Assistant gespeichert und nie protokolliert.",
+          "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des ausgewerteten Tages). Läuft mit und ohne KI."
+        }
+      },
+      "ai_model": {
+        "title": "KI-Modell und Budget",
+        "description": "Der Key wurde angenommen. Wähle das Modell und wie viel die KI im Monat kosten darf.",
+        "data": {
+          "model": "Claude-Modell",
+          "monthly_budget": "Monatsbudget"
+        },
+        "data_description": {
           "model": "Modell für alle KI-Abfragen. Die Preise sind Vorschläge für das gewählte Modell und änderbar.",
-          "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des bewerteten Tages).",
-          "monthly_budget": "Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel)."
+          "monthly_budget": "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel)."
         }
       },
       "reconfigure": {
@@ -78,14 +94,25 @@
         "data_description": {
           "api_key": "Optional. Ohne Key läuft nur die lokale Regelung. Der Key wird nur in Home Assistant gespeichert und nie protokolliert."
         }
+      },
+      "reauth_confirm": {
+        "title": "API-Key abgelehnt",
+        "description": "Anthropic hat den gespeicherten API-Key abgelehnt. Die KI-Prüfungen und der KI-Teil der Heiztag-Entscheidung ruhen daher. Die lokale Regelung läuft mit den gelernten Werten weiter.\n\nGib einen gültigen Key aus console.anthropic.com (API Keys) ohne Leerzeichen ein. Lässt du das Feld leer, geht es ohne KI weiter.",
+        "data": {
+          "api_key": "Anthropic API-Key"
+        },
+        "data_description": {
+          "api_key": "Wird vor dem Speichern bei Anthropic geprüft. Der Key wird nur in Home Assistant gespeichert und nie protokolliert."
+        }
       }
     },
     "error": {
-      "invalid_day_month": "Bitte im Format TT.MM. angeben (z. B. 01.10.).",
-      "invalid_auth": "Der API-Key wurde abgelehnt.",
-      "cannot_connect": "Keine Verbindung zur Anthropic API.",
-      "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
-      "min_above_max": "Minimum muss unter dem Maximum liegen."
+      "invalid_day_month": "Bitte ein gültiges Datum angeben (TT.MM., z. B. 01.10.); einen Tag wie den 31.02. gibt es nicht.",
+      "invalid_auth": "Anthropic hat den API-Key abgelehnt. Prüfe ihn unter console.anthropic.com > API Keys und füge ihn ohne Leerzeichen ein. Ohne Key läuft die lokale Regelung weiter.",
+      "cannot_connect": "Anthropic ist nicht erreichbar. Prüfe Internetverbindung, Proxy und Firewall. Der Key wurde nicht gespeichert.",
+      "max_below_base": "Das maximale Intervall muss mindestens so groß sein wie das Prüfintervall (z. B. alle 4 h prüfen, höchstens alle 48 h).",
+      "min_above_max": "Minimum muss unter dem Maximum liegen.",
+      "outdoor_required": "Bitte einen Außentemperatursensor oder eine Wetter-Entität wählen."
     }
   },
   "options": {
@@ -98,8 +125,8 @@
           "rules": "Notfallregel",
           "ventilation": "Lüftung",
           "ai": "KI",
-          "advanced": "Heiztag-Entscheidung",
-          "ai_limits": "KI-Grenzen"
+          "decision": "Heiztag-Entscheidung (Experten)",
+          "ai_limits": "KI-Grenzen (Experten)"
         }
       },
       "general": {
@@ -114,18 +141,26 @@
           "heat_meter": "Wärmezähler",
           "season_start": "Beginn der Heizperiode (TT.MM.)",
           "season_end": "Ende der Heizperiode (TT.MM.)",
-          "frost_temperature": "Frostschutz-Mindesttemperatur"
+          "frost_temperature": "Frostschutz-Mindesttemperatur",
+          "forecast_trust": "Vertrauen in die Sonnenprognose",
+          "season_start_day": "Heizperiode beginnt: Tag",
+          "season_start_month": "Heizperiode beginnt: Monat",
+          "season_end_day": "Heizperiode endet: Tag",
+          "season_end_month": "Heizperiode endet: Monat"
         },
         "data_description": {
-          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst).",
+          "outdoor_temperature": "Sensor für die Außentemperatur (z. B. ein Helfer, der mehrere Sensoren zusammenfasst). Ohne ihn gilt die aktuelle Temperatur der Wetter-Entität.",
           "outdoor_humidity": "Optional. Für die Lüftungsempfehlung; ohne Sensor wird die Luftfeuchte der Wetter-Entität genutzt.",
-          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt.",
+          "weather": "Optional, aber empfohlen. Die Vorhersage wird für die nächtliche Heiztag-Entscheidung und die Sonnenprognose genutzt. Ohne Außensensor gilt ihre aktuelle Temperatur als Außentemperatur.",
           "pv_power": "Optional. PV-Leistung (W oder kW) als Indikator für Sonne. Daraus wird der Sonneneinfluss je Bereich gelernt.",
           "pv_forecast": "Optional, nur zusammen mit dem PV-Leistungssensor. Erwartete PV-Energie der nächsten Stunde (Wh oder kWh, z. B. Forecast.Solar) oder erwartete Leistung in einer Stunde (W oder kW). Ohne diesen Sensor wird die Sonne aus der stündlichen Wettervorhersage und dem Sonnenstand geschätzt.",
           "heat_meter": "Optional. Zählerstand des Wärmezählers der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ, z. B. total_increasing). Die KI sieht dann die gemessene Wärme, außerdem steht sie im Dashboard. Seltene und grobe Werte sind kein Problem.",
           "season_start": "Außerhalb der Heizperiode bleiben alle Kreise aus (nur Frostschutz) und die KI wird nicht gefragt.",
           "season_end": "Letzter Tag der Heizperiode, darf im Folgejahr liegen (z. B. 31.03.).",
-          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat."
+          "frost_temperature": "Gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.",
+          "forecast_trust": "Anteil der erwarteten PV-Leistung, auf den sich die Regelung beim Zurückhalten verlässt (100 % = volle Prognose, 0 % = nur die aktuelle PV-Leistung zählt).",
+          "season_start_day": "Ab diesem Datum darf geheizt werden (z. B. 1. Oktober).",
+          "season_end_day": "Letzter Tag der Heizperiode (z. B. 31. März); die Periode darf über den Jahreswechsel gehen."
         }
       },
       "vacation": {
@@ -139,9 +174,9 @@
         },
         "data_description": {
           "vacation_entities": "Ist eine dieser Entitäten 'an', gilt Urlaub (z. B. ein input_boolean oder ein Kalender).",
-          "vacation_temperature": "Sollwert für alle Bereiche im Urlaub.",
+          "vacation_temperature": "Sollwert für alle Bereiche im Urlaub (z. B. 17 °C).",
           "return_entity": "Optional: input_datetime, Zeitstempel-Sensor oder datetime-Entität. Es wird so rechtzeitig vorgeheizt (gelernte Aufheizzeit), dass bei Rückkehr der normale Sollwert erreicht ist.",
-          "preheat_reserve": "Zusätzliche Zeit zur berechneten Vorheizzeit."
+          "preheat_reserve": "Zusätzliche Zeit zur berechneten Vorheizzeit (z. B. 30 min)."
         }
       },
       "rules": {
@@ -151,13 +186,15 @@
           "emergency_enabled": "Notfallregel",
           "emergency_delta": "Notfall: unter Sollwert um",
           "emergency_duration": "Notfall: Dauer",
-          "emergency_window_quiet": "Notfall: keine Fensteränderung seit"
+          "emergency_window_quiet": "Notfall: keine Fensteränderung seit",
+          "force_on_below": "Immer heizen unter Sollwert um"
         },
         "data_description": {
           "emergency_enabled": "An Tagen ohne Heizbetrieb darf ein Bereich trotzdem heizen, wenn die nach der Vorlaufzeit erwartete Temperatur lange und deutlich unter dem Sollwert liegt, ohne dass gelüftet wurde.",
           "emergency_delta": "Wie weit die nach der Vorlaufzeit erwartete Temperatur unter dem Sollwert liegen muss (mindestens die Einschalthysterese).",
-          "emergency_duration": "Wie lange die erwartete Temperatur so tief bleiben muss.",
-          "emergency_window_quiet": "Lüften zählt nicht: die Fenster dürfen sich so lange nicht verändert haben."
+          "emergency_duration": "Wie lange die erwartete Temperatur so tief bleiben muss (z. B. 45 min).",
+          "emergency_window_quiet": "Lüften zählt nicht: die Fenster dürfen sich so lange nicht verändert haben.",
+          "force_on_below": "So weit unter dem Sollwert heizt der Kreis unabhängig von jeder Vorhersage und der erwarteten Sonne."
         }
       },
       "ventilation": {
@@ -173,13 +210,13 @@
           "night_end_hour": "Nacht endet um"
         },
         "data_description": {
-          "ventilation_min_ah_advantage": "Die Außenluft muss mindestens so viel weniger Wasser enthalten (g/m³) für 'Jetzt lüften'.",
+          "ventilation_min_ah_advantage": "Absolute Feuchte ist der Wassergehalt der Luft in g/m³, unabhängig von der Temperatur. Die Außenluft muss mindestens so viel weniger Wasser enthalten für 'Jetzt lüften' (z. B. 0,8 g/m³).",
           "ventilation_max_reference_excess": "Trocknen wird nicht empfohlen, wenn es außen um mehr als diesen Wert wärmer ist als innen.",
           "ventilation_min_cooling_advantage": "'Lüften sinnvoll', wenn es innen mindestens so viel wärmer ist als außen (nicht während Heizbetrieb).",
           "ventilation_cooling_margin": "In der Heizperiode wird 'Lüften sinnvoll' (Kühlen) nur empfohlen, wenn der Raum mindestens so viel wärmer ist als sein Sollwert. Außerhalb der Heizperiode gilt das nicht. Bereiche ohne Heizkreis nutzen ihren Start-Sollwert.",
           "ventilation_cooling_min_temp": "'Lüften sinnvoll' (Kühlen) erst ab dieser Raumtemperatur, ganzjährig. 0 = aus. Zusätzlich wird Kühlen nie empfohlen, wenn die Außenluft die relative Feuchte des Raums über seine Feuchte-Schwelle bringen würde.",
           "night_start_hour": "Bei einem anderen Raum als Referenz zählt der Kühlvorteil nur nachts.",
-          "night_end_hour": "Ende der Nacht (Stunde)."
+          "night_end_hour": "Ende der Nacht (Uhrzeit, z. B. 08:00)."
         }
       },
       "ai": {
@@ -187,7 +224,7 @@
         "description": "Modell, Zeiten, Budget und Preise. Der API-Key wird über 'Neu konfigurieren' geändert.",
         "data": {
           "model": "Claude-Modell",
-          "effort": "Denkaufwand (effort)",
+          "effort": "Denkaufwand",
           "nightly_time": "Uhrzeit des Nachtlaufs",
           "check_interval": "Prüfintervall",
           "check_max_interval": "Maximales Prüfintervall",
@@ -200,52 +237,70 @@
         },
         "data_description": {
           "model": "Modell für alle KI-Abfragen. Die Preise sind Vorschläge für das gewählte Modell und änderbar.",
-          "effort": "Weniger Aufwand bedeutet weniger Denk-Tokens und geringere Kosten. 'auto' sendet keinen Wert.",
+          "effort": "Claude denkt vor der Antwort nach. Mehr Aufwand kann bessere Antworten geben, braucht aber mehr Tokens, die als Ausgabe abgerechnet werden. 'auto' überlässt es dem Modell.",
           "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des bewerteten Tages).",
-          "check_interval": "Grundintervall der periodischen KI-Prüfung an Heiztagen. Es verdoppelt sich nach jeder Prüfung ohne relevante Änderung.",
-          "check_max_interval": "Obergrenze für das verdoppelte Intervall.",
-          "monthly_budget": "Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel).",
-          "price_input": "Pro Million Tokens.",
-          "price_output": "Pro Million Tokens (Denken zählt als Ausgabe).",
-          "price_cache_write": "Pro Million Tokens.",
-          "price_cache_read": "Pro Million Tokens.",
-          "max_output_tokens": "Obergrenze je Antwort, auch für die Kostenschätzung vor einer Abfrage."
+          "check_interval": "Grundintervall der periodischen KI-Prüfung an Heiztagen (z. B. 4 h). Es verdoppelt sich nach jeder Prüfung ohne relevante Änderung.",
+          "check_max_interval": "Obergrenze für das verdoppelte Intervall (z. B. 48 h).",
+          "monthly_budget": "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel). Eine Prüfung kostet meist wenige Cent, 5 USD reichen also für etwa 100 bis 200 Abfragen.",
+          "price_input": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
+          "price_output": "US-Dollar pro Million Tokens, wie Anthropic abrechnet (Denken zählt als Ausgabe).",
+          "price_cache_write": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
+          "price_cache_read": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
+          "max_output_tokens": "Obergrenze je Antwort, Denken eingeschlossen (zu niedrig schneidet Antworten ab; sie sind bezahlt, werden aber verworfen). Auch Obergrenze der Kostenschätzung vor einer Abfrage."
         }
       },
-      "advanced": {
-        "title": "Heiztag-Entscheidung",
+      "decision": {
+        "title": "Heiztag-Entscheidung (Experten)",
         "description": "Gelernte Schwelle, Bewertung, Lernschritte und Phasenwechsel der Heiztag-Entscheidung.",
         "data": {
-          "theta": "theta (gelernt)",
+          "theta": "Heizgrenze theta (gelernt)",
           "too_cold_margin": "Zu kalt unter Sollwert um",
-          "too_cold_minutes": "Minuten zu kalt für Heizbedarf",
-          "theta_step_up": "theta Schritt hoch",
-          "theta_step_down": "theta Schritt runter",
-          "puffer_step_up": "puffer Schritt hoch",
-          "puffer_step_down": "puffer Schritt runter",
-          "phase_shared_min_days": "Tage bis gemeinsame Entscheidung",
-          "phase_shared_min_agreement": "Übereinstimmung für gemeinsam",
-          "phase_rule_min_days": "Tage bis Regel führt",
-          "phase_rule_min_agreement": "Übereinstimmung für Regel führt",
-          "phase_max_rule_errors": "Erlaubte Regelfehler",
-          "phase_fallback_errors_7d": "Regelfehler in 7 Tagen für Rückfall",
-          "phase_ai_check_every_days": "KI-Kontrolle alle"
+          "too_cold_minutes": "Minuten zu kalt für Heizbedarf"
         },
         "data_description": {
           "theta": "Aktuelle Schwelle der Heiztag-Regel: liegt die Prognose-Höchsttemperatur darunter, wird geheizt. Eine Änderung ersetzt den gelernten Wert; danach wird von hier aus weiter gelernt.",
           "too_cold_margin": "Bewertung: ein Bereich gilt als zu kalt unter Sollwert minus diesem Wert (Lüften ausgenommen).",
-          "too_cold_minutes": "Bewertung: so viele Minuten zu kalt bedeuten Heizbedarf.",
-          "theta_step_up": "Nach Fehler A (zu kalt ohne Heizbetrieb).",
-          "theta_step_down": "Nach Fehler B (Heizbetrieb ohne Bedarf).",
-          "puffer_step_up": "Nach Fehler A für den kalten Bereich.",
-          "puffer_step_down": "Nach Fehler B.",
-          "phase_shared_min_days": "Phase 'KI führt' -> 'gemeinsam' nach so vielen bewerteten Tagen.",
-          "phase_shared_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
-          "phase_rule_min_days": "Phase 'gemeinsam' -> 'Regel führt' nach so vielen Tagen in 'gemeinsam'.",
-          "phase_rule_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
-          "phase_max_rule_errors": "Höchstens so viele Regelfehler im Zeitraum für einen Phasenwechsel.",
-          "phase_fallback_errors_7d": "So viele Regelfehler in 7 Tagen führen eine Phase zurück.",
-          "phase_ai_check_every_days": "Wenn die Regel führt und sicher ist, wird die KI trotzdem alle so viele Tage gefragt."
+          "too_cold_minutes": "Bewertung: so viele Minuten zu kalt bedeuten Heizbedarf."
+        },
+        "sections": {
+          "learning_steps": {
+            "name": "Lernschritte",
+            "description": "Wie stark sich Heizgrenze und Reserve nach einem bewerteten Fehler ändern.",
+            "data": {
+              "theta_step_up": "Heizgrenze: Schritt nach oben",
+              "theta_step_down": "Heizgrenze: Schritt nach unten",
+              "puffer_step_up": "Reserve über Sollwert: Schritt nach oben",
+              "puffer_step_down": "Reserve über Sollwert: Schritt nach unten"
+            },
+            "data_description": {
+              "theta_step_up": "Nach Fehler A, also wenn es an einem Tag ohne Heizen zu kalt wurde (z. B. 1,0 K).",
+              "theta_step_down": "Nach Fehler B, also wenn geheizt wurde, obwohl es nicht nötig war (z. B. 1,0 K).",
+              "puffer_step_up": "Nach Fehler A für den kalten Bereich.",
+              "puffer_step_down": "Nach Fehler B."
+            }
+          },
+          "phases": {
+            "name": "Entscheidungsphasen",
+            "description": "Wann die Heiztag-Entscheidung zwischen KI führt, gemeinsam und Regel führt wechselt.",
+            "data": {
+              "phase_shared_min_days": "Tage bis gemeinsame Entscheidung",
+              "phase_shared_min_agreement": "Übereinstimmung für gemeinsam",
+              "phase_rule_min_days": "Tage bis Regel führt",
+              "phase_rule_min_agreement": "Übereinstimmung für Regel führt",
+              "phase_max_rule_errors": "Erlaubte Regelfehler",
+              "phase_fallback_errors_7d": "Regelfehler in 7 Tagen für Rückfall",
+              "phase_ai_check_every_days": "KI-Kontrolle alle"
+            },
+            "data_description": {
+              "phase_shared_min_days": "Wer über den Heiztag entscheidet: zuerst führt die KI, dann entscheiden KI und Regel gemeinsam, zuletzt führt die Regel. 'KI führt' -> 'gemeinsam' nach so vielen bewerteten Tagen (z. B. 14).",
+              "phase_shared_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
+              "phase_rule_min_days": "Phase 'gemeinsam' -> 'Regel führt' nach so vielen Tagen in 'gemeinsam'.",
+              "phase_rule_min_agreement": "Mindest-Übereinstimmung von Regel und KI.",
+              "phase_max_rule_errors": "Höchstens so viele Regelfehler im Zeitraum für einen Phasenwechsel.",
+              "phase_fallback_errors_7d": "So viele Regelfehler in 7 Tagen führen eine Phase zurück.",
+              "phase_ai_check_every_days": "Wenn die Regel führt und sicher ist, wird die KI trotzdem alle so viele Tage gefragt."
+            }
+          }
         }
       },
       "ai_limits": {
@@ -309,7 +364,7 @@
             }
           },
           "puffer": {
-            "name": "Puffer",
+            "name": "Reserve über Sollwert (puffer)",
             "data": {
               "min": "Minimum",
               "max": "Maximum",
@@ -317,7 +372,7 @@
             }
           },
           "theta": {
-            "name": "theta",
+            "name": "Heizgrenze (theta)",
             "data": {
               "min": "Minimum",
               "max": "Maximum",
@@ -328,11 +383,12 @@
       }
     },
     "error": {
-      "invalid_day_month": "Bitte im Format TT.MM. angeben (z. B. 01.10.).",
-      "invalid_auth": "Der API-Key wurde abgelehnt.",
-      "cannot_connect": "Keine Verbindung zur Anthropic API.",
-      "max_below_base": "Das maximale Intervall darf nicht kleiner als das Prüfintervall sein.",
-      "min_above_max": "Minimum muss unter dem Maximum liegen."
+      "invalid_day_month": "Bitte ein gültiges Datum angeben (TT.MM., z. B. 01.10.); einen Tag wie den 31.02. gibt es nicht.",
+      "invalid_auth": "Anthropic hat den API-Key abgelehnt. Prüfe ihn unter console.anthropic.com > API Keys und füge ihn ohne Leerzeichen ein. Ohne Key läuft die lokale Regelung weiter.",
+      "cannot_connect": "Anthropic ist nicht erreichbar. Prüfe Internetverbindung, Proxy und Firewall. Der Key wurde nicht gespeichert.",
+      "max_below_base": "Das maximale Intervall muss mindestens so groß sein wie das Prüfintervall (z. B. alle 4 h prüfen, höchstens alle 48 h).",
+      "min_above_max": "Bei jedem Parameter darf das Minimum nicht über dem Maximum liegen. Bitte die Grenzen des betroffenen Parameters korrigieren.",
+      "outdoor_required": "Bitte einen Außentemperatursensor oder eine Wetter-Entität wählen."
     }
   },
   "config_subentries": {
@@ -374,7 +430,8 @@
                 "min_target": "Kleinster Sollwert",
                 "max_target": "Größter Sollwert",
                 "min_on_time": "Mindest-Einschaltzeit",
-                "min_off_time": "Mindest-Ausschaltzeit"
+                "min_off_time": "Mindest-Ausschaltzeit",
+                "heating_type": "Heizungsart"
               },
               "data_description": {
                 "heater_switch": "Schalter des Stellantriebs (z. B. ein Relais). Leer lassen für einen Bereich nur mit Lüftungsempfehlung.",
@@ -382,7 +439,8 @@
                 "min_target": "Kleinster Wert der Thermostatkarte.",
                 "max_target": "Größter Wert der Thermostatkarte.",
                 "min_on_time": "Wird immer eingehalten (schont den Stellantrieb). Wird nicht gelernt.",
-                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt."
+                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt.",
+                "heating_type": "Wie der Kreis heizt. Ein Fußboden speichert Wärme über Stunden, Heizkörper reagieren in Minuten; die KI beurteilt die gelernten Werte entsprechend."
               }
             },
             "start_values": {
@@ -391,14 +449,14 @@
               "data": {
                 "window_delay": "Fensterverzögerung (Startwert)",
                 "recovery_time": "Erholungszeit nach Lüften (Startwert)",
-                "dead_time": "Totzeit (Startwert)",
-                "puffer": "Puffer (Startwert)"
+                "dead_time": "Totzeit bis der Raum wärmer wird (Startwert)",
+                "puffer": "Reserve über Sollwert (Startwert)"
               },
               "data_description": {
                 "window_delay": "So lange offen pausiert die Heizung. Die KI darf den Wert anpassen.",
                 "recovery_time": "Nach dem Schließen wird so lange gewartet, weil Estrich und Wände den Raum oft selbst aufheizen. Wird danach gelernt.",
-                "dead_time": "Zeit, bis der Raum nach dem Einschalten wärmer wird. Wird danach gelernt.",
-                "puffer": "Heiztag-Regel: nötiger Abstand über dem Sollwert beim Nachtlauf. Wird danach gelernt."
+                "dead_time": "Zeit vom Einschalten, bis der Raum wärmer wird; bei Fußbodenheizung oft 30-90 min, bei Heizkörpern 5-20 min. Wird danach gelernt.",
+                "puffer": "Heiztag-Regel: wie weit ein Bereich beim Nachtlauf über dem Sollwert liegen muss, um einen Tag ohne Heizen zu überstehen (z. B. 0,7 K). Wird danach gelernt."
               }
             },
             "ventilation": {
@@ -413,7 +471,7 @@
                 "ventilation_rh_threshold": "Relative Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder).",
                 "reference_temperature": "Optional, für Räume, die über einen anderen Raum gelüftet werden.",
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
-                "ventilation_block_entity": "Optional. Solange aktiv (z. B. Klimaanlage läuft, Beschattung geschlossen) wird kein Lüften empfohlen."
+                "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
               }
             }
           }
@@ -449,7 +507,8 @@
                 "min_target": "Kleinster Sollwert",
                 "max_target": "Größter Sollwert",
                 "min_on_time": "Mindest-Einschaltzeit",
-                "min_off_time": "Mindest-Ausschaltzeit"
+                "min_off_time": "Mindest-Ausschaltzeit",
+                "heating_type": "Heizungsart"
               },
               "data_description": {
                 "heater_switch": "Schalter des Stellantriebs (z. B. ein Relais). Leer lassen für einen Bereich nur mit Lüftungsempfehlung.",
@@ -457,7 +516,8 @@
                 "min_target": "Kleinster Wert der Thermostatkarte.",
                 "max_target": "Größter Wert der Thermostatkarte.",
                 "min_on_time": "Wird immer eingehalten (schont den Stellantrieb). Wird nicht gelernt.",
-                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt."
+                "min_off_time": "Wird immer eingehalten. Wird nicht gelernt.",
+                "heating_type": "Wie der Kreis heizt. Ein Fußboden speichert Wärme über Stunden, Heizkörper reagieren in Minuten; die KI beurteilt die gelernten Werte entsprechend."
               }
             },
             "learned_values": {
@@ -466,8 +526,8 @@
               "data": {
                 "window_delay": "Fensterverzögerung",
                 "recovery_time": "Erholungszeit nach Lüften",
-                "dead_time": "Totzeit",
-                "puffer": "Puffer"
+                "dead_time": "Totzeit bis der Raum wärmer wird",
+                "puffer": "Reserve über Sollwert"
               },
               "data_description": {
                 "window_delay": "So lange offen pausiert die Heizung. Die KI darf den Wert anpassen.",
@@ -488,7 +548,7 @@
                 "ventilation_rh_threshold": "Relative Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder).",
                 "reference_temperature": "Optional, für Räume, die über einen anderen Raum gelüftet werden.",
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
-                "ventilation_block_entity": "Optional. Solange aktiv (z. B. Klimaanlage läuft, Beschattung geschlossen) wird kein Lüften empfohlen."
+                "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
               }
             }
           }
@@ -496,9 +556,11 @@
       },
       "error": {
         "name_required": "Bitte einen Namen angeben.",
-        "min_above_max": "Der kleinste Sollwert muss unter dem größten liegen.",
-        "target_out_of_range": "Der Start-Sollwert muss zwischen kleinstem und größtem Sollwert liegen.",
-        "reference_incomplete": "Referenz-Temperatur und Referenz-Feuchte gehen nur zusammen."
+        "name_in_use": "Ein anderer Bereich heißt schon so. Bitte einen eindeutigen Namen wählen (Export und Import finden Bereiche über den Namen).",
+        "switch_in_use": "Dieser Schalter steuert bereits einen anderen Heizbereich. Jeder Heizkreis gehört zu genau einem Bereich: wähle einen anderen Schalter oder entferne ihn zuerst aus dem anderen Bereich.",
+        "min_above_max": "Der kleinste Sollwert muss kleiner sein als der größte. Bitte einen der beiden Werte ändern (beide in °C).",
+        "target_out_of_range": "Der Start-Sollwert muss zwischen dem kleinsten und dem größten Sollwert liegen. Bitte ihn oder die Grenzen anpassen.",
+        "reference_incomplete": "Referenztemperatur und Referenzfeuchte gehen nur zusammen: beide Sensoren wählen oder keinen."
       }
     }
   },
@@ -509,6 +571,29 @@
         "low": "Niedrig",
         "medium": "Mittel",
         "high": "Hoch"
+      }
+    },
+    "heating_type": {
+      "options": {
+        "underfloor": "Fußbodenheizung",
+        "radiator": "Heizkörper",
+        "other": "Andere (z. B. Wandheizung)"
+      }
+    },
+    "month": {
+      "options": {
+        "1": "Januar",
+        "2": "Februar",
+        "3": "März",
+        "4": "April",
+        "5": "Mai",
+        "6": "Juni",
+        "7": "Juli",
+        "8": "August",
+        "9": "September",
+        "10": "Oktober",
+        "11": "November",
+        "12": "Dezember"
       }
     }
   },
@@ -529,6 +614,7 @@
           "preheat": "Vorheizen zur Rückkehr",
           "emergency": "Notfallregel",
           "sensor_error": "Sensorfehler",
+          "actuator_unavailable": "Aktor nicht erreichbar",
           "no_circuit": "Kein Heizkreis"
         }
       },
@@ -625,11 +711,6 @@
           "off_today": "Heute nicht heizen"
         }
       }
-    },
-    "climate": {
-      "area": {
-        "name": "Thermostat"
-      }
     }
   },
   "services": {
@@ -699,6 +780,24 @@
     },
     "ai_disabled": {
       "message": "Die KI ist ausgeschaltet oder nicht eingerichtet."
+    }
+  },
+  "issues": {
+    "sensor_unavailable": {
+      "title": "Temperatursensor von {area} nicht verfügbar",
+      "description": "Der Temperatursensor {entity_id} des Heizbereichs {area} liefert seit mindestens 15 Minuten keinen gültigen Wert. Ohne Raumtemperatur bleibt der Heizkreis aus, und auch der Frostschutz kann nicht greifen.\n\nPrüfe den Sensor (Batterie, Funkverbindung, zugehörige Integration) oder wähle in den Einstellungen des Heizbereichs einen anderen Temperatursensor. Die Meldung verschwindet von selbst, sobald der Sensor wieder Werte liefert."
+    },
+    "actuator_unavailable": {
+      "title": "Schalter von {area} nicht erreichbar",
+      "description": "Der Schalter {entity_id} des Heizbereichs {area} ist seit mindestens 15 Minuten nicht erreichbar. Der Heizkreis kann nicht geschaltet werden und bleibt im letzten Zustand.\n\nPrüfe das Gerät (Stromversorgung, Funkverbindung, zugehörige Integration) oder wähle in den Einstellungen des Heizbereichs einen anderen Schalter. Die Meldung verschwindet von selbst, sobald der Schalter wieder erreichbar ist."
+    },
+    "actuator_not_responding": {
+      "title": "Schalter von {area} reagiert nicht",
+      "description": "Der Schalter {entity_id} des Heizbereichs {area} hat nach mehreren Schaltbefehlen seinen Zustand nicht geändert. Die Integration versucht es weiter, mit wachsendem Abstand (bis 15 Minuten).\n\nPrüfe, ob das Gerät reagiert, wenn du es in Home Assistant von Hand schaltest, und ob eine andere Automation es zurückschaltet. Die Meldung verschwindet, sobald der Schalter den Befehlen wieder folgt."
+    },
+    "outdoor_unavailable": {
+      "title": "Außentemperatursensor nicht verfügbar",
+      "description": "Der Außentemperatursensor {entity_id} liefert seit mindestens 15 Minuten keinen gültigen Wert. Die Regelung läuft weiter, aber die Vorhersage ist ungenauer, und das thermische Modell lernt in dieser Zeit nichts.\n\nPrüfe den Sensor oder wähle in den Einstellungen von AI Heating Assistant (Allgemein) einen anderen. Die Meldung verschwindet von selbst, sobald der Sensor wieder Werte liefert."
     }
   }
 }

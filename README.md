@@ -2,13 +2,13 @@
 
 [English version](README.en.md)
 
-Custom Integration für Home Assistant, die eine Fußbodenheizung mit einem Schaltaktor je Heizkreis (z. B. ein Relais, das den Stellantrieb schaltet) lokal regelt, das Verhalten jedes Raums lernt und die Parameter regelmäßig von Claude (Anthropic) prüfen lässt. Home Assistant trifft alle Schaltentscheidungen selbst. Die KI schaltet nie, sie passt nur Parameter innerhalb einstellbarer Grenzen an und wird mit wachsender Sicherheit seltener gefragt.
+Custom Integration für Home Assistant, die eine Fußbodenheizung (oder Heizkörper je Bereich, siehe Heizungsart) mit einem Schaltaktor je Heizkreis (z. B. ein Relais, das den Stellantrieb schaltet) lokal regelt, das Verhalten jedes Raums lernt und die Parameter regelmäßig von Claude (Anthropic) prüfen lässt. Home Assistant trifft alle Schaltentscheidungen selbst. Die KI schaltet nie, sie passt nur Parameter innerhalb einstellbarer Grenzen an und wird mit wachsender Sicherheit seltener gefragt.
 
 Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), Better Thermostat, Automationen für Sollwert, Wetter, Kälte und Urlaub sowie eine Lüftungsempfehlung auf Basis der Luftfeuchte.
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.10.2. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 1.0.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -16,12 +16,13 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 * **Sollwert** über die normale Thermostatkarte. Er bleibt dauerhaft gespeichert, bis du ihn änderst. Keine Zeitpläne, keine Nachtabsenkung (bei Fußbodenheizung meist kontraproduktiv).
 * **Vorausschauend einschalten:** Der Kreis geht an, wenn die Temperatur nach der gelernten Totzeit (unter Berücksichtigung von Abkühlrate, Außentemperatur und Sonne) unter Sollwert minus Einschalthysterese fallen würde.
-* **Sonne vorausschauend:** Für die Abkühlung über die Vorlaufzeit zählt nicht nur die aktuelle PV-Leistung, sondern die in dieser Zeit erwartete. Ist absehbar, dass die Sonne den Raum ohnehin aufheizt, schaltet der Kreis morgens nicht erst ein; abends rechnet die Regelung nicht mehr mit Sonne, die gleich verschwindet. Quelle ist ein optionaler PV-Prognosesensor (z. B. Forecast.Solar) oder, ohne ihn, die stündliche Wettervorhersage (Bewölkung) zusammen mit dem Sonnenstand. Dafür lernt die Integration an fast wolkenlosen Tagen, wie viel PV-Leistung bei klarem Himmel zu erwarten ist. Die Prognose fließt nur zu 70 % ein, und 1 K unter Sollwert wird unabhängig von jeder Vorhersage geheizt. Ohne PV-Leistungssensor bleibt alles wie bisher. Liefert der Sensor tagsüber keinen Wert, gilt die PV-Leistung als unbekannt: Es wird dann nichts kalibriert und nichts ins Modell übernommen, gerechnet wird mit der erwarteten Leistung (PV-Prognosesensor oder Sonnenstand und Bewölkung, sobald die Skala gelernt ist, sonst 0); bei tief stehender Sonne oder wenn ohnehin kaum Leistung zu erwarten ist, gilt 0. Fehlt der Wert länger als eine Stunde bei Tag, steht eine Warnung im Protokoll.
+* **Sonne vorausschauend:** Für die Abkühlung über die Vorlaufzeit zählt nicht nur die aktuelle PV-Leistung, sondern die in dieser Zeit erwartete. Ist absehbar, dass die Sonne den Raum ohnehin aufheizt, schaltet der Kreis morgens nicht erst ein; abends rechnet die Regelung nicht mehr mit Sonne, die gleich verschwindet. Quelle ist ein optionaler PV-Prognosesensor (z. B. Forecast.Solar) oder, ohne ihn, die stündliche Wettervorhersage (Bewölkung) zusammen mit dem Sonnenstand. Dafür lernt die Integration an fast wolkenlosen Tagen, wie viel PV-Leistung bei klarem Himmel zu erwarten ist. Die Prognose fließt nur zu 70 % ein (Option „Vertrauen in die Sonnenprognose“), und 1 K unter Sollwert wird unabhängig von jeder Vorhersage geheizt (Option „Immer heizen unter Sollwert um“, 0,3 bis 3 K). Ohne PV-Leistungssensor bleibt alles wie bisher. Liefert der Sensor tagsüber keinen Wert, gilt die PV-Leistung als unbekannt: Es wird dann nichts kalibriert und nichts ins Modell übernommen, gerechnet wird mit der erwarteten Leistung (PV-Prognosesensor oder Sonnenstand und Bewölkung, sobald die Skala gelernt ist, sonst 0); bei tief stehender Sonne oder wenn ohnehin kaum Leistung zu erwarten ist, gilt 0. Fehlt der Wert länger als eine Stunde bei Tag, steht eine Warnung im Protokoll.
 * **Vorausschauend abschalten:** Der Kreis geht aus, wenn die aktuelle Temperatur plus das erwartete Überschwingen den Sollwert plus Ausschalthysterese erreicht. Das Überschwingen der trägen Fußbodenheizung wird gelernt (abhängig von der Laufzeit). Nach dem Abschalten wird die noch im Boden steckende Wärme beim Wiedereinschalten berücksichtigt, bis die Temperatur wieder fällt; sonst liefe der Kreis nach der Mindestpause sofort wieder an.
 * **Fenster:** Ist ein Fenster länger als die Fensterverzögerung offen, pausiert die Heizanforderung. Nach dem Schließen wird die gelernte Erholungszeit abgewartet, weil Estrich und Wände den Raum oft selbst wieder aufheizen. Ist die Temperatur vor dem Lüften wieder erreicht, endet die Erholung sofort.
 * **Kurzlüften:** Solange ein Fenster offen ist, schaltet ein ausgeschalteter Kreis nicht ein, auch vor Ablauf der Fensterverzögerung. Ein laufender Kreis wird dabei nicht unterbrochen. War das Fenster mindestens 2 Minuten, aber kürzer als die Fensterverzögerung offen, folgt eine verkürzte Erholung: der Anteil der Fensterverzögerung, den das Fenster offen war, von der gelernten Erholungszeit (3 von 5 Minuten ergibt 60 %). Auch sie endet sofort, wenn die Temperatur vor dem Lüften wieder erreicht ist.
 * **Mindest-Ein- und -Ausschaltzeit** werden immer eingehalten.
 * **Frostschutz** gilt immer, auch außerhalb der Heizperiode und bei ausgeschaltetem Thermostat.
+* **Ausfälle:** Liefert der Temperatursensor keinen oder einen unmöglichen Wert (außerhalb −50 bis 80 °C, `nan`), bleibt der Kreis aus (Status *Sensorfehler*), auch der Frostschutz kann dann nicht greifen. Ist der Schalter nicht erreichbar, zeigt der Status *Aktor nicht erreichbar*. Dauert ein solcher Ausfall (oder der des Außentemperatursensors) länger als 15 Minuten, erscheint eine Reparaturmeldung unter Einstellungen > System > Reparaturen; sie verschwindet von selbst, sobald der Wert zurück ist. Eine ignorierte Meldung bleibt auch nach einem Neustart ignoriert, solange der Ausfall andauert. Folgt ein Schalter den Befehlen nicht, wird er nach 1, 2, 4, 8 und dann alle 15 Minuten erneut geschaltet statt jede Minute; nach drei Versuchen erscheint ebenfalls eine Meldung.
 * **Heizperiode:** Außerhalb (z. B. 01.04. bis 30.09.) bleiben alle Kreise aus, es gibt keine KI-Abfragen.
 * **Urlaub:** Frei wählbare Entitäten zeigen Urlaub an (z. B. `input_boolean.vacation_mode` oder ein Kalender). Dann gilt die Urlaubstemperatur für alle Bereiche. Mit einer optionalen Rückkehr-Entität (z. B. `input_datetime.vacation_end`) wird anhand der gelernten Aufheizrate so rechtzeitig vorgeheizt, dass bei Rückkehr der normale Sollwert erreicht ist. Liegt das Rückkehrdatum in der Vergangenheit (z. B. Urlaub manuell eingeschaltet), wird es ignoriert und die Urlaubstemperatur gilt.
 
@@ -34,26 +35,28 @@ Einmal pro Nacht (Uhrzeit einstellbar) wird entschieden, ob heute überhaupt geh
 3. Ein **Phasenmodell** entscheidet, wer führt: *KI führt* (Start), *Gemeinsam* (bei Einigkeit diese, sonst die Regel, wenn sie sich sicher ist), *Regel führt* (die KI wird nur gefragt, wenn die Regel unsicher ist, plus einmal pro Woche zur Kontrolle). Ein Wechsel erfolgt nach genügend Tagen mit hoher Übereinstimmung und wenigen Regelfehlern, bei Fehlern geht es eine Phase zurück.
 4. Jeder Tag wird nachträglich **bewertet**. Solange nichts geheizt hat, zählt die echte Raumtemperatur (Minuten zu kalt außerhalb von Lüftungsphasen). Sobald ein Kreis lief, hat die Entscheidung den Raum selbst warm gehalten; dann zählt ein virtueller Raum, der mit der gelernten Abkühlrate ohne Heizung weiterläuft. Fehler A (nicht geheizt, obwohl nötig) und Fehler B (geheizt ohne Bedarf) passen `theta` und `puffer` an. Tage mit manuellem Override werden nicht gelernt.
 
-Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionalen **Notfallregel** (Raum unter dem Sollwert und Temperatur voraussichtlich nach der Vorlaufzeit lange und deutlich darunter, ohne dass gelüftet wurde). Über die Auswahl "Heiztag manuell" lässt sich der Tag übersteuern, das gilt bis zur nächsten Entscheidung.
+Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionalen **Notfallregel** (Raum unter dem Sollwert und Temperatur voraussichtlich nach der Vorlaufzeit lange und deutlich darunter, ohne dass gelüftet wurde). Über die Auswahl "Heiztag manuell" lässt sich der Tag übersteuern, das gilt bis zur nächsten Entscheidung. "Heute heizen" wirkt auch außerhalb der Heizperiode (etwa an einem kalten Frühlingstag); die KI bleibt dort aus.
 
 ### Lernen je Bereich
 
 * **Thermisches Modell** (rekursive kleinste Quadrate): `dT/dt = a · Ventil − k · (T_innen − T_außen) + s · PV`. Daraus folgen Aufheizrate, Abkühlrate, Einfluss der Außentemperatur (`k`) und Einfluss der Sonne (`s`, PV-Leistung als Sonnenindikator).
 * **Ereignisse:** Totzeit nach dem Einschalten, Überschwingen nach dem Abschalten, Erholungszeit nach dem Lüften. Die Totzeit zählt erst, wenn der Anstieg bestätigt ist (ein zweiter Sensorschritt oder ein Schritt, der fünf Minuten anhält), damit ein einzelnes Zittern des Sensors sie nicht verfälscht. Die Erholungszeit wird auch gelernt, wenn die Heizung die Wartezeit abbricht, sofern der Raum am Ende der Wartezeit gerade von selbst wärmer wurde; das thermische Modell vergisst langsam (etwa drei Wochen).
-* Alle Werte werden dauerhaft gespeichert, als Sensoren angezeigt und lassen sich exportieren, importieren und zurücksetzen.
+* Alle Werte werden dauerhaft gespeichert, als Sensoren angezeigt und lassen sich exportieren, importieren und zurücksetzen. Export und Import finden Bereiche über den Namen, deshalb muss jeder Bereich anders heißen. Werden die KI-Grenzen enger gestellt, werden Werte außerhalb beim nächsten Laden auf die Grenze gesetzt (mit Logbuch-Eintrag).
 
 ### KI-Prüfung (Claude)
 
-* Nur an Heiztagen und in der Heizperiode. Sie erhält eine kompakte Zusammenfassung je Bereich (Ist, Soll, Lernwerte, Kennzahlen seit der letzten Prüfung) und liefert Parameteranpassungen als JSON.
+* Nur an Heiztagen und in der Heizperiode. Sie erhält eine kompakte Zusammenfassung je Bereich (Ist, Soll, Lernwerte, Kennzahlen seit der letzten Prüfung) und liefert Parameteranpassungen als JSON. Begründungen schreibt sie in der Sprache von Home Assistant (auch regionale Varianten wie de-CH).
 * **Ziel:** so wenig Wärme wie möglich, ohne dass ein Raum unter den Sollwert fällt. Komfort ist eine feste Grenze, kein Tauschobjekt. Dafür bekommt die KI neben den Minuten zu kalt auch:
-  * **Überheizen** (`over_kh`): Kelvinstunden mehr als 0,2 K über dem Sollwert, während der Kreis läuft und bis 4 Stunden nach dem Abschalten (also Wärme, die die Heizung zu viel geliefert hat). Wärme nur von der Sonne an einem Tag ohne Heizen zählt nicht. Der Anteil bei Sonne (`sun_over_kh`, PV ab 0,3 kW) zeigt, ob der Sonnenfaktor zu niedrig ist.
+  * **Überheizen** (`over_kh`): Kelvinstunden mehr als 0,2 K über dem Sollwert, während der Kreis läuft und bis 4 Stunden nach dem Abschalten (also Wärme, die die Heizung zu viel geliefert hat). Wärme nur von der Sonne an einem Tag ohne Heizen zählt nicht. Der Anteil bei Sonne (`sun_over_kh`, PV ab 0,3 kW bzw. ab 10 % der gelernten Leistung bei klarem Himmel) zeigt, ob der Sonnenfaktor zu niedrig ist.
   * **Heizaufwand je Bedarf** (`on_per_kh`): Heizminuten je Kelvinstunde Unterschied zwischen Sollwert und Außentemperatur. So sind Prüfungen bei unterschiedlichem Wetter vergleichbar.
   * **Mittlere Laufzeit** je Einschalten.
   * **Verlauf der letzten 6 Prüfungen** mit ihren Kennzahlen und den dabei gemachten Änderungen. Die KI kann damit beurteilen, ob eine Änderung etwas gebracht hat, und sie sonst zurücknehmen. Wird ein Bereich zurückgesetzt oder ein gelernter Wert von Hand geändert, wird sein Verlauf gelöscht.
 * Anpassbare Parameter: Einschalt- und Ausschalthysterese, Faktor Überschwingen, Faktor Vorlauf, Sonnenfaktor, Fensterverzögerung, Korrektur der Erholungszeit, `puffer` und `theta`. Jeder Wert wird auf Minimum, Maximum und eine maximale Änderung je Prüfung begrenzt (alles einstellbar).
-* **Seltener fragen:** Das Prüfintervall verdoppelt sich nach jeder Prüfung ohne relevante Änderung und ohne Komfortfehler (bis zum Maximalintervall). Es fällt auf das Grundintervall zurück, wenn es zu kalt war, ein Bereich deutlich überheizt wurde (mehr als 0,5 Kelvinstunden je Tag, anteilig), die KI deutlich geändert hat oder du Sollwert bzw. Einstellungen änderst. Eine bereits geplante Prüfung bleibt über den Nachtlauf hinweg bestehen; nach einem Nicht-Heiztag folgt die nächste Prüfung nach dem Grundintervall, und war ein Raum seit der letzten Prüfung zu kalt, wird die nächste Prüfung vorgezogen.
-* **Kosten:** aus der Token-Nutzung mal den eingetragenen Preisen. Vor jeder Abfrage wird geschätzt; ist das Monatsbudget erreicht, gibt es bis zum Monatswechsel keine Abfragen.
+* **Seltener fragen:** Das Prüfintervall verdoppelt sich nach jeder Prüfung ohne relevante Änderung und ohne Komfortfehler (bis zum Maximalintervall). Es fällt auf das Grundintervall zurück, wenn es zu kalt war, ein Bereich deutlich überheizt wurde (mehr als 0,5 Kelvinstunden je Tag, anteilig), die KI deutlich geändert hat oder du Einstellungen bzw. einen Sollwert um mindestens 0,5 K änderst (kleinere Schritte, etwa aus Automationen, setzen das Intervall nicht zurück). Eine bereits geplante Prüfung bleibt über den Nachtlauf hinweg bestehen; nach einem Nicht-Heiztag folgt die nächste Prüfung nach dem Grundintervall, und war ein Raum seit der letzten Prüfung zu kalt, wird die nächste Prüfung vorgezogen.
+* **Kosten:** aus der Token-Nutzung mal den eingetragenen Preisen (in USD). Antwortet nach einem serverseitigen Fallback ein anderes Modell, gilt dessen Listenpreis. Vor jeder Abfrage wird geschätzt (Ausgabe: doppelter Mittelwert der bisherigen Antworten im Monat, höchstens die maximalen Ausgabe-Tokens, Standard 16000 inklusive Denken); ist das Monatsbudget erreicht, gibt es bis zum Monatswechsel keine Abfragen.
 * **Ausfall:** Bei Fehlern, Zeitüberschreitung oder ungültiger Antwort läuft die Regelung mit den zuletzt gelernten Werten weiter. Der API-Key erscheint nie im Log und wird in der Diagnose geschwärzt.
+* **Abgelehnter API-Key:** Lehnt Anthropic den Key ab (z. B. widerrufen), fragt Home Assistant unter Einstellungen > Geräte & Dienste nach einem neuen Key (erneute Authentifizierung). Bis dahin läuft die lokale Regelung ohne KI weiter; ein leeres Feld schaltet die KI ab.
+* **Wetterdienst antwortet nicht:** Die Wetterprognose wird höchstens 10 Sekunden lang abgewartet; danach entscheidet die Heiztag-Regel ohne Prognose, und die Regelung läuft weiter. Schlägt die Heiztag-Entscheidung fehl, wird sie nach 15 Minuten erneut versucht (Fehler im Log).
 
 ### Wärmezähler
 
@@ -77,9 +80,16 @@ Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder ei
 3. **AI Heating Assistant** herunterladen und Home Assistant neu starten.
 4. **Einstellungen > Geräte & Dienste > Integration hinzufügen > AI Heating Assistant**.
 
-Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von Anthropic (optional, ohne Key läuft nur die lokale Regelung).
+Voraussetzung: Home Assistant 2026.10 oder neuer. Für die KI ein API-Key von Anthropic (optional, ohne Key läuft nur die lokale Regelung). Bei der Einrichtung fragt der KI-Schritt nur den Key und die Uhrzeit des Nachtlaufs; Modell und Monatsbudget folgen erst, wenn ein Key eingegeben und angenommen wurde.
+
+### Manuelle Installation
+
+1. Den Ordner `custom_components/ai_heating_assistant` aus diesem Repository nach `config/custom_components/` von Home Assistant kopieren.
+2. Home Assistant neu starten und die Integration wie oben unter Schritt 4 hinzufügen.
 
 ## Konfiguration
+
+Die Auswahlfelder zeigen nur passende Entitäten (z. B. Temperatursensoren mit Geräteklasse Temperatur oder Einheit °C/°F/K, Feuchtesensoren mit Einheit %). Bereits gewählte Entitäten außerhalb dieser Auswahl bleiben gültig.
 
 ### Dashboard
 
@@ -94,15 +104,17 @@ Die Einrichtung selbst läuft weiterhin als Dialog.
 
 ### Einrichtung (global)
 
+Temperatursensoren dürfen in °C, °F oder K melden; ohne Einheit gilt das Einheitensystem von Home Assistant. Gerechnet wird intern in °C, und alle Temperaturen in den Einstellungen (Sollwerte, Frostschutz, `theta`) werden in °C eingegeben. Die Thermostate zeigen Werte im Einheitensystem von Home Assistant.
+
 | Option | Standard | Bedeutung |
 |---|---|---|
-| Außentemperatursensor | | z. B. `sensor.outdoor_temperature` |
+| Außentemperatursensor | | z. B. `sensor.outdoor_temperature`; optional, wenn eine Wetter-Entität gewählt ist (dann gilt deren aktuelle Temperatur) |
 | Außenfeuchtesensor | | optional, für die Lüftungsempfehlung |
 | Wetter-Entität | | optional, Vorhersage für den Nachtlauf und die Sonnenprognose |
-| PV-Leistungssensor | | optional, Sonnenindikator (W oder kW) |
+| PV-Leistungssensor | | optional, Sonnenindikator (W oder kW; ohne Einheit gilt W, eine andere Einheit wird mit Warnung ignoriert) |
 | PV-Prognosesensor | | optional, nur mit PV-Leistungssensor: Energie der nächsten Stunde (Wh oder kWh) oder Leistung in einer Stunde (W oder kW); ohne ihn wird die Wettervorhersage genutzt |
 | Wärmezähler | | optional, Zählerstand der hier geregelten Heizkreise (Wh, kWh, MWh, MJ oder GJ); seltene und grobe Werte sind kein Problem, siehe [Wärmezähler](#wärmezähler) |
-| Heizperiode | 01.10. bis 31.03. | Format TT.MM. |
+| Heizperiode | 01.10. bis 31.03. (Südhalbkugel: 01.05. bis 30.09.) | im Dialog als Tag und Monat, im Panel im Format TT.MM.; der Vorschlag richtet sich bei der Einrichtung nach dem Breitengrad von Home Assistant |
 | Frostschutz | 7 °C | gilt immer |
 | Urlaubs-Entitäten | | "an" = Urlaub |
 | Urlaubstemperatur | 18 °C | für alle Bereiche |
@@ -111,14 +123,16 @@ Die Einrichtung selbst läuft weiterhin als Dialog.
 | Startwert `theta` | 16 °C | Heiztag-Regel; nur bei der Einrichtung, danach wird der gelernte Wert bearbeitet |
 | API-Key, Modell | Claude Opus 5.5 | änderbar, eigener Modellname möglich |
 | Nachtlauf | 03:00 | |
-| Monatsbudget | 5 € | |
+| Monatsbudget | 5 USD | |
 
 ### Einstellungen
 
+Reihenfolge im Optionsmenü: Allgemein, Urlaub, Notfallregel, Lüftung, KI, Heiztag-Entscheidung (Experten), KI-Grenzen (Experten). Lernschritte und Entscheidungsphasen liegen in einklappbaren Abschnitten.
+
 * **Allgemein:** Sensoren, Heizperiode und Frostschutz, Urlaub wie oben.
 * **Notfallregel:** an, 1 K unter Sollwert (voraussichtlich nach der Vorlaufzeit, mindestens die Einschalthysterese), 45 min, Fenster 30 min unverändert.
-* **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20 bis 8 Uhr.
-* **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in €/Million Tokens (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
+* **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20:00 bis 08:00 Uhr (Uhrzeiten, minutengenau).
+* **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in USD je Million Tokens (Anthropic rechnet in US-Dollar ab; es wird nicht umgerechnet) (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
 * **KI-Grenzen:** Minimum, Maximum, größte Änderung je Prüfung für jeden Parameter.
 * **Heiztag-Entscheidung:** gelerntes `theta` (änderbar), Bewertungsschwellen, Lernschritte, Bedingungen der Phasenwechsel.
 
@@ -135,6 +149,7 @@ Im Dashboard unter **Heizbereiche** (oder unter der Integration **Heizbereich hi
 | Heizkreis-Schalter | z. B. `switch.heating_circuit_1`; leer = nur Lüftungsempfehlung |
 | Start-Sollwert, kleinster und größter Sollwert | 21 / 16 / 24 °C |
 | Mindest-Ein- und -Ausschaltzeit | 10 / 10 min (fest) |
+| Heizungsart | Fußbodenheizung (Standard), Heizkörper oder Andere; die KI beurteilt Trägheit und gelernte Werte danach. Die Regelung selbst lernt das Verhalten jedes Raums ohnehin. |
 | Startwerte Fensterverzögerung, Erholungszeit, Totzeit, puffer | 5 min, 30 min, 30 min, 0,7 K; nur beim Anlegen |
 | Feuchte-Schwelle | 60 % |
 | Referenz-Temperatur und -Feuchte | optional, statt außen (Raum ohne eigenes Fenster) |
@@ -143,6 +158,10 @@ Im Dashboard unter **Heizbereiche** (oder unter der Integration **Heizbereich hi
 Startwerte (auch `theta`) werden nur beim Einrichten bzw. Anlegen gesetzt und gelten, bis etwas gelernt wurde. Danach lassen sie sich nicht mehr ändern; stattdessen zeigt der Bereich unter **Gelernte Werte** die Werte, mit denen gerade geregelt wird (Fensterverzögerung, Erholungszeit, Totzeit, puffer), und das gelernte `theta` steht unter **Heiztag-Entscheidung**. Eine Änderung dort ersetzt den gelernten bzw. von der KI angepassten Wert, das Lernen geht von dort aus weiter, und das Logbuch vermerkt es.
 
 ## Entitäten
+
+Entitäten, die nach einer Änderung nicht mehr entstehen (z. B. „Wärme heute“ nach dem Entfernen des Wärmezählers), werden beim nächsten Laden aus der Entitätsregistrierung entfernt. Schnell wechselnde Prognosewerte (`predicted_temperature`, `expected_peak`, `expected_pv_kw`) und große Attribute (Parameterliste, letzte Tage, Regel, KI-Zusammenfassung) zeichnet der Recorder nicht auf; die Werte sind auf die angezeigte Genauigkeit gerundet, damit nicht jede Minute ein neuer Zustand entsteht.
+
+Bei neuen Installationen sind die Diagnose-Sensoren der Lernwerte (Aufheiz- und Abkühlrate, Überschwingen, Totzeit, Erholungszeit, Einfluss Außen und Sonne) zunächst deaktiviert; das Panel zeigt die Werte trotzdem an. Bei Bedarf lassen sie sich unter Einstellungen > Entitäten aktivieren. KI-Zeitstempel, KI-Kosten und Entscheidungsphase sind Diagnose-Entitäten. Ein neues Bereichsgerät kommt in den Home-Assistant-Bereich seines Temperatursensors.
 
 Global (Gerät "AI Heating Assistant"):
 
@@ -161,6 +180,8 @@ Je Heizbereich (eigenes Gerät):
 Alle wichtigen Entscheidungen und jede KI-Anpassung mit Begründung stehen im **Logbuch**. Benachrichtigungen verschickt die Integration nicht.
 
 ## Dienste
+
+`import_parameters`, `reset_learned`, `decide_heating_day` und `run_ai_check` (die beiden letzten können KI-Kosten verursachen) dürfen nur Administratoren aufrufen; Automationen und Skripte ohne Benutzer dürfen sie weiter nutzen.
 
 | Dienst | Zweck |
 |---|---|
@@ -185,6 +206,58 @@ data:
         params:
           hysteresis_on: 0.2
 ```
+
+## Fehlerbehebung
+
+* **Status *Sensorfehler*:** Der Temperatursensor liefert keinen, einen unmöglichen Wert oder eine Einheit, die keine Temperatur ist (Warnung im Protokoll). Der Kreis bleibt aus; nach 15 Minuten erscheint eine Reparaturmeldung.
+* **Status *Aktor nicht erreichbar*:** Der Schalter ist `unavailable`. Folgt er Befehlen nicht, wird mit wachsendem Abstand erneut geschaltet; nach drei Versuchen erscheint eine Reparaturmeldung.
+* **KI fragt nicht mehr:** Budget erreicht (Hinweis im Dashboard, Sensor *KI-Kosten im Monat* mit `budget_reached`) oder der API-Key wurde abgelehnt (erneute Authentifizierung unter Einstellungen > Geräte & Dienste).
+* **Debug-Protokoll:** In der Integration *Debug-Protokollierung aktivieren* wählen, oder in `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.ai_heating_assistant: debug
+    anthropic: debug
+```
+
+## Datenschutz
+
+Ohne API-Key verlässt nichts das Haus. Mit Key gehen an Anthropic: die Bereichsnamen, Temperaturen, Soll- und Lernwerte, Kennzahlen seit der letzten Prüfung, Außentemperatur, PV-Leistung, eine kompakte Wettervorhersage, Wärmezählerwerte und der Verlauf der Heiztag-Entscheidungen. Entitäts-IDs, Standort und der API-Key selbst sind nicht Teil der Anfragen.
+
+## Bekannte Einschränkungen
+
+* Alle Temperaturen in den Einstellungen werden in °C eingegeben (Sensoren und Thermostate dürfen °F nutzen).
+* Nur Schaltaktoren (an/aus) je Heizkreis, keine stetigen Ventile.
+* Eine Instanz je Home Assistant.
+
+## Beispiel für eine Automation
+
+An einem Brückentag nicht heizen. Die Auswahl gilt für den Tag, an dem sie gesetzt wird; nach Mitternacht und vor dem Nachtlauf gesetzt, gilt sie für den neuen Tag:
+
+```yaml
+automation:
+  - alias: "Kein Heizen am Brückentag"
+    triggers:
+      - trigger: time
+        at: "00:30:00"
+    conditions:
+      - condition: state
+        entity_id: calendar.brueckentage
+        state: "on"
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.ai_heating_assistant_heating_day_override
+        data:
+          option: off_today
+```
+
+## Deaktivieren und Deinstallation
+
+Wird die Integration deaktiviert oder entfernt, verschwindet ihre Seite aus der Seitenleiste, und sie schaltet alle eingeschalteten Heizkreise aus; sonst würde ein gerade laufender Kreis ohne Grenze weiterheizen. Dasselbe gilt für den Schalter eines gelöschten Heizbereichs und für einen Schalter, der in einem Bereich durch einen anderen ersetzt wurde. Ein Neuladen (z. B. nach einer Änderung der Einstellungen) oder ein Neustart von Home Assistant lässt die Kreise unverändert.
+
+Beim Entfernen werden außerdem die gelernten Werte (`.storage/ai_heating_assistant.<entry_id>`) und die Seite in der Seitenleiste gelöscht. Danach den Ordner `custom_components/ai_heating_assistant` entfernen (bzw. in HACS „Entfernen“ wählen) und Home Assistant neu starten.
 
 ## Entwicklung
 

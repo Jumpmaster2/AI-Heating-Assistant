@@ -2,13 +2,13 @@
 
 [Deutsche Version](README.md)
 
-Custom integration for Home Assistant that controls underfloor heating with one switch per heating circuit (for example a relay that drives the valve actuator) locally, learns the behaviour of every room and lets Claude (Anthropic) review the parameters periodically. Home Assistant makes every switching decision itself. The AI never switches anything; it only adjusts parameters within configurable limits and is asked less often as the local model becomes more reliable.
+Custom integration for Home Assistant that controls underfloor heating (or radiators per area, see heating type) with one switch per heating circuit (for example a relay that drives the valve actuator) locally, learns the behaviour of every room and lets Claude (Anthropic) review the parameters periodically. Home Assistant makes every switching decision itself. The AI never switches anything; it only adjusts parameters within configurable limits and is asked less often as the local model becomes more reliable.
 
 It typically replaces: thermostat helpers (Generic Thermostat), Better Thermostat, automations for setpoint, weather, cold and vacation handling, and a humidity based ventilation recommendation.
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.10.2. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.0.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -16,12 +16,13 @@ The overview, the learned values and all settings are in the **AI Heating Assist
 
 * **Target temperature** via the normal thermostat card. It is stored permanently until you change it. No schedules, no night setback (usually counterproductive with underfloor heating).
 * **Predictive switch-on:** the circuit turns on when the temperature after the learned dead time (taking cooling rate, outdoor temperature and sun into account) would fall below target minus the switch-on hysteresis.
-* **Sun ahead:** the cooling over the lead time uses the PV power expected in that time, not only the current value. If the sun is going to heat the room anyway, the circuit does not switch on in the morning; in the evening the control no longer counts on sun that is about to disappear. The source is an optional PV forecast sensor (e.g. Forecast.Solar) or, without it, the hourly weather forecast (cloud coverage) together with the sun position. For the latter the integration learns on nearly cloudless days how much PV power to expect under a clear sky. Only 70 % of the forecast is used, and 1 K below target the area heats regardless of any forecast. Without a PV power sensor nothing changes. If the sensor has no value by day, the PV power counts as unknown: nothing is calibrated or fed into the model, and the expected power is used instead (PV forecast sensor, or sun position and cloud coverage once the scale is learned, otherwise 0); with the sun low or hardly any power expected it counts as 0. A value missing for more than an hour by day is logged as a warning.
+* **Sun ahead:** the cooling over the lead time uses the PV power expected in that time, not only the current value. If the sun is going to heat the room anyway, the circuit does not switch on in the morning; in the evening the control no longer counts on sun that is about to disappear. The source is an optional PV forecast sensor (e.g. Forecast.Solar) or, without it, the hourly weather forecast (cloud coverage) together with the sun position. For the latter the integration learns on nearly cloudless days how much PV power to expect under a clear sky. Only 70 % of the forecast is used (option "Trust in the sun forecast"), and 1 K below target the area heats regardless of any forecast (option "Always heat below target by", 0.3 to 3 K). Without a PV power sensor nothing changes. If the sensor has no value by day, the PV power counts as unknown: nothing is calibrated or fed into the model, and the expected power is used instead (PV forecast sensor, or sun position and cloud coverage once the scale is learned, otherwise 0); with the sun low or hardly any power expected it counts as 0. A value missing for more than an hour by day is logged as a warning.
 * **Predictive switch-off:** the circuit turns off when the current temperature plus the expected overshoot reaches target plus the switch-off hysteresis. The overshoot of the slow floor heating is learned (depending on the run time). After switching off, the heat still stored in the floor is taken into account before switching on again, until the temperature falls; otherwise the circuit would come back right after the minimum off time.
 * **Windows:** if a window is open longer than the window delay, the heating demand pauses. After closing, the learned recovery time is awaited, because screed and walls often reheat the room themselves. Recovery ends early once the temperature before airing is reached again.
 * **Short airing:** while a window is open, a circuit that is off does not switch on, even before the window delay is over. A running circuit is not interrupted. If the window was open for at least 2 minutes but shorter than the window delay, a shortened recovery follows: the share of the window delay the window was open, applied to the learned recovery time (3 of 5 minutes gives 60 %). It also ends early once the temperature before airing is reached again.
 * **Minimum on and off times** are always respected.
 * **Frost protection** always applies, also outside the heating period and with the thermostat switched off.
+* **Outages:** if the temperature sensor has no value or an impossible one (outside −50 to 80 °C, `nan`), the circuit stays off (status *Sensor error*) and frost protection cannot work either. If the switch is unavailable, the status shows *Actuator unavailable*. If such an outage (or one of the outdoor temperature sensor) lasts longer than 15 minutes, a repair appears under Settings > System > Repairs; it disappears by itself once the value is back. A dismissed repair stays dismissed across restarts while the outage lasts. A switch that does not follow its commands is asked again after 1, 2, 4, 8 and then every 15 minutes instead of every minute; after three attempts a repair appears as well.
 * **Heating period:** outside (e.g. 01.04. to 30.09.) all circuits stay off and the AI is not called.
 * **Vacation:** freely selectable entities indicate vacation (e.g. `input_boolean.vacation_mode` or a calendar). Then the vacation temperature applies to all areas. With an optional return entity (e.g. `input_datetime.vacation_end`) preheating starts early enough, based on the learned heat-up rate, to reach the normal target on return. A return time in the past (e.g. vacation switched on manually) is ignored and the vacation temperature applies.
 
@@ -34,26 +35,28 @@ Once per night (time configurable) it is decided whether heating is needed today
 3. A **phase model** decides who leads: *AI leads* (start), *shared* (agreement wins, otherwise the rule if it is sure), *rule leads* (the AI is only asked when the rule is unsure, plus once a week as a control). The phase advances after enough days with high agreement and few rule errors and falls back after errors.
 4. Every day is **evaluated** afterwards. While nothing heated, the real room temperature is the truth (minutes too cold outside airing phases). Once a circuit ran, the decision itself kept the room warm; then a virtual room that keeps cooling with the learned rate and no heating decides. Error A (no heating although needed) and error B (heating without need) adapt `theta` and `puffer`. Days under a manual override are not learned from.
 
-On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (area below target and temperature expected after the lead time long and clearly below it, without airing). The select "Heating day override" overrides the day until the next decision.
+On a no-heating day all circuits stay off except frost protection and the optional **emergency rule** (area below target and temperature expected after the lead time long and clearly below it, without airing). The select "Heating day override" overrides the day until the next decision. "Heat today" also works outside the heating period (e.g. on a cold spring day); the AI stays off there.
 
 ### Learning per area
 
 * **Thermal model** (recursive least squares): `dT/dt = a · valve − k · (T_in − T_out) + s · PV`. This yields heat-up rate, cooling rate, influence of the outdoor temperature (`k`) and of the sun (`s`, PV power as sunshine indicator).
 * **Events:** dead time after switching on, overshoot after switching off, recovery time after airing. The dead time only counts once the rise is confirmed (a second sensor step, or one step lasting five minutes), so a single sensor jitter cannot distort it. The recovery time is also learned when heating cuts the wait short, provided the room was warming up by itself at the end of the wait; the thermal model forgets slowly (about three weeks).
-* All values are stored permanently, exposed as sensors and can be exported, imported and reset.
+* All values are stored permanently, exposed as sensors and can be exported, imported and reset. Export and import find areas by name, so every area needs its own name. If the AI limits are narrowed, values outside are set to the limit at the next load (with a logbook entry).
 
 ### AI check (Claude)
 
-* Only on heating days within the heating period. It receives a compact summary per area (actual, target, learned values, statistics since the last check) and returns parameter adjustments as JSON.
+* Only on heating days within the heating period. It receives a compact summary per area (actual, target, learned values, statistics since the last check) and returns parameter adjustments as JSON. It writes its reasons in the language of Home Assistant (regional variants such as en-GB included).
 * **Goal:** as little heat as possible without any area falling below its target. Comfort is a hard limit, not something to trade. Besides the minutes too cold the AI therefore receives:
-  * **Overheating** (`over_kh`): Kelvin hours more than 0.2 K above the target while the circuit runs and up to 4 hours after switch-off (heat the heating delivered in excess). Warmth from the sun alone on a day without heating does not count. The share with sun (`sun_over_kh`, PV from 0.3 kW) shows whether the sun factor is too low.
+  * **Overheating** (`over_kh`): Kelvin hours more than 0.2 K above the target while the circuit runs and up to 4 hours after switch-off (heat the heating delivered in excess). Warmth from the sun alone on a day without heating does not count. The share with sun (`sun_over_kh`, PV from 0.3 kW, or from 10 % of the learned clear sky power) shows whether the sun factor is too low.
   * **Heating effort per demand** (`on_per_kh`): heating minutes per Kelvin hour of difference between target and outdoor temperature, so checks in different weather can be compared.
   * **Average run time** per switch-on.
   * **History of the last 6 checks** with their figures and the changes made. The AI can judge whether a change helped and otherwise undo it. Resetting an area or editing a learned value by hand deletes its history.
 * Adjustable parameters: switch-on and switch-off hysteresis, overshoot factor, lead time factor, sun factor, window delay, recovery time correction, `puffer` and `theta`. Every value is clamped to minimum, maximum and a maximum change per check (all configurable).
-* **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, an area was clearly overheated (more than 0.5 Kelvin hours per day, pro rata), the AI changed something significant, or you change the target or settings. A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
-* **Costs:** token usage times the configured prices. Every call is estimated beforehand; once the monthly budget is reached there are no calls until the month changes.
+* **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, an area was clearly overheated (more than 0.5 Kelvin hours per day, pro rata), the AI changed something significant, or you change settings or a target by at least 0.5 K (smaller steps, e.g. from automations, do not reset the interval). A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
+* **Costs:** token usage times the configured prices (in USD). If another model answers after a server-side fallback, its list price applies. Every call is estimated beforehand (output: twice the mean of this month's answers, at most the maximum output tokens, default 16000 including thinking); once the monthly budget is reached there are no calls until the month changes.
 * **Failures:** on errors, timeouts or invalid answers the control continues with the last learned values. The API key never appears in the log and is redacted in diagnostics.
+* **Rejected API key:** if Anthropic rejects the key (e.g. revoked), Home Assistant asks for a new one under Settings > Devices & services (re-authentication). Until then the local control runs without the AI; an empty field turns the AI off.
+* **Weather service does not answer:** the forecast is awaited for at most 10 seconds; after that the heating day rule decides without a forecast and the control goes on. If the heating day decision fails, it is tried again after 15 minutes (error in the log).
 
 ### Heat meter
 
@@ -77,9 +80,16 @@ Per area (also without heating circuit) from the absolute humidity inside and ou
 3. Download **AI Heating Assistant** and restart Home Assistant.
 4. **Settings > Devices & services > Add integration > AI Heating Assistant**.
 
-Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (optional, without a key only the local control runs).
+Requirements: Home Assistant 2026.10 or newer. For the AI an Anthropic API key (optional, without a key only the local control runs). During setup the AI step only asks for the key and the time of the nightly run; model and monthly budget follow only once a key was entered and accepted.
+
+### Manual installation
+
+1. Copy the folder `custom_components/ai_heating_assistant` of this repository to `config/custom_components/` of Home Assistant.
+2. Restart Home Assistant and add the integration as in step 4 above.
 
 ## Configuration
+
+The entity fields only offer matching entities (e.g. temperature sensors with the temperature device class or the unit °C/°F/K, humidity sensors in %). Entities chosen earlier outside this choice stay valid.
 
 ### Dashboard
 
@@ -94,15 +104,17 @@ The setup itself is still a dialog.
 
 ### Setup (global)
 
+Temperature sensors may report °C, °F or K; without a unit the unit system of Home Assistant applies. Internally everything is calculated in °C, and all temperatures in the settings (targets, frost protection, `theta`) are entered in °C. The thermostats show values in the unit system of Home Assistant.
+
 | Option | Default | Meaning |
 |---|---|---|
-| Outdoor temperature sensor | | e.g. `sensor.outdoor_temperature` |
+| Outdoor temperature sensor | | e.g. `sensor.outdoor_temperature`; optional if a weather entity is chosen (its current temperature is used then) |
 | Outdoor humidity sensor | | optional, for the ventilation recommendation |
 | Weather entity | | optional, forecast for the nightly run and the expected sun |
-| PV power sensor | | optional, sunshine indicator (W or kW) |
+| PV power sensor | | optional, sunshine indicator (W or kW; without a unit W applies, another unit is ignored with a warning) |
 | PV forecast sensor | | optional, only with the PV power sensor: energy of the next hour (Wh or kWh) or power in one hour (W or kW); without it the weather forecast is used |
 | Heat meter | | optional, meter reading of the circuits controlled here (Wh, kWh, MWh, MJ or GJ); seldom and coarse readings are fine, see [Heat meter](#heat-meter) |
-| Heating period | 01.10. to 31.03. | format DD.MM. |
+| Heating period | 01.10. to 31.03. (southern hemisphere: 01.05. to 30.09.) | as day and month in the dialog, as DD.MM. in the panel; the suggestion at setup follows the latitude of Home Assistant |
 | Frost protection | 7 °C | always applies |
 | Vacation entities | | "on" = vacation |
 | Vacation temperature | 18 °C | for all areas |
@@ -111,14 +123,16 @@ The setup itself is still a dialog.
 | Start value `theta` | 16 °C | heating day rule; only during setup, afterwards the learned value is edited |
 | API key, model | Claude Opus 5.5 | changeable, custom model names possible |
 | Nightly run | 03:00 | |
-| Monthly budget | 5 € | |
+| Monthly budget | 5 USD | |
 
 ### Settings
 
+Order of the options menu: general, vacation, emergency rule, ventilation, AI, heating day decision (experts), AI limits (experts). Learning steps and decision phases sit in collapsible sections.
+
 * **General:** sensors, heating period and frost protection, vacation as above.
 * **Emergency rule:** on, 1 K below target (expected after the lead time, at least the switch-on hysteresis), 45 min, windows unchanged for 30 min.
-* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
-* **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in €/million tokens (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
+* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20:00 to 08:00 (times, to the minute).
+* **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in USD per million tokens (Anthropic bills in US dollars; nothing is converted) (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
 * **Heating day decision:** learned `theta` (editable), evaluation thresholds, learning steps, conditions for phase changes.
 
@@ -135,6 +149,7 @@ In the dashboard under **Heating areas** (or under the integration with **Add he
 | Heating circuit switch | e.g. `switch.heating_circuit_1`; empty = ventilation recommendation only |
 | Initial, minimum and maximum target | 21 / 16 / 24 °C |
 | Minimum on and off time | 10 / 10 min (fixed) |
+| Heating type | underfloor (default), radiators or other; the AI judges inertia and learned values accordingly. The control itself learns the behaviour of each room anyway. |
 | Start values window delay, recovery time, dead time, puffer | 5 min, 30 min, 30 min, 0.7 K; only when the area is created |
 | Humidity threshold | 60 % |
 | Reference temperature and humidity | optional, instead of outdoor (room without its own window) |
@@ -143,6 +158,10 @@ In the dashboard under **Heating areas** (or under the integration with **Add he
 Start values (including `theta`) are only set during setup or when an area is created and apply until something has been learned. They cannot be changed afterwards; instead an area shows the values the control currently uses under **Learned values** (window delay, recovery time, dead time, puffer), and the learned `theta` is under **Heating day decision**. A change there replaces the learned or AI-adjusted value, learning continues from there, and the logbook records it.
 
 ## Entities
+
+Entities no longer provided after a change (e.g. "Heat today" after removing the heat meter) are removed from the entity registry at the next load. Fast changing forecast values (`predicted_temperature`, `expected_peak`, `expected_pv_kw`) and large attributes (parameter list, last days, rule, AI summary) are not recorded; values are rounded to the shown precision so that not every minute creates a new state.
+
+On new installations the diagnostic sensors of the learned values (heating and cooling rate, overshoot, dead time, recovery time, outdoor and sun influence) start disabled; the panel shows the values anyway. They can be enabled under Settings > Entities. AI timestamps, AI costs and decision phase are diagnostic entities. A new area device is placed in the Home Assistant area of its temperature sensor.
 
 Global (device "AI Heating Assistant"):
 
@@ -161,6 +180,8 @@ Per heating area (own device):
 All important decisions and every AI adjustment with its reason are written to the **logbook**. The integration does not send notifications.
 
 ## Services
+
+`import_parameters`, `reset_learned`, `decide_heating_day` and `run_ai_check` (the last two may cause AI costs) are for administrators; automations and scripts without a user may still call them.
 
 | Service | Purpose |
 |---|---|
@@ -185,6 +206,58 @@ data:
         params:
           hysteresis_on: 0.2
 ```
+
+## Troubleshooting
+
+* **Status *Sensor error*:** the temperature sensor reports no value, an impossible one or a unit that is no temperature (warning in the log). The circuit stays off; after 15 minutes a repair appears.
+* **Status *Actuator unavailable*:** the switch is `unavailable`. If it does not follow commands, it is asked again with growing pauses; after three attempts a repair appears.
+* **The AI is no longer asked:** budget reached (notice in the dashboard, sensor *AI costs this month* with `budget_reached`) or the API key was rejected (re-authentication under Settings > Devices & services).
+* **Debug log:** choose *Enable debug logging* in the integration, or in `configuration.yaml`:
+
+```yaml
+logger:
+  logs:
+    custom_components.ai_heating_assistant: debug
+    anthropic: debug
+```
+
+## Privacy
+
+Without an API key nothing leaves the house. With a key Anthropic receives: the area names, temperatures, targets and learned values, statistics since the last check, outdoor temperature, PV power, a compact weather forecast, heat meter values and the history of heating day decisions. Entity ids, location and the API key itself are not part of the requests.
+
+## Known limitations
+
+* All temperatures in the settings are entered in °C (sensors and thermostats may use °F).
+* Only on/off switches per heating circuit, no modulating valves.
+* One instance per Home Assistant.
+
+## Automation example
+
+No heating on a bridge day. The choice applies to the day it is set on; set after midnight and before the nightly run, it applies to the new day:
+
+```yaml
+automation:
+  - alias: "No heating on bridge days"
+    triggers:
+      - trigger: time
+        at: "00:30:00"
+    conditions:
+      - condition: state
+        entity_id: calendar.bridge_days
+        state: "on"
+    actions:
+      - action: select.select_option
+        target:
+          entity_id: select.ai_heating_assistant_heating_day_override
+        data:
+          option: off_today
+```
+
+## Disabling and uninstalling
+
+When the integration is disabled or removed, its sidebar page disappears and it switches off every circuit that is on; otherwise a running circuit would keep heating without limit. The same applies to the switch of a deleted heating area and to a switch that was replaced by another one in an area. A reload (e.g. after changing settings) or a restart of Home Assistant leaves the circuits as they are.
+
+Removing the integration also deletes the learned values (`.storage/ai_heating_assistant.<entry_id>`) and the sidebar page. Afterwards remove the folder `custom_components/ai_heating_assistant` (or choose "Remove" in HACS) and restart Home Assistant.
 
 ## Development
 

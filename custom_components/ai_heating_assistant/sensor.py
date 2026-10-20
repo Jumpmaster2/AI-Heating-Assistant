@@ -56,25 +56,28 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="heat_rate",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="K/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=2,
-        value_fn=lambda a: round(a.learned_values.heat_rate_kph, 3),
+        value_fn=lambda a: round(a.learned_values.heat_rate_kph, 2),
         attrs_fn=lambda a: {
-            "heat_effect_kph": round(a.learner.model.a, 4),
+            "heat_effect_kph": round(a.learner.model.a, 3),
             "samples": a.learner.model.n_heat,
         },
     ),
     AreaSensorDescription(
         key="cool_rate",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="K/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=3,
-        value_fn=lambda a: round(a.learned_values.cool_rate_kph, 4),
+        value_fn=lambda a: round(a.learned_values.cool_rate_kph, 3),
         attrs_fn=lambda a: {"samples": a.learner.model.n_cool},
     ),
     AreaSensorDescription(
         key="overshoot",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         device_class=SensorDeviceClass.TEMPERATURE_DELTA,
         native_unit_of_measurement=UnitOfTemperature.KELVIN,
         state_class=SensorStateClass.MEASUREMENT,
@@ -87,6 +90,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="dead_time",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         state_class=SensorStateClass.MEASUREMENT,
@@ -96,6 +100,7 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="recovery_time",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.MINUTES,
         state_class=SensorStateClass.MEASUREMENT,
@@ -108,17 +113,19 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
     ),
     AreaSensorDescription(
         key="outdoor_influence",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="1/h",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=4,
-        value_fn=lambda a: round(a.learner.model.k, 5),
+        value_fn=lambda a: round(a.learner.model.k, 4),
     ),
     AreaSensorDescription(
         key="sun_influence",
+        entity_registry_enabled_default=False,  # the panel reads them directly
         native_unit_of_measurement="K/h/kW",
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=3,
-        value_fn=lambda a: round(a.learner.model.s, 4),
+        value_fn=lambda a: round(a.learner.model.s, 3),
     ),
     AreaSensorDescription(
         key="learning_progress",
@@ -183,6 +190,9 @@ class AreaSensor(AreaEntity, SensorEntity):
     """Sensor of one area."""
 
     entity_description: AreaSensorDescription
+    # Values change with every model update; rounded to what is shown, so the recorder
+    # writes a row only when the shown value changes. Large attributes are not recorded.
+    _unrecorded_attributes = frozenset({"parameters", "heat_effect_kph"})
 
     def __init__(
         self, coordinator: HeatingCoordinator, area_id: str, description: AreaSensorDescription
@@ -208,6 +218,8 @@ class HeatingDayPhaseSensor(GlobalEntity, SensorEntity):
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [p.value for p in Phase]
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _unrecorded_attributes = frozenset({"last_days"})
 
     def __init__(self, coordinator: HeatingCoordinator) -> None:
         super().__init__(coordinator, "decision_phase")
@@ -230,6 +242,8 @@ class AiTimestampSensor(GlobalEntity, SensorEntity):
     """Last or next AI check."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _unrecorded_attributes = frozenset({"summary", "rejected"})
 
     def __init__(self, coordinator: HeatingCoordinator, key: str, state_key: str) -> None:
         super().__init__(coordinator, key)
@@ -257,7 +271,9 @@ class AiCostSensor(GlobalEntity, SensorEntity):
     """AI costs of the current month."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_native_unit_of_measurement = "EUR"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    # Anthropic bills in US dollars; prices and budget are entered in USD as well.
+    _attr_native_unit_of_measurement = "USD"
     _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator: HeatingCoordinator) -> None:
@@ -265,9 +281,7 @@ class AiCostSensor(GlobalEntity, SensorEntity):
 
     @property
     def native_value(self) -> float:
-        budget = self.coordinator.budget
-        budget.roll(dt_util.now().strftime("%Y-%m"))
-        return round(budget.spent, 4)
+        return round(self.coordinator.budget.spent, 4)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

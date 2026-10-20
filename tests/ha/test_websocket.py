@@ -79,7 +79,8 @@ async def test_save_options(hass: HomeAssistant, base_states, hass_ws_client) ->
     assert entry.options["frost_temperature"] == 7.0
 
     for options, error in (
-        ({"outdoor_temperature": ""}, "required:outdoor_temperature"),
+        # no weather entity either (removed above): one of both is needed
+        ({"outdoor_temperature": ""}, "outdoor_required:outdoor_temperature"),
         ({"frost_temperature": 99}, "invalid_value:frost_temperature"),
         ({"weather": "sensor.not_weather"}, "invalid_value:weather"),
         ({"season_start": "31.02."}, "invalid_day_month:season_start"),
@@ -136,6 +137,15 @@ async def test_save_api_key(hass: HomeAssistant, base_states, hass_ws_client) ->
     assert msg["result"]["has_api_key"] is True
     assert entry.data["api_key"] == "good-key"
     assert entry.runtime_data.ai_configured
+
+    # a key saved in the panel ends a reauth flow that asked for one
+    await entry.start_reauth_flow(hass)
+    assert hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    with patch(target):
+        msg = await _send(client, type=f"{DOMAIN}/save_api_key", api_key="other-key")
+        await hass.async_block_till_done(wait_background_tasks=True)
+    assert msg["success"], msg
+    assert not hass.config_entries.flow.async_progress_by_handler(DOMAIN)
 
     msg = await _send(client, type=f"{DOMAIN}/save_api_key", remove=True)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -196,6 +206,12 @@ async def test_areas(hass: HomeAssistant, base_states, hass_ws_client) -> None:
             "reference_incomplete",
         ),
         ("X", {"temperature_sensor": "binary_sensor.x"}, "invalid_value:temperature_sensor"),
+        (" living ROOM", {"temperature_sensor": "sensor.x"}, "name_in_use"),
+        (
+            "X",
+            {"temperature_sensor": "sensor.x", "heater_switch": "input_boolean.heating_circuit_1"},
+            "switch_in_use",
+        ),
     ):
         msg = await _send(client, type=f"{DOMAIN}/save_area", title=title, data=data)
         assert not msg["success"], data
@@ -292,3 +308,23 @@ async def test_learned_values(hass: HomeAssistant, base_states, hass_ws_client) 
         learned={"heat_rate": 1},
     )
     assert msg["error"]["message"] == "unknown_option:heat_rate"
+
+
+async def test_learned_rates_for_the_panel(
+    hass: HomeAssistant, base_states, hass_ws_client
+) -> None:
+    """The learned rates reach the panel although their sensors are off by default."""
+    from homeassistant.helpers import entity_registry as er
+
+    entry = await _setup(hass)
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "ai_heating_assistant/learned"})
+    msg = await client.receive_json()
+    assert msg["success"], msg
+    living = next(s.subentry_id for s in entry.subentries.values() if s.title == "Living room")
+    stats = msg["result"][living]
+    assert stats["dead_time"]["unit"] == "min" and stats["dead_time"]["value"] == 30.0
+    assert len(msg["result"]) == 1  # the ventilation only area has no circuit
+    registry = er.async_get(hass)
+    assert registry.async_get("sensor.living_room_dead_time").disabled_by is not None
+    assert registry.async_get("sensor.living_room_status").disabled_by is None

@@ -2,16 +2,36 @@
 
 from __future__ import annotations
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
-from .const import CONF_PUFFER_DOWN, CONF_THETA_DOWN, DOMAIN, PLATFORMS, STORAGE_VERSION
-from .coordinator import AiHeatingConfigEntry, HeatingCoordinator
+from .const import (
+    CONF_HEAT_METER,
+    CONF_MAX_OUTPUT_TOKENS,
+    CONF_NIGHT_END,
+    CONF_NIGHT_START,
+    CONF_PUFFER_DOWN,
+    CONF_SWITCH,
+    CONF_THETA_DOWN,
+    DOMAIN,
+    LOGGER,
+    PLATFORMS,
+    STORAGE_VERSION,
+    SUBENTRY_AREA,
+)
+from .coordinator import (
+    AiHeatingConfigEntry,
+    HeatingCoordinator,
+    async_delete_issues,
+    async_turn_off_switches,
+)
 from .entity import global_device_info
 from .panel import async_register_panel, async_unregister_panel
+from .sensor import AREA_SENSORS
 from .services import async_setup_services
 from .websocket import async_register_websocket
 
@@ -39,6 +59,20 @@ async def async_migrate_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) 
             if options.get(key) == old:
                 options[key] = new
         hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    if entry.minor_version < 3:
+        # Thinking counts as output: 4000 tokens could cut answers off (only a value
+        # still at the old default is changed).
+        options = {**entry.options}
+        if options.get(CONF_MAX_OUTPUT_TOKENS) == 4000:
+            options[CONF_MAX_OUTPUT_TOKENS] = 16000
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
+    if entry.minor_version < 4:
+        # The night of the ventilation advice is set as times, no longer as hours.
+        options = {**entry.options}
+        for key in (CONF_NIGHT_START, CONF_NIGHT_END):
+            if isinstance(options.get(key), int | float):
+                options[key] = f"{int(options[key]) % 24:02d}:00:00"
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=4)
     return True
 
 
@@ -53,9 +87,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) ->
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    _async_remove_stale_entities(hass, entry)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await async_register_panel(hass, entry.entry_id)
     return True
+
+
+@callback
+def _async_remove_stale_entities(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
+    """Remove entities the configuration no longer provides (heat meter removed, circuit
+    removed from an area); they would stay as "unavailable". Judged from the
+    configuration, not from what was set up: an entity that failed to load keeps its
+    registry entry and the user's settings."""
+    coordinator = entry.runtime_data
+    stale = set()
+    if not coordinator.opt(CONF_HEAT_METER):
+        stale.add(f"{entry.entry_id}_heat_today")
+    for area in coordinator.areas.values():
+        if not area.has_circuit:
+            stale.add(f"{area.area_id}_climate")
+            stale.update(f"{area.area_id}_{d.key}" for d in AREA_SENSORS if d.circuit_only)
+    registry = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if reg_entry.platform == DOMAIN and reg_entry.unique_id in stale:
+            LOGGER.info("Removing %s: no longer provided", reg_entry.entity_id)
+            registry.async_remove(reg_entry.entity_id)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
@@ -64,14 +120,37 @@ async def _async_update_listener(hass: HomeAssistant, entry: AiHeatingConfigEntr
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> bool:
-    """Unload a config entry."""
+    """Unload a config entry. The coordinator shuts itself down afterwards (it registers
+    its shutdown with the entry)."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    if unloaded:
+    if unloaded and entry.disabled_by is not None:
+        # Disabled (not a reload): stop the control first, so no tick switches a
+        # circuit on again, then nothing controls the circuits any more.
         await entry.runtime_data.async_shutdown()
+        await _async_switch_off_circuits(hass, entry, "disabled")
+        async_delete_issues(hass)
+        async_unregister_panel(hass)  # nothing to show while disabled
     return unloaded
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -> None:
-    """Delete stored learning data and the panel when the integration is removed."""
+    """Switch off the circuits and delete stored learning data and the panel when the
+    integration is removed."""
+    await _async_switch_off_circuits(hass, entry, "removed")
+    async_delete_issues(hass)
     async_unregister_panel(hass)
     await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()
+
+
+async def _async_switch_off_circuits(
+    hass: HomeAssistant, entry: AiHeatingConfigEntry, reason: str
+) -> None:
+    """Switch off every circuit of the entry that is on (a circuit left on would heat
+    without limit once nothing controls it)."""
+    switches = [
+        sub.data[CONF_SWITCH]
+        for sub in entry.subentries.values()
+        if sub.subentry_type == SUBENTRY_AREA and sub.data.get(CONF_SWITCH)
+    ]
+    for entity_id in await async_turn_off_switches(hass, switches):
+        LOGGER.info("Switched off %s: %s was %s", entity_id, entry.title, reason)

@@ -4,7 +4,13 @@ from datetime import date
 
 import pytest
 from logic.physics import absolute_humidity, in_season, parse_day_month
-from logic.ventilation import VentilationInput, VentilationSettings, VentilationState, recommend
+from logic.ventilation import (
+    VentilationInput,
+    VentilationSettings,
+    VentilationState,
+    is_blocking,
+    recommend,
+)
 
 
 def test_absolute_humidity_reference_values() -> None:
@@ -167,3 +173,27 @@ def test_no_cooling_if_outside_air_makes_room_too_humid() -> None:
         VentilationSettings(rh_threshold=70.0),
     )
     assert relaxed.cooling_useful
+
+
+@pytest.mark.parametrize(
+    ("domain", "state", "expected"),
+    [
+        ("cover", "open", False),  # sun protection up: ventilating is fine
+        ("cover", "opening", False),
+        ("cover", "closed", True),
+        ("cover", "closing", True),
+        ("climate", "off", False),
+        ("climate", "cool", True),
+        ("climate", "heat_cool", True),
+        ("water_heater", "eco", True),
+        ("switch", "on", True),
+        ("binary_sensor", "off", False),
+        ("fan", "on", True),
+        ("media_player", "playing", True),  # other domains: active unless off or idle
+        ("media_player", "idle", False),
+        ("cover", "unavailable", False),
+        ("climate", "unknown", False),
+    ],
+)
+def test_block_entity_per_domain(domain: str, state: str, expected: bool) -> None:
+    assert is_blocking(domain, state) is expected

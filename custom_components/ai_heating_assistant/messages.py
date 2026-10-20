@@ -61,8 +61,8 @@ _TEXTS: dict[str, dict[str, str]] = {
         "en": "AI error ({kind}): {error}. Control continues with the last values.",
     },
     "ai_budget": {
-        "de": "KI-Monatsbudget erreicht ({spent} von {budget} €). Keine KI-Abfragen bis Monatsende.",
-        "en": "AI monthly budget reached ({spent} of {budget} €). No AI calls until the end of the month.",
+        "de": "KI-Monatsbudget erreicht ({spent} von {budget} USD). Keine KI-Abfragen bis Monatsende.",
+        "en": "AI monthly budget reached ({spent} of {budget} USD). No AI calls until the end of the month.",
     },
     "import": {"de": "Parameter importiert: {areas}.", "en": "Parameters imported: {areas}."},
     "reset": {"de": "Gelernte Werte zurückgesetzt.", "en": "Learned values reset."},
@@ -74,11 +74,82 @@ _TEXTS: dict[str, dict[str, str]] = {
         "de": "Gelernter Wert {name} von Hand geändert: {old} → {new} {unit}.",
         "en": "Learned value {name} changed by hand: {old} → {new} {unit}.",
     },
+    "sensor_unavailable": {
+        "de": "Temperatursensor {entity_id} liefert seit 15 Minuten keinen Wert; der Heizkreis bleibt aus, auch der Frostschutz greift nicht.",
+        "en": "Temperature sensor {entity_id} has had no value for 15 minutes; the heating circuit stays off and frost protection cannot work either.",
+    },
+    "actuator_unavailable": {
+        "de": "Schalter {entity_id} ist seit 15 Minuten nicht erreichbar; der Heizkreis kann nicht geschaltet werden.",
+        "en": "Switch {entity_id} has been unavailable for 15 minutes; the heating circuit cannot be switched.",
+    },
+    "actuator_not_responding": {
+        "de": "Schalter {entity_id} folgt den Schaltbefehlen nicht; neue Versuche mit wachsendem Abstand (bis 15 Minuten).",
+        "en": "Switch {entity_id} does not follow the switching commands; it is asked again with growing pauses (up to 15 minutes).",
+    },
+    "outdoor_unavailable": {
+        "de": "Außentemperatursensor {entity_id} liefert seit 15 Minuten keinen Wert; Vorhersage und Lernen sind eingeschränkt.",
+        "en": "Outdoor temperature sensor {entity_id} has had no value for 15 minutes; prediction and learning are limited.",
+    },
+    "limit_clamp": {
+        "de": "{parameter}: {old} -> {new}, weil die KI-Grenzen geändert wurden.",
+        "en": "{parameter}: {old} -> {new} because the AI limits were changed.",
+    },
+    "circuit_released": {
+        "de": "Schalter {entity_id} gehört zu keinem Heizbereich mehr und wurde ausgeschaltet.",
+        "en": "Switch {entity_id} no longer belongs to a heating area and was switched off.",
+    },
     "dead_time": {"de": "Totzeit", "en": "dead time"},
     "recovery": {"de": "Erholungszeit", "en": "recovery time"},
     "window_delay_min": {"de": "Fensterverzögerung", "en": "window delay"},
     "puffer": {"de": "Puffer", "en": "puffer"},
 }
+
+
+# Values shown in logbook texts instead of internal keys.
+_VALUES: dict[str, dict[str, dict[str, str]]] = {
+    "source": {
+        "ai": {"de": "KI", "en": "AI"},
+        "rule": {"de": "Regel", "en": "rule"},
+        "rule_fallback": {"de": "Regel ohne KI", "en": "rule without AI"},
+        "agreement": {"de": "Regel und KI einig", "en": "rule and AI agree"},
+        "vacation_rule": {"de": "Regel im Urlaub", "en": "rule on vacation"},
+        "season": {"de": "außerhalb der Heizperiode", "en": "outside the heating period"},
+        "override": {"de": "von Hand", "en": "set by hand"},
+    },
+    "phase": {
+        "ai_leads": {"de": "KI führt", "en": "AI leads"},
+        "shared": {"de": "gemeinsam", "en": "shared"},
+        "rule_leads": {"de": "Regel führt", "en": "rule leads"},
+    },
+    "need": {
+        "yes": {"de": "ja", "en": "yes"},
+        "no": {"de": "nein", "en": "no"},
+        "unclear": {"de": "unklar", "en": "unclear"},
+    },
+    "error": {
+        "A": {"de": "zu kalt ohne Heizen", "en": "too cold without heating"},
+        "B": {"de": "unnötig geheizt", "en": "heated without need"},
+        "": {"de": "keiner", "en": "none"},
+    },
+    "parameter": {
+        "hysteresis_on": {"de": "Einschalt-Hysterese", "en": "switch-on hysteresis"},
+        "hysteresis_off": {"de": "Ausschalt-Hysterese", "en": "switch-off hysteresis"},
+        "overshoot_factor": {"de": "Überschwing-Faktor", "en": "overshoot factor"},
+        "lead_factor": {"de": "Vorlauf-Faktor", "en": "lead factor"},
+        "sun_factor": {"de": "Sonnenfaktor", "en": "sun factor"},
+        "window_delay_min": {"de": "Fensterverzögerung", "en": "window delay"},
+        "recovery_bias_min": {"de": "Erholungszeit-Zuschlag", "en": "recovery time offset"},
+        "puffer": {"de": "Reserve über Sollwert", "en": "margin above target"},
+        "theta": {"de": "Heizgrenze", "en": "heating threshold"},
+    },
+}
+
+
+def label_of(language: str, group: str, key: Any) -> str:
+    """Readable name of an internal value (source, phase, need, error, parameter)."""
+    lang = "de" if language.lower().startswith("de") else "en"
+    entry = _VALUES.get(group, {}).get(str(key or ""))
+    return entry[lang] if entry else str(key)
 
 
 def text(language: str, key: str, **kwargs: Any) -> str:

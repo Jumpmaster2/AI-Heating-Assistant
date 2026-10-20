@@ -17,7 +17,7 @@
       "ventilation": { "default": "mdi:window-open-variant" },
       "decision_phase": { "default": "mdi:account-switch-outline" },
       "ai_last_check": { "default": "mdi:robot-outline" },
-      "ai_next_check": { "default": "mdi:robot-confused-outline" },
+      "ai_next_check": { "default": "mdi:clock-outline" },
       "ai_cost_month": { "default": "mdi:cash" },
       "heat_today": { "default": "mdi:heat-wave" }
     },

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import cache
 from types import MappingProxyType
 from typing import Any
 
-import voluptuous as vol
+import probatio as vol
 from homeassistant.components import websocket_api
-from homeassistant.config_entries import ConfigEntry, ConfigEntryState, ConfigSubentry
+from homeassistant.config_entries import (
+    SOURCE_REAUTH,
+    ConfigEntry,
+    ConfigEntryState,
+    ConfigSubentry,
+)
 from homeassistant.const import CONF_API_KEY
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import section
@@ -17,19 +23,20 @@ from homeassistant.helpers.selector import EntitySelector, Selector, TimeSelecto
 
 from .config_flow import (
     START_KEYS,
-    _advanced_schema,
-    _ai_schema,
-    _area_schema,
-    _check_api_key,
-    _coordinator,
-    _general_schema,
-    _learned_fields,
-    _rules_schema,
-    _vacation_schema,
-    _validate_area,
-    _ventilation_schema,
-    _with_price_suggestions,
+    ai_schema,
+    area_schema,
+    check_api_key,
+    decision_schema_expert,
+    general_schema,
     keep_start_values,
+    learned_fields,
+    other_areas,
+    rules_schema,
+    running_coordinator,
+    vacation_schema,
+    validate_area,
+    ventilation_schema,
+    with_price_suggestions,
 )
 from .const import (
     AREA_DEFAULTS,
@@ -42,6 +49,7 @@ from .const import (
     CONF_SEASON_END,
     CONF_SEASON_START,
     CONF_TEMP_SENSOR,
+    CONF_WEATHER,
     DEFAULTS,
     DOMAIN,
     LEARNED_THETA,
@@ -50,6 +58,7 @@ from .const import (
 )
 from .logic.ai_schema import PARAMS, default_limits
 from .logic.physics import parse_day_month
+from .sensor import AREA_SENSORS
 
 DATA_WS = f"{DOMAIN}_ws_registered"
 
@@ -78,7 +87,7 @@ AREA_ENTITY_KEYS = {
     "outdoor_influence": "sensor",
     "sun_influence": "sensor",
 }
-REQUIRED_OPTIONS = (CONF_OUTDOOR_TEMP,)
+REQUIRED_OPTIONS: tuple[str, ...] = ()
 
 
 @callback
@@ -92,6 +101,7 @@ def async_register_websocket(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_save_area)
     websocket_api.async_register_command(hass, ws_delete_area)
     websocket_api.async_register_command(hass, ws_save_theta)
+    websocket_api.async_register_command(hass, ws_learned)
 
 
 def _entry(hass: HomeAssistant) -> ConfigEntry | None:
@@ -119,12 +129,12 @@ def option_fields() -> dict[str, Selector]:
     values: dict[str, Any] = dict(DEFAULTS)
     fields: dict[str, Selector] = {}
     for schema in (
-        _general_schema(values),
-        _vacation_schema(values),
-        _rules_schema(values),
-        _ventilation_schema(values),
-        _ai_schema(values),
-        _advanced_schema(values),
+        general_schema(values, season_text=True),
+        vacation_schema(values),
+        rules_schema(values),
+        ventilation_schema(values),
+        ai_schema(values),
+        decision_schema_expert(values),
     ):
         fields.update(_fields(schema))
     return fields
@@ -132,7 +142,7 @@ def option_fields() -> dict[str, Selector]:
 
 @cache
 def area_fields() -> dict[str, Selector]:
-    return _fields(_area_schema({}))
+    return _fields(area_schema({}))
 
 
 def _spec(selector: Selector) -> dict[str, Any]:
@@ -216,10 +226,12 @@ def apply_options(current: dict[str, Any], changes: dict[str, Any]) -> dict[str,
             updates[key] = DEFAULTS[key]
         else:
             removed.add(key)
-    updates = _with_price_suggestions({**DEFAULTS, **current}, updates)
+    updates = with_price_suggestions({**DEFAULTS, **current}, updates)
     options = {k: v for k, v in current.items() if k not in removed}
     options.update(updates)
     merged = {**DEFAULTS, **options}
+    if not merged.get(CONF_OUTDOOR_TEMP) and not merged.get(CONF_WEATHER):
+        raise PanelError("outdoor_required", CONF_OUTDOOR_TEMP)
     for key in (CONF_SEASON_START, CONF_SEASON_END):
         try:
             parse_day_month(str(merged[key]))
@@ -230,8 +242,11 @@ def apply_options(current: dict[str, Any], changes: dict[str, Any]) -> dict[str,
     return options
 
 
-def area_data(title: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Validated data of a heating area; raises PanelError."""
+def area_data(
+    title: str, data: dict[str, Any], others: Sequence[ConfigSubentry] = ()
+) -> dict[str, Any]:
+    """Validated data of a heating area; raises PanelError. ``others`` are the other
+    areas of the entry (names and switches must differ)."""
     fields = area_fields()
     title = title.strip()
     values: dict[str, Any] = {}
@@ -248,7 +263,7 @@ def area_data(title: str, data: dict[str, Any]) -> dict[str, Any]:
     values = {**AREA_DEFAULTS, CONF_AREA_NAME: title, **values}
     if not values.get(CONF_TEMP_SENSOR):
         raise PanelError("required", CONF_TEMP_SENSOR)
-    errors = _validate_area(values)
+    errors = validate_area(values, others)
     if error := errors.get(CONF_AREA_NAME):
         raise PanelError(error)
     if error := errors.get("base"):
@@ -264,7 +279,7 @@ def _learned(coordinator: Any, values: Any) -> dict[str, float]:
     for key in values:
         if key not in ranges:
             raise PanelError("unknown_option", key)
-    fields = _learned_fields(dict.fromkeys(values, 0.0), ranges)
+    fields = learned_fields(dict.fromkeys(values, 0.0), ranges)
     result = {}
     for marker, selector in fields.items():
         key = str(marker)
@@ -277,7 +292,7 @@ def _learned(coordinator: Any, values: Any) -> dict[str, float]:
 
 def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     registry = er.async_get(hass)
-    coordinator = _coordinator(entry)
+    coordinator = running_coordinator(entry)
     entities: dict[str, str] = {}
     for key, domain in ENTITY_KEYS.items():
         if entity_id := registry.async_get_entity_id(domain, DOMAIN, f"{entry.entry_id}_{key}"):
@@ -308,7 +323,7 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         keys = dict.fromkeys((LEARNED_THETA, *START_KEYS), 0.0)
         learned_specs = {
             str(k): _spec(sel)
-            for k, sel in _learned_fields(keys, coordinator.learned_ranges()).items()
+            for k, sel in learned_fields(keys, coordinator.learned_ranges()).items()
         }
     return {
         "entry_id": entry.entry_id,
@@ -328,6 +343,39 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
 
 def _error(connection: websocket_api.ActiveConnection, msg_id: int, err: Exception) -> None:
     connection.send_error(msg_id, "invalid", str(err))
+
+
+# learned rates of the areas, shown in the panel (their sensors are off by default)
+LEARNED_STATS = (
+    "heat_rate",
+    "cool_rate",
+    "overshoot",
+    "dead_time",
+    "recovery_time",
+    "outdoor_influence",
+    "sun_influence",
+)
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/learned"})
+@websocket_api.require_admin
+@callback
+def ws_learned(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    entry = _entry(hass)
+    coordinator = running_coordinator(entry) if entry else None
+    if coordinator is None:
+        connection.send_error(msg["id"], "not_found", "AI Heating Assistant is not running")
+        return
+    descriptions = {d.key: d for d in AREA_SENSORS if d.key in LEARNED_STATS}
+    result = {
+        area.area_id: {
+            key: {"value": d.value_fn(area), "unit": d.native_unit_of_measurement}
+            for key, d in descriptions.items()
+        }
+        for area in coordinator.areas.values()
+        if area.has_circuit
+    }
+    connection.send_result(msg["id"], result)
 
 
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/config"})
@@ -385,10 +433,13 @@ async def ws_save_api_key(
         return
     if api_key:
         model = str(entry.options.get(CONF_AI_MODEL, DEFAULTS[CONF_AI_MODEL]))
-        if error := await _check_api_key(hass, api_key, model):
+        if error := await check_api_key(hass, api_key, model):
             connection.send_error(msg["id"], "invalid", error)
             return
     hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_API_KEY: api_key})
+    # a reauth flow started for the old key has nothing left to do
+    for flow in list(entry.async_get_active_flows(hass, {SOURCE_REAUTH})):
+        hass.config_entries.flow.async_abort(flow["flow_id"])
     connection.send_result(msg["id"], config_payload(hass, entry))
 
 
@@ -415,9 +466,9 @@ def ws_save_area(
     if sub_id and (subentry is None or subentry.subentry_type != SUBENTRY_AREA):
         connection.send_error(msg["id"], "not_found", "area not found")
         return
-    coordinator = _coordinator(entry)
+    coordinator = running_coordinator(entry)
     try:
-        data = area_data(msg["title"], msg["data"])
+        data = area_data(msg["title"], msg["data"], other_areas(entry, sub_id))
         learned = (
             _learned(coordinator, msg["learned"])
             if subentry is not None and coordinator is not None and "learned" in msg
@@ -455,7 +506,7 @@ def ws_save_theta(
 ) -> None:
     """Change the learned theta (its start value is only set up once)."""
     entry = _entry(hass)
-    coordinator = _coordinator(entry) if entry else None
+    coordinator = running_coordinator(entry) if entry else None
     if entry is None or coordinator is None:
         connection.send_error(msg["id"], "not_found", "AI Heating Assistant is not running")
         return

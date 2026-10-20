@@ -6,7 +6,7 @@ import pytest
 from logic.ai_policy import (
     Budget,
     Prices,
-    cost_eur,
+    cost_usd,
     estimate_cost,
     next_interval_hours,
     overheat_issue,
@@ -28,11 +28,23 @@ PRICES = Prices(input=4.0, output=20.0, cache_write=5.0, cache_read=0.2)
 
 def test_cost_from_usage() -> None:
     usage = {"input_tokens": 1500, "output_tokens": 800, "cache_read_input_tokens": None}
-    assert cost_eur(usage, PRICES) == pytest.approx((1500 * 4 + 800 * 20) / 1e6)
+    assert cost_usd(usage, PRICES) == pytest.approx((1500 * 4 + 800 * 20) / 1e6)
 
 
 def test_estimate_is_upper_bound() -> None:
     assert estimate_cost(3500, 2000, PRICES) == pytest.approx((1000 * 4 + 2000 * 20) / 1e6)
+
+
+def test_estimate_uses_measured_output() -> None:
+    # twice the mean output, at least 1000 tokens, at most the maximum
+    assert estimate_cost(3500, 16000, PRICES, 800) == pytest.approx((1000 * 4 + 1600 * 20) / 1e6)
+    assert estimate_cost(3500, 16000, PRICES, 100) == pytest.approx((1000 * 4 + 1000 * 20) / 1e6)
+    assert estimate_cost(3500, 16000, PRICES, 9000) == pytest.approx((1000 * 4 + 16000 * 20) / 1e6)
+    budget = Budget()
+    assert budget.avg_output is None
+    budget.add(0.1, {"input_tokens": 10, "output_tokens": 300})
+    budget.add(0.1, {"input_tokens": 10, "output_tokens": 500})
+    assert budget.avg_output == 400
 
 
 def test_budget_blocks_and_rolls_over() -> None:
@@ -136,3 +148,30 @@ def test_prompts_are_compact_json() -> None:
     assert "over_kh" in system and "on_per_kh" in system and "history" in system
     assert "hard limit" in system
     assert "over_kh" in nightly_messages({}, "en")[0]
+
+
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [
+        ("de", "in German."),
+        ("de-CH", "in German."),
+        ("en-GB", "in English."),
+        ("fr", "in the language with the code 'fr'."),
+    ],
+)
+def test_prompt_language_follows_home_assistant(language: str, expected: str) -> None:
+    system, _ = nightly_messages({}, language)
+    assert system.endswith(expected)
+
+
+def test_value_outside_narrowed_limits_ends_inside() -> None:
+    """Limits narrowed below the current value: the step limit must not keep it outside."""
+    limits = default_limits()
+    limits["hysteresis_on"] = {"min": 0.1, "max": 0.25, "step": 0.05}
+    current = {"a1": {**CURRENT["a1"], "hysteresis_on": 0.5}, GLOBAL: CURRENT[GLOBAL]}
+    raw = {
+        "adjustments": [{"area": "a1", "parameter": "hysteresis_on", "value": 0.45, "reason": ""}],
+        "summary": "",
+        "confidence": 1,
+    }
+    assert validate_check(raw, current, limits).applied[0].new == 0.25
