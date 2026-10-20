@@ -1067,3 +1067,19 @@ async def test_forecast_trust_scales_the_expected_sun(
         assert await hass.config_entries.async_remove(entry.entry_id)
     assert expected[100] > 0 and expected[0] == 0
     assert expected[50] == pytest.approx(expected[100] / 2)
+
+
+async def test_pv_thresholds_follow_the_size_of_the_plant(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from custom_components.ai_heating_assistant.logic.sun import SunScale
+
+    freezer.move_to(IN_SEASON)
+    entry = make_entry()
+    await _setup(hass, entry)
+    coordinator = entry.runtime_data
+    assert coordinator._pv_threshold(0.3, 0.1, 0.05) == 0.3  # nothing learned: absolute
+    coordinator.sun_scale = SunScale(10.0)  # large plant: 10 kW under a clear sky
+    assert coordinator._pv_threshold(0.3, 0.1, 0.05) == pytest.approx(1.0)
+    coordinator.sun_scale = SunScale(0.2)  # balcony plant
+    assert coordinator._pv_threshold(0.3, 0.1, 0.05) == 0.05

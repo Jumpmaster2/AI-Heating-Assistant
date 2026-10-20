@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.12.5. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.12.6. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -47,7 +47,7 @@ On a no-heating day all circuits stay off except frost protection and the option
 
 * Only on heating days within the heating period. It receives a compact summary per area (actual, target, learned values, statistics since the last check) and returns parameter adjustments as JSON. It writes its reasons in the language of Home Assistant (regional variants such as en-GB included).
 * **Goal:** as little heat as possible without any area falling below its target. Comfort is a hard limit, not something to trade. Besides the minutes too cold the AI therefore receives:
-  * **Overheating** (`over_kh`): Kelvin hours more than 0.2 K above the target while the circuit runs and up to 4 hours after switch-off (heat the heating delivered in excess). Warmth from the sun alone on a day without heating does not count. The share with sun (`sun_over_kh`, PV from 0.3 kW) shows whether the sun factor is too low.
+  * **Overheating** (`over_kh`): Kelvin hours more than 0.2 K above the target while the circuit runs and up to 4 hours after switch-off (heat the heating delivered in excess). Warmth from the sun alone on a day without heating does not count. The share with sun (`sun_over_kh`, PV from 0.3 kW, or from 10 % of the learned clear sky power) shows whether the sun factor is too low.
   * **Heating effort per demand** (`on_per_kh`): heating minutes per Kelvin hour of difference between target and outdoor temperature, so checks in different weather can be compared.
   * **Average run time** per switch-on.
   * **History of the last 6 checks** with their figures and the changes made. The AI can judge whether a change helped and otherwise undo it. Resetting an area or editing a learned value by hand deletes its history.

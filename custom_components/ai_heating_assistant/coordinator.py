@@ -194,6 +194,11 @@ WEATHER_PV_REFRESH_S = 1800  # s between hourly forecast requests for the expect
 VIRTUAL_MIN_COOL_UPDATES = 24  # model updates without heating before the virtual room is trusted
 TWILIGHT_INDEX = 0.05  # clear sky index (about 5 degrees elevation) below which PV counts as 0
 PV_NEGLIGIBLE_KW = 0.05  # expected PV power below which a missing PV value counts as 0
+# Once the clear sky PV power of the plant is learned, the thresholds above are taken
+# relative to it, so they fit small and large plants alike.
+SUN_OVERHEAT_SHARE = 0.1
+PV_NEGLIGIBLE_SHARE = 0.02
+MIN_SUN_OVERHEAT_KW = 0.05
 PV_MISSING_WARN_MIN = 60.0  # daytime minutes without a PV value before a warning
 OUTAGE_ISSUE_S = 15 * 60  # s a sensor or switch may be missing before a repair issue
 CMD_RETRY_MIN = (1, 2, 4, 8, 15)  # min before a switch command without effect is repeated
@@ -1142,12 +1147,21 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         """Share of the expected sun that is relied on (forecasts are uncertain)."""
         return float(self.opt(CONF_FORECAST_TRUST)) / 100
 
+    def _pv_threshold(self, absolute_kw: float, share: float, minimum: float = 0.0) -> float:
+        """A PV power threshold: a share of the learned clear sky power, else absolute."""
+        scale = self.sun_scale.value
+        if scale is None or scale <= 0:
+            return absolute_kw
+        return max(minimum, share * scale)
+
     def _pv_negligible(self, ts: float) -> bool:
         """A missing PV value may be read as zero: the sun is low or little is expected."""
         if self._sun_index(ts) < TWILIGHT_INDEX:
             return True
         expected = self._pv_estimate(ts)
-        return expected is not None and expected < PV_NEGLIGIBLE_KW
+        return expected is not None and expected < self._pv_threshold(
+            PV_NEGLIGIBLE_KW, PV_NEGLIGIBLE_SHARE
+        )
 
     def _pv_missing(self, minutes: float, ts: float) -> None:
         """Warn once when the PV sensor has had no value for a while by day."""
@@ -1382,7 +1396,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 over = excess * minutes / 60
                 day.over_kh += over
                 check["over_kh"] = check.get("over_kh", 0.0) + over
-                if self.pv_assumed >= SUN_OVERHEAT_KW:
+                if self.pv_assumed >= self._pv_threshold(
+                    SUN_OVERHEAT_KW, SUN_OVERHEAT_SHARE, MIN_SUN_OVERHEAT_KW
+                ):
                     check["sun_over_kh"] = check.get("sun_over_kh", 0.0) + over
             if self.outdoor_temp is not None and target > self.outdoor_temp:
                 check["deg_h"] = (
