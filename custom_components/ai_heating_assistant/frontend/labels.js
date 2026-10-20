@@ -120,27 +120,27 @@ export const LABELS = {
    ],
    "monthly_budget": [
     "Monatsbudget",
-    "Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel)."
+    "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel)."
    ],
    "price_input": [
     "Preis Eingabe-Tokens",
-    "Pro Million Tokens."
+    "US-Dollar pro Million Tokens, wie Anthropic abrechnet."
    ],
    "price_output": [
     "Preis Ausgabe-Tokens",
-    "Pro Million Tokens (Denken zählt als Ausgabe)."
+    "US-Dollar pro Million Tokens, wie Anthropic abrechnet (Denken zählt als Ausgabe)."
    ],
    "price_cache_write": [
     "Preis Cache schreiben",
-    "Pro Million Tokens."
+    "US-Dollar pro Million Tokens, wie Anthropic abrechnet."
    ],
    "price_cache_read": [
     "Preis Cache lesen",
-    "Pro Million Tokens."
+    "US-Dollar pro Million Tokens, wie Anthropic abrechnet."
    ],
    "max_output_tokens": [
     "Maximale Ausgabe-Tokens",
-    "Obergrenze je Antwort, auch für die Kostenschätzung vor einer Abfrage."
+    "Obergrenze je Antwort, Denken eingeschlossen (zu niedrig schneidet Antworten ab; sie sind bezahlt, werden aber verworfen). Auch Obergrenze der Kostenschätzung vor einer Abfrage."
    ],
    "theta": [
     "theta (gelernt)",
@@ -509,27 +509,27 @@ export const LABELS = {
    ],
    "monthly_budget": [
     "Monthly budget",
-    "No AI calls once the costs of the month reach this value (until the month changes)."
+    "In US dollars, as Anthropic bills. No AI calls once the costs of the month reach this value (until the month changes)."
    ],
    "price_input": [
     "Price input tokens",
-    "Per million tokens."
+    "US dollars per million tokens, as Anthropic bills."
    ],
    "price_output": [
     "Price output tokens",
-    "Per million tokens (thinking counts as output)."
+    "US dollars per million tokens, as Anthropic bills (thinking counts as output)."
    ],
    "price_cache_write": [
     "Price cache write",
-    "Per million tokens."
+    "US dollars per million tokens, as Anthropic bills."
    ],
    "price_cache_read": [
     "Price cache read",
-    "Per million tokens."
+    "US dollars per million tokens, as Anthropic bills."
    ],
    "max_output_tokens": [
     "Maximum output tokens",
-    "Upper limit per answer, also used for the cost estimate before a call."
+    "Upper limit per answer, thinking included (too low cuts answers off, they are paid but discarded). Also the upper bound of the cost estimate before a call."
    ],
    "theta": [
     "theta (learned)",

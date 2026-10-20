@@ -257,7 +257,8 @@ class AiCostSensor(GlobalEntity, SensorEntity):
     """AI costs of the current month."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_native_unit_of_measurement = "EUR"
+    # Anthropic bills in US dollars; prices and budget are entered in USD as well.
+    _attr_native_unit_of_measurement = "USD"
     _attr_suggested_display_precision = 2
 
     def __init__(self, coordinator: HeatingCoordinator) -> None:

@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 0.11.8. Please keep an eye on the logbook during the first weeks.
+> Status: version 0.11.9. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -52,8 +52,8 @@ On a no-heating day all circuits stay off except frost protection and the option
   * **Average run time** per switch-on.
   * **History of the last 6 checks** with their figures and the changes made. The AI can judge whether a change helped and otherwise undo it. Resetting an area or editing a learned value by hand deletes its history.
 * Adjustable parameters: switch-on and switch-off hysteresis, overshoot factor, lead time factor, sun factor, window delay, recovery time correction, `puffer` and `theta`. Every value is clamped to minimum, maximum and a maximum change per check (all configurable).
-* **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, an area was clearly overheated (more than 0.5 Kelvin hours per day, pro rata), the AI changed something significant, or you change the target or settings. A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
-* **Costs:** token usage times the configured prices. Every call is estimated beforehand; once the monthly budget is reached there are no calls until the month changes.
+* **Asking less often:** the check interval doubles after every check without relevant change and without comfort problems (up to the maximum interval). It returns to the base interval if it was too cold, an area was clearly overheated (more than 0.5 Kelvin hours per day, pro rata), the AI changed something significant, or you change settings or a target by at least 0.5 K (smaller steps, e.g. from automations, do not reset the interval). A check already planned survives the nightly run; after a no-heating day the next check follows after the base interval, and if an area was too cold since the last check, the next check is brought forward.
+* **Costs:** token usage times the configured prices (in USD). If another model answers after a server-side fallback, its list price applies. Every call is estimated beforehand (output: twice the mean of this month's answers, at most the maximum output tokens, default 16000 including thinking); once the monthly budget is reached there are no calls until the month changes.
 * **Failures:** on errors, timeouts or invalid answers the control continues with the last learned values. The API key never appears in the log and is redacted in diagnostics.
 * **Rejected API key:** if Anthropic rejects the key (e.g. revoked), Home Assistant asks for a new one under Settings > Devices & services (re-authentication). Until then the local control runs without the AI; an empty field turns the AI off.
 * **Weather service does not answer:** the forecast is awaited for at most 10 seconds; after that the heating day rule decides without a forecast and the control goes on. If the heating day decision fails, it is tried again after 15 minutes (error in the log).
@@ -116,14 +116,14 @@ Temperature sensors may report °C, °F or K; without a unit the unit system of 
 | Start value `theta` | 16 °C | heating day rule; only during setup, afterwards the learned value is edited |
 | API key, model | Claude Opus 5.5 | changeable, custom model names possible |
 | Nightly run | 03:00 | |
-| Monthly budget | 5 € | |
+| Monthly budget | 5 USD | |
 
 ### Settings
 
 * **General:** sensors, heating period and frost protection, vacation as above.
 * **Emergency rule:** on, 1 K below target (expected after the lead time, at least the switch-on hysteresis), 45 min, windows unchanged for 30 min.
 * **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20 to 8 h.
-* **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in €/million tokens (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
+* **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in USD per million tokens (Anthropic bills in US dollars; nothing is converted) (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
 * **Heating day decision:** learned `theta` (editable), evaluation thresholds, learning steps, conditions for phase changes.
 

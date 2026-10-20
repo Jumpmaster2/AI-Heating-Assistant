@@ -13,7 +13,7 @@ OVERHEAT_KH_PER_DAY = 0.5
 
 @dataclass(slots=True)
 class Prices:
-    """Prices in EUR per million tokens."""
+    """Prices in USD per million tokens (as Anthropic bills)."""
 
     input: float
     output: float
@@ -21,7 +21,7 @@ class Prices:
     cache_read: float
 
 
-def cost_eur(usage: dict[str, Any], prices: Prices) -> float:
+def cost_usd(usage: dict[str, Any], prices: Prices) -> float:
     """Cost of one API call from its usage block."""
 
     def tokens(key: str) -> float:
@@ -37,10 +37,20 @@ def cost_eur(usage: dict[str, Any], prices: Prices) -> float:
     return total / 1_000_000
 
 
-def estimate_cost(prompt_chars: int, max_output_tokens: int, prices: Prices) -> float:
-    """Upper estimate of a call before it is made."""
+MIN_OUTPUT_ESTIMATE = 1000  # output tokens assumed at least when estimating a call
+
+
+def estimate_cost(
+    prompt_chars: int, max_output_tokens: int, prices: Prices, avg_output: float | None = None
+) -> float:
+    """Estimate of a call before it is made. With answers measured, twice their mean
+    output (thinking included) is assumed instead of the maximum, which would block
+    calls long before the budget is spent."""
     input_tokens = prompt_chars / CHARS_PER_TOKEN
-    return (input_tokens * prices.input + max_output_tokens * prices.output) / 1_000_000
+    output = float(max_output_tokens)
+    if avg_output:
+        output = min(output, max(MIN_OUTPUT_ESTIMATE, 2 * avg_output))
+    return (input_tokens * prices.input + output * prices.output) / 1_000_000
 
 
 @dataclass
@@ -71,6 +81,11 @@ class Budget:
         allowed = self.spent + estimate <= limit
         self.blocked = not allowed
         return allowed
+
+    @property
+    def avg_output(self) -> float | None:
+        """Mean output tokens per call this month (None before the first call)."""
+        return self.output_tokens / self.calls if self.calls else None
 
     def add(self, cost: float, usage: dict[str, Any]) -> None:
         self.spent = round(self.spent + cost, 6)

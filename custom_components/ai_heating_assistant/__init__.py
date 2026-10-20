@@ -9,6 +9,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
+    CONF_MAX_OUTPUT_TOKENS,
     CONF_PUFFER_DOWN,
     CONF_SWITCH,
     CONF_THETA_DOWN,
@@ -53,6 +54,13 @@ async def async_migrate_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) 
             if options.get(key) == old:
                 options[key] = new
         hass.config_entries.async_update_entry(entry, options=options, minor_version=2)
+    if entry.minor_version < 3:
+        # Thinking counts as output: 4000 tokens could cut answers off (only a value
+        # still at the old default is changed).
+        options = {**entry.options}
+        if options.get(CONF_MAX_OUTPUT_TOKENS) == 4000:
+            options[CONF_MAX_OUTPUT_TOKENS] = 16000
+        hass.config_entries.async_update_entry(entry, options=options, minor_version=3)
     return True
 
 

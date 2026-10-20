@@ -728,3 +728,101 @@ async def test_failed_decision_is_retried_after_a_pause(
             await hass.services.async_call(
                 DOMAIN, "decide_heating_day", {"use_ai": False}, blocking=True
             )
+
+
+async def test_old_default_of_max_output_tokens_is_raised(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    old = make_entry(max_output_tokens=4000)
+    await _setup(hass, old)
+    assert old.options["max_output_tokens"] == 16000 and old.minor_version == 3
+
+
+async def test_own_max_output_tokens_is_kept(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    own = make_entry(max_output_tokens=6000)
+    await _setup(hass, own)
+    assert own.options["max_output_tokens"] == 6000
+
+
+async def test_costs_use_the_prices_of_the_model_that_answered(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from custom_components.ai_heating_assistant.ai_client import AiError
+    from custom_components.ai_heating_assistant.logic.ai_policy import Prices
+
+    freezer.move_to(IN_SEASON)
+    with patch(STRUCTURED, side_effect=AiError("offline")):
+        await _setup(hass, make_entry(api_key="test-key"))
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    configured = coordinator.prices
+    coordinator.client.served_model = "claude-opus-5-5"
+    assert coordinator._served_prices() == configured
+    coordinator.client.served_model = "claude-sonnet-5-5-20261001"  # server fallback
+    assert coordinator._served_prices() == Prices(2.0, 10.0, 2.5, 0.2)
+    coordinator.client.served_model = "claude-unknown"
+    assert coordinator._served_prices() == configured
+
+
+async def test_small_target_steps_keep_the_ai_interval(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    from custom_components.ai_heating_assistant.ai_client import AiError
+
+    freezer.move_to(IN_SEASON)
+    with patch(STRUCTURED, side_effect=AiError("offline")):
+        await _setup(hass, make_entry(api_key="test-key"))
+        coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+        area_id = next(a.area_id for a in coordinator.areas.values() if a.has_circuit)
+        coordinator.ai_state["stable"] = 3
+        await coordinator.async_set_target(area_id, 21.3)
+        assert coordinator.ai_state["stable"] == 3
+        await coordinator.async_set_target(area_id, 21.8)
+        assert coordinator.ai_state["stable"] == 0
+
+
+async def test_hourly_forecast_for_pv_is_fetched_in_the_background(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    """A slow weather service does not hold up the tick; one request at a time."""
+    import asyncio
+
+    from custom_components.ai_heating_assistant.logic.sun import SunScale
+
+    freezer.move_to(IN_SEASON)
+    hass.states.async_set("sensor.pv_power", "500", {"unit_of_measurement": "W"})
+    hass.states.async_set("weather.home", "sunny", {"temperature": 5, "temperature_unit": "°C"})
+    release = asyncio.Event()
+    calls: list[str] = []
+
+    async def forecasts(call: ServiceCall) -> dict:
+        calls.append(call.data["type"])
+        if call.data["type"] != "hourly":
+            return {"weather.home": {"forecast": []}}
+        await release.wait()
+        item = {"datetime": "2026-11-16T11:00:00+01:00", "temperature": 6, "condition": "sunny"}
+        return {"weather.home": {"forecast": [item]}}
+
+    hass.services.async_register(
+        "weather", "get_forecasts", forecasts, supports_response=SupportsResponse.ONLY
+    )
+    entry = make_entry(weather="weather.home", pv_power="sensor.pv_power")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    coordinator = entry.runtime_data
+    coordinator.sun_scale = SunScale(2.0)
+    for _ in range(3):  # ticks finish while the hourly request still waits
+        freezer.tick(timedelta(minutes=1))
+        await coordinator.async_refresh()
+    # one for the startup decision, one for the PV estimate: not one per tick
+    assert calls.count("hourly") == 2
+    assert coordinator.last_update_success
+
+    release.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+    freezer.tick(timedelta(minutes=1))
+    await coordinator.async_refresh()
+    assert coordinator._pv_points

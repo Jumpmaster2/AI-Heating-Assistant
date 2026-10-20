@@ -51,6 +51,7 @@ class ClaudeClient:
         self._owned = owned  # own HTTP client (not the shared one of Home Assistant)
         self.model = model
         self.effort = effort
+        self.served_model: str | None = None  # model that answered the last request
 
     @classmethod
     async def create(
@@ -104,6 +105,7 @@ class ClaudeClient:
             output_config["effort"] = self.effort
         extra_headers: dict[str, str] = {}
         extra_body: dict[str, Any] = {}
+        self.served_model = None
         if self.model in FALLBACK_MODELS:
             extra_headers["anthropic-beta"] = FALLBACK_BETA
             extra_body["fallbacks"] = "default"
@@ -128,6 +130,8 @@ class ClaudeClient:
             raise AiError(f"API error {err.status_code}") from err
 
         usage = _usage(message)
+        served = getattr(message, "model", None)
+        self.served_model = served if isinstance(served, str) else None
         stop = getattr(message, "stop_reason", None)
         if stop == "refusal":
             raise AiError("request refused by the model", usage)

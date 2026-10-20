@@ -107,6 +107,7 @@ from .const import (
     DOMAIN,
     EVENT_LOGBOOK,
     LOGGER,
+    MODEL_PRICE_SUGGESTIONS,
     NAME,
     STORAGE_VERSION,
     SUBENTRY_AREA,
@@ -116,7 +117,7 @@ from .logic import heating_day as hd
 from .logic.ai_policy import (
     Budget,
     Prices,
-    cost_eur,
+    cost_usd,
     estimate_cost,
     next_interval_hours,
     overheat_issue,
@@ -198,6 +199,7 @@ CMD_ISSUE_ATTEMPTS = 3  # commands without effect before a repair issue
 # Repair issues of this integration (translation keys; the issue id adds the area id).
 SWITCH_OFF_TIMEOUT = 10  # s to wait for a circuit to switch off when control ends
 FORECAST_TIMEOUT = 10  # s to wait for the weather service
+TARGET_CHANGE_K = 0.5  # target change that makes the AI look again soon
 DECIDE_RETRY_S = 15 * 60  # pause after a failed heating day decision before the next try
 ISSUE_KEYS = (
     "sensor_unavailable",
@@ -1356,8 +1358,13 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
 
     async def async_set_target(self, area_id: str, value: float) -> None:
         area = self.areas[area_id]
-        area.target = round(float(value), 2)
-        self._config_changed()
+        old, area.target = area.target, round(float(value), 2)
+        if abs(area.target - old) >= TARGET_CHANGE_K:
+            self._config_changed()
+        else:
+            # Small steps (often from automations) would otherwise keep the AI interval
+            # from ever growing.
+            self._save()
         self.async_update_listeners()
         await self.async_request_refresh()
 
@@ -1775,7 +1782,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.budget.roll(month)
         limit = float(self.opt(CONF_BUDGET))
         max_tokens = int(self.opt(CONF_MAX_OUTPUT_TOKENS))
-        estimate = estimate_cost(len(system) + len(user), max_tokens, self.prices)
+        estimate = estimate_cost(
+            len(system) + len(user), max_tokens, self.prices, self.budget.avg_output
+        )
         if not self.budget.can_spend(estimate, limit):
             if self.ai_state.get("budget_logged") != month:
                 self.ai_state["budget_logged"] = month
@@ -1795,11 +1804,23 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 self.config_entry.async_start_reauth(self.hass)
         finally:
             if usage:
-                self.budget.add(cost_eur(usage, self.prices), usage)
+                self.budget.add(cost_usd(usage, self._served_prices()), usage)
             self._save()
         if data is not None:
             self.ai_state["last_error"] = None
         return data
+
+    def _served_prices(self) -> Prices:
+        """Prices of the model that answered: the server may fall back to another model,
+        then its list price applies instead of the configured prices."""
+        served = self.client.served_model if self.client else None
+        selected = str(self.opt(CONF_AI_MODEL))
+        if not served or served == selected or served.startswith(f"{selected}-"):
+            return self.prices
+        for model, prices in MODEL_PRICE_SUGGESTIONS.items():
+            if served == model or served.startswith(f"{model}-"):
+                return Prices(*prices)
+        return self.prices
 
     def _ai_failed(self, kind: str, error: str) -> None:
         self.ai_state["last_error"] = f"{kind}: {error}"

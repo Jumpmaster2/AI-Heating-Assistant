@@ -61,8 +61,8 @@ _TEXTS: dict[str, dict[str, str]] = {
         "en": "AI error ({kind}): {error}. Control continues with the last values.",
     },
     "ai_budget": {
-        "de": "KI-Monatsbudget erreicht ({spent} von {budget} €). Keine KI-Abfragen bis Monatsende.",
-        "en": "AI monthly budget reached ({spent} of {budget} €). No AI calls until the end of the month.",
+        "de": "KI-Monatsbudget erreicht ({spent} von {budget} USD). Keine KI-Abfragen bis Monatsende.",
+        "en": "AI monthly budget reached ({spent} of {budget} USD). No AI calls until the end of the month.",
     },
     "import": {"de": "Parameter importiert: {areas}.", "en": "Parameters imported: {areas}."},
     "reset": {"de": "Gelernte Werte zurückgesetzt.", "en": "Learned values reset."},

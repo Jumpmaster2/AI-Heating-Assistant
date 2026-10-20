@@ -286,7 +286,7 @@ const SETTINGS = {
     { id: "apikey", icon: "mdi:key-outline", special: "apikey" },
     { id: "model", icon: "mdi:robot-outline", fields: ["model", "effort", "max_output_tokens"] },
     { id: "schedule", icon: "mdi:clock-outline", fields: ["nightly_time", "check_interval", "check_max_interval"] },
-    { id: "costs", icon: "mdi:currency-eur", fields: ["monthly_budget", "price_input", "price_output", "price_cache_write", "price_cache_read"] },
+    { id: "costs", icon: "mdi:currency-usd", fields: ["monthly_budget", "price_input", "price_output", "price_cache_write", "price_cache_read"] },
     { id: "limits", icon: "mdi:arrow-expand-horizontal", special: "limits" },
   ],
   decision: [
@@ -689,7 +689,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
           <div class="row"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="grow">${esc(ui.nextCheck)}</span><span class="muted">${esc(this._ok(next) ? this._time(next.state) : ui.none)}</span></div>
           <div class="row"><ha-icon icon="mdi:weather-night"></ha-icon><span class="grow">${esc(ui.nextNightly)}</span><span class="muted">${esc(this._time(attrs.next_decision))}</span></div>
           <div class="row"><ha-icon icon="mdi:calendar-check-outline"></ha-icon><span class="grow">${esc(ui.lastDecision)}</span><span class="muted">${esc(decision)}</span></div>
-          <div class="row"><ha-icon icon="mdi:currency-eur"></ha-icon><span class="grow">${esc(ui.costMonth)}</span><span class="muted">${esc(`${this._num(this._ok(cost) ? cost.state : 0, 2)} € / ${this._num(budget, 2)} €`)}</span></div>
+          <div class="row"><ha-icon icon="mdi:currency-usd"></ha-icon><span class="grow">${esc(ui.costMonth)}</span><span class="muted">${esc(`${this._num(this._ok(cost) ? cost.state : 0, 2)} USD / ${this._num(budget, 2)} USD`)}</span></div>
         </div>
       </div>`;
 

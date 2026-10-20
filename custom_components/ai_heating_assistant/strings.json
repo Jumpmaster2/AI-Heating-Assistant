@@ -66,7 +66,7 @@
           "api_key": "Optional. Without a key the local control runs alone. The key is only stored in Home Assistant and never logged.",
           "model": "Model for all AI calls. Prices below are suggestions for the selected model and can be changed.",
           "nightly_time": "Daily decision whether heating is needed today (also the start of the evaluated day).",
-          "monthly_budget": "No AI calls once the costs of the month reach this value (until the month changes)."
+          "monthly_budget": "In US dollars, as Anthropic bills. No AI calls once the costs of the month reach this value (until the month changes)."
         }
       },
       "reconfigure": {
@@ -214,12 +214,12 @@
           "nightly_time": "Daily decision whether heating is needed today (also the start of the evaluated day).",
           "check_interval": "Base interval of the periodic AI check on heating days. It doubles after every check without relevant change.",
           "check_max_interval": "Upper limit for the doubled interval.",
-          "monthly_budget": "No AI calls once the costs of the month reach this value (until the month changes).",
-          "price_input": "Per million tokens.",
-          "price_output": "Per million tokens (thinking counts as output).",
-          "price_cache_write": "Per million tokens.",
-          "price_cache_read": "Per million tokens.",
-          "max_output_tokens": "Upper limit per answer, also used for the cost estimate before a call."
+          "monthly_budget": "In US dollars, as Anthropic bills. No AI calls once the costs of the month reach this value (until the month changes).",
+          "price_input": "US dollars per million tokens, as Anthropic bills.",
+          "price_output": "US dollars per million tokens, as Anthropic bills (thinking counts as output).",
+          "price_cache_write": "US dollars per million tokens, as Anthropic bills.",
+          "price_cache_read": "US dollars per million tokens, as Anthropic bills.",
+          "max_output_tokens": "Upper limit per answer, thinking included (too low cuts answers off, they are paid but discarded). Also the upper bound of the cost estimate before a call."
         }
       },
       "advanced": {

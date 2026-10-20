@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 0.11.8. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 0.11.9. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -52,8 +52,8 @@ Bei "kein Heiztag" bleiben alle Kreise aus, außer Frostschutz und der optionale
   * **Mittlere Laufzeit** je Einschalten.
   * **Verlauf der letzten 6 Prüfungen** mit ihren Kennzahlen und den dabei gemachten Änderungen. Die KI kann damit beurteilen, ob eine Änderung etwas gebracht hat, und sie sonst zurücknehmen. Wird ein Bereich zurückgesetzt oder ein gelernter Wert von Hand geändert, wird sein Verlauf gelöscht.
 * Anpassbare Parameter: Einschalt- und Ausschalthysterese, Faktor Überschwingen, Faktor Vorlauf, Sonnenfaktor, Fensterverzögerung, Korrektur der Erholungszeit, `puffer` und `theta`. Jeder Wert wird auf Minimum, Maximum und eine maximale Änderung je Prüfung begrenzt (alles einstellbar).
-* **Seltener fragen:** Das Prüfintervall verdoppelt sich nach jeder Prüfung ohne relevante Änderung und ohne Komfortfehler (bis zum Maximalintervall). Es fällt auf das Grundintervall zurück, wenn es zu kalt war, ein Bereich deutlich überheizt wurde (mehr als 0,5 Kelvinstunden je Tag, anteilig), die KI deutlich geändert hat oder du Sollwert bzw. Einstellungen änderst. Eine bereits geplante Prüfung bleibt über den Nachtlauf hinweg bestehen; nach einem Nicht-Heiztag folgt die nächste Prüfung nach dem Grundintervall, und war ein Raum seit der letzten Prüfung zu kalt, wird die nächste Prüfung vorgezogen.
-* **Kosten:** aus der Token-Nutzung mal den eingetragenen Preisen. Vor jeder Abfrage wird geschätzt; ist das Monatsbudget erreicht, gibt es bis zum Monatswechsel keine Abfragen.
+* **Seltener fragen:** Das Prüfintervall verdoppelt sich nach jeder Prüfung ohne relevante Änderung und ohne Komfortfehler (bis zum Maximalintervall). Es fällt auf das Grundintervall zurück, wenn es zu kalt war, ein Bereich deutlich überheizt wurde (mehr als 0,5 Kelvinstunden je Tag, anteilig), die KI deutlich geändert hat oder du Einstellungen bzw. einen Sollwert um mindestens 0,5 K änderst (kleinere Schritte, etwa aus Automationen, setzen das Intervall nicht zurück). Eine bereits geplante Prüfung bleibt über den Nachtlauf hinweg bestehen; nach einem Nicht-Heiztag folgt die nächste Prüfung nach dem Grundintervall, und war ein Raum seit der letzten Prüfung zu kalt, wird die nächste Prüfung vorgezogen.
+* **Kosten:** aus der Token-Nutzung mal den eingetragenen Preisen (in USD). Antwortet nach einem serverseitigen Fallback ein anderes Modell, gilt dessen Listenpreis. Vor jeder Abfrage wird geschätzt (Ausgabe: doppelter Mittelwert der bisherigen Antworten im Monat, höchstens die maximalen Ausgabe-Tokens, Standard 16000 inklusive Denken); ist das Monatsbudget erreicht, gibt es bis zum Monatswechsel keine Abfragen.
 * **Ausfall:** Bei Fehlern, Zeitüberschreitung oder ungültiger Antwort läuft die Regelung mit den zuletzt gelernten Werten weiter. Der API-Key erscheint nie im Log und wird in der Diagnose geschwärzt.
 * **Abgelehnter API-Key:** Lehnt Anthropic den Key ab (z. B. widerrufen), fragt Home Assistant unter Einstellungen > Geräte & Dienste nach einem neuen Key (erneute Authentifizierung). Bis dahin läuft die lokale Regelung ohne KI weiter; ein leeres Feld schaltet die KI ab.
 * **Wetterdienst antwortet nicht:** Die Wetterprognose wird höchstens 10 Sekunden lang abgewartet; danach entscheidet die Heiztag-Regel ohne Prognose, und die Regelung läuft weiter. Schlägt die Heiztag-Entscheidung fehl, wird sie nach 15 Minuten erneut versucht (Fehler im Log).
@@ -116,14 +116,14 @@ Temperatursensoren dürfen in °C, °F oder K melden; ohne Einheit gilt das Einh
 | Startwert `theta` | 16 °C | Heiztag-Regel; nur bei der Einrichtung, danach wird der gelernte Wert bearbeitet |
 | API-Key, Modell | Claude Opus 5.5 | änderbar, eigener Modellname möglich |
 | Nachtlauf | 03:00 | |
-| Monatsbudget | 5 € | |
+| Monatsbudget | 5 USD | |
 
 ### Einstellungen
 
 * **Allgemein:** Sensoren, Heizperiode und Frostschutz, Urlaub wie oben.
 * **Notfallregel:** an, 1 K unter Sollwert (voraussichtlich nach der Vorlaufzeit, mindestens die Einschalthysterese), 45 min, Fenster 30 min unverändert.
 * **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20 bis 8 Uhr.
-* **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in €/Million Tokens (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
+* **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in USD je Million Tokens (Anthropic rechnet in US-Dollar ab; es wird nicht umgerechnet) (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
 * **KI-Grenzen:** Minimum, Maximum, größte Änderung je Prüfung für jeden Parameter.
 * **Heiztag-Entscheidung:** gelerntes `theta` (änderbar), Bewertungsschwellen, Lernschritte, Bedingungen der Phasenwechsel.
 

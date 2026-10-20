@@ -66,7 +66,7 @@
           "api_key": "Optional. Ohne Key läuft nur die lokale Regelung. Der Key wird nur in Home Assistant gespeichert und nie protokolliert.",
           "model": "Modell für alle KI-Abfragen. Die Preise sind Vorschläge für das gewählte Modell und änderbar.",
           "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des bewerteten Tages).",
-          "monthly_budget": "Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel)."
+          "monthly_budget": "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel)."
         }
       },
       "reconfigure": {
@@ -214,12 +214,12 @@
           "nightly_time": "Tägliche Entscheidung, ob heute geheizt wird (zugleich Beginn des bewerteten Tages).",
           "check_interval": "Grundintervall der periodischen KI-Prüfung an Heiztagen. Es verdoppelt sich nach jeder Prüfung ohne relevante Änderung.",
           "check_max_interval": "Obergrenze für das verdoppelte Intervall.",
-          "monthly_budget": "Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel).",
-          "price_input": "Pro Million Tokens.",
-          "price_output": "Pro Million Tokens (Denken zählt als Ausgabe).",
-          "price_cache_write": "Pro Million Tokens.",
-          "price_cache_read": "Pro Million Tokens.",
-          "max_output_tokens": "Obergrenze je Antwort, auch für die Kostenschätzung vor einer Abfrage."
+          "monthly_budget": "In US-Dollar, wie Anthropic abrechnet. Keine KI-Abfragen mehr, sobald die Kosten des Monats diesen Wert erreichen (bis zum Monatswechsel).",
+          "price_input": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
+          "price_output": "US-Dollar pro Million Tokens, wie Anthropic abrechnet (Denken zählt als Ausgabe).",
+          "price_cache_write": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
+          "price_cache_read": "US-Dollar pro Million Tokens, wie Anthropic abrechnet.",
+          "max_output_tokens": "Obergrenze je Antwort, Denken eingeschlossen (zu niedrig schneidet Antworten ab; sie sind bezahlt, werden aber verworfen). Auch Obergrenze der Kostenschätzung vor einer Abfrage."
         }
       },
       "advanced": {

@@ -6,7 +6,7 @@ import pytest
 from logic.ai_policy import (
     Budget,
     Prices,
-    cost_eur,
+    cost_usd,
     estimate_cost,
     next_interval_hours,
     overheat_issue,
@@ -28,11 +28,23 @@ PRICES = Prices(input=4.0, output=20.0, cache_write=5.0, cache_read=0.2)
 
 def test_cost_from_usage() -> None:
     usage = {"input_tokens": 1500, "output_tokens": 800, "cache_read_input_tokens": None}
-    assert cost_eur(usage, PRICES) == pytest.approx((1500 * 4 + 800 * 20) / 1e6)
+    assert cost_usd(usage, PRICES) == pytest.approx((1500 * 4 + 800 * 20) / 1e6)
 
 
 def test_estimate_is_upper_bound() -> None:
     assert estimate_cost(3500, 2000, PRICES) == pytest.approx((1000 * 4 + 2000 * 20) / 1e6)
+
+
+def test_estimate_uses_measured_output() -> None:
+    # twice the mean output, at least 1000 tokens, at most the maximum
+    assert estimate_cost(3500, 16000, PRICES, 800) == pytest.approx((1000 * 4 + 1600 * 20) / 1e6)
+    assert estimate_cost(3500, 16000, PRICES, 100) == pytest.approx((1000 * 4 + 1000 * 20) / 1e6)
+    assert estimate_cost(3500, 16000, PRICES, 9000) == pytest.approx((1000 * 4 + 16000 * 20) / 1e6)
+    budget = Budget()
+    assert budget.avg_output is None
+    budget.add(0.1, {"input_tokens": 10, "output_tokens": 300})
+    budget.add(0.1, {"input_tokens": 10, "output_tokens": 500})
+    assert budget.avg_output == 400
 
 
 def test_budget_blocks_and_rolls_over() -> None:

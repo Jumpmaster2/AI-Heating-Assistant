@@ -219,7 +219,7 @@ def _ai_basic_fields(v: dict[str, Any]) -> dict[Any, Any]:
             )
         ),
         _req(CONF_NIGHTLY_TIME, v): TimeSelector(),
-        _req(CONF_BUDGET, v): _number(0, 100, 0.5, "€"),
+        _req(CONF_BUDGET, v): _number(0, 100, 0.5, "USD"),
     }
 
 
@@ -236,10 +236,10 @@ def _ai_schema(v: dict[str, Any]) -> vol.Schema:
             ),
             _req(CONF_CHECK_INTERVAL, v): _number(0.5, 48, 0.5, "h"),
             _req(CONF_CHECK_MAX_INTERVAL, v): _number(1, 336, 1, "h"),
-            _req(CONF_PRICE_INPUT, v): _number(0, 100, 0.001, "€/MTok"),
-            _req(CONF_PRICE_OUTPUT, v): _number(0, 500, 0.001, "€/MTok"),
-            _req(CONF_PRICE_CACHE_WRITE, v): _number(0, 100, 0.001, "€/MTok"),
-            _req(CONF_PRICE_CACHE_READ, v): _number(0, 100, 0.001, "€/MTok"),
+            _req(CONF_PRICE_INPUT, v): _number(0, 100, 0.001, "USD/MTok"),
+            _req(CONF_PRICE_OUTPUT, v): _number(0, 500, 0.001, "USD/MTok"),
+            _req(CONF_PRICE_CACHE_WRITE, v): _number(0, 100, 0.001, "USD/MTok"),
+            _req(CONF_PRICE_CACHE_READ, v): _number(0, 100, 0.001, "USD/MTok"),
             _req(CONF_MAX_OUTPUT_TOKENS, v): _number(500, 32000, 100),
         }
     )
@@ -378,7 +378,9 @@ class AiHeatingConfigFlow(ConfigFlow, domain=DOMAIN):
     """Initial setup: global sensors, vacation, AI."""
 
     VERSION = 1
-    MINOR_VERSION = 2  # 2: relay minute options removed, learning steps down doubled
+    # 2: relay minute options removed, learning steps down doubled
+    # 3: max output tokens 4000 -> 16000 (thinking counts as output)
+    MINOR_VERSION = 3
 
     def __init__(self) -> None:
         self._options: dict[str, Any] = {}
