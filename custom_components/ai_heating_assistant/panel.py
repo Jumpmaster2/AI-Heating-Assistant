@@ -11,6 +11,7 @@ from .const import DOMAIN, LOGGER, NAME
 PANEL_URL_PATH = "ai-heating-assistant"
 PANEL_COMPONENT = "ai-heating-assistant-panel"
 STATIC_URL = "/ai_heating_assistant_static"
+PANEL_STATIC_URL = "/ai_heating_assistant_panel"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 DATA_STATIC = f"{DOMAIN}_static_registered"
 DATA_CARD = f"{DOMAIN}_card_url"
@@ -24,12 +25,21 @@ async def async_register_panel(hass: HomeAssistant, entry_id: str) -> None:
     from homeassistant.components import frontend, panel_custom
     from homeassistant.components.http import StaticPathConfig
 
-    if not hass.data.get(DATA_STATIC):
+    # The panel is served below a path with the version, so its imports (labels.js) are
+    # new after an update as well; the card keeps its fixed path (dashboard resource).
+    # A path can only be registered once per run: keep the version.
+    version = hass.data.get(DATA_STATIC)
+    if version is None:
+        version = await hass.async_add_executor_job(_version)
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False)]
+            [
+                StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False),
+                StaticPathConfig(
+                    f"{PANEL_STATIC_URL}/{version}", str(FRONTEND_DIR), cache_headers=False
+                ),
+            ]
         )
-        hass.data[DATA_STATIC] = True
-    version = await hass.async_add_executor_job(_version)
+        hass.data[DATA_STATIC] = version
     if not hass.data.get(DATA_CARD):
         # Thermostat card for every dashboard (custom:ai-heating-thermostat-card).
         hass.data[DATA_CARD] = f"{CARD_PATH}?v={version}"
@@ -42,7 +52,7 @@ async def async_register_panel(hass: HomeAssistant, entry_id: str) -> None:
         hass,
         frontend_url_path=PANEL_URL_PATH,
         webcomponent_name=PANEL_COMPONENT,
-        module_url=f"{STATIC_URL}/panel.js?v={version}",
+        module_url=f"{PANEL_STATIC_URL}/{version}/panel.js",
         sidebar_title=NAME,
         sidebar_icon="mdi:home-thermometer-outline",
         require_admin=True,
