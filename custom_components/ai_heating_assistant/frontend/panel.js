@@ -182,6 +182,11 @@ const UI = {
       previewNote: "Dazu kommen die Antwortsprache und, bei der Parameterprüfung, die Liste der Parameter.",
     },
     loadError: "Konfiguration konnte nicht geladen werden",
+    loading: "Wird geladen …",
+    noAnswer: "Keine Antwort von Home Assistant",
+    retry: "Erneut versuchen",
+    retryHint: "Ein neuer Versuch startet automatisch.",
+    renderError: "Anzeige fehlgeschlagen",
   },
   en: {
     title: "AI Heating Assistant",
@@ -355,8 +360,18 @@ const UI = {
       previewNote: "The answer language and, for the parameter check, the list of parameters are added.",
     },
     loadError: "Could not load the configuration",
+    loading: "Loading …",
+    noAnswer: "No answer from Home Assistant",
+    retry: "Try again",
+    retryHint: "A new attempt starts automatically.",
+    renderError: "Display failed",
   },
 };
+
+// loading the configuration: no answer after LOAD_TIMEOUT counts as failed,
+// a failed load is tried again after RETRY_DELAY (while the panel is shown)
+const LOAD_TIMEOUT = 10000;
+const RETRY_DELAY = 5000;
 
 const TABS = [
   ["overview", "mdi:view-dashboard-outline"],
@@ -481,6 +496,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     this._error = null;
     this._sig = "";
     this._count = null;
+    this._loadSeq = 0;
+    this._onReady = () => {
+      // the connection is back (e.g. the app was in the background): load again after a failure
+      if (this._error) this._load(!!this._cfg);
+    };
     this.attachShadow({ mode: "open" });
     this.shadowRoot.addEventListener("click", (ev) => this._onClick(ev));
     this.shadowRoot.addEventListener("input", (ev) => this._onInput(ev));
@@ -492,9 +512,12 @@ class AiHeatingAssistantPanel extends HTMLElement {
   set hass(hass) {
     const first = !this._hass;
     this._hass = hass;
+    this._watchConnection(hass.connection);
     if (first) {
       this._entitiesRef = hass.entities;
       this._count = this._entityCount();
+      // toolbar, tabs and the loading card right away, the content follows
+      this._render();
       this._load();
       return;
     }
@@ -524,6 +547,26 @@ class AiHeatingAssistantPanel extends HTMLElement {
 
   set panel(value) {
     this._panel = value;
+  }
+
+  connectedCallback() {
+    if (!this._wasDisconnected) return; // the first load starts with hass
+    this._wasDisconnected = false;
+    this._watchConnection(this._hass?.connection);
+    if (this._hass && (!this._cfg || this._error)) this._load(!!this._cfg);
+  }
+
+  disconnectedCallback() {
+    this._wasDisconnected = true;
+    clearTimeout(this._retryTimer);
+    this._watchConnection(null);
+  }
+
+  _watchConnection(conn) {
+    if (conn === this._conn) return;
+    this._conn?.removeEventListener?.("ready", this._onReady);
+    this._conn = conn || null;
+    this._conn?.addEventListener?.("ready", this._onReady);
   }
 
   // ------------------------------------------------------------------ texts
@@ -561,13 +604,38 @@ class AiHeatingAssistantPanel extends HTMLElement {
   // ------------------------------------------------------------------ data
 
   async _load(quiet = false) {
+    // only the newest request counts; an older one that answers late is ignored
+    const seq = ++this._loadSeq;
+    clearTimeout(this._retryTimer);
+    const timer = setTimeout(() => {
+      if (seq === this._loadSeq) this._loadFailed(this.ui.noAnswer, quiet);
+    }, LOAD_TIMEOUT);
+    let cfg;
     try {
-      this._cfg = await this._hass.callWS({ type: `${DOMAIN}/config` });
-      this._statsAt = 0; // configuration changed: learned values again
-      this._error = null;
+      cfg = await this._hass.callWS({ type: `${DOMAIN}/config` });
     } catch (err) {
-      this._error = err.message || String(err);
+      if (seq === this._loadSeq) this._loadFailed(err.message || String(err), quiet);
+      return;
+    } finally {
+      clearTimeout(timer);
     }
+    // a late answer after the timeout is still welcome, as long as no newer request runs
+    if (seq !== this._loadSeq) return;
+    clearTimeout(this._retryTimer);
+    this._cfg = cfg;
+    this._statsAt = 0; // configuration changed: learned values again
+    this._error = null;
+    this._show(quiet);
+  }
+
+  _loadFailed(error, quiet) {
+    this._error = error;
+    this._show(quiet);
+    clearTimeout(this._retryTimer);
+    if (this.isConnected) this._retryTimer = setTimeout(() => this._load(quiet), RETRY_DELAY);
+  }
+
+  _show(quiet) {
     // keep the editor and its inputs while the entity ids are refreshed
     if (quiet && this._edit) return;
     if (quiet && this.shadowRoot.querySelector(".content")) {
@@ -628,21 +696,45 @@ class AiHeatingAssistantPanel extends HTMLElement {
             `<button class="tab ${this._tab === id ? "active" : ""}" data-tab="${id}"><ha-icon icon="${icon}"></ha-icon><span>${esc(ui.tabs[id])}</span></button>`,
         ).join("")}
       </div>
-      <div class="content">${this._content()}</div>
-      <div class="datalists">${this._datalists()}</div>
+      <div class="content">${this._safeContent()}</div>
+      <div class="datalists">${this._safeDatalists()}</div>
       <div class="toast" hidden></div>`;
     this._upgradeSelectors();
     this._sig = this._signature();
   }
 
+  // a failure while building the content shows as an error card instead of an empty page
+  _safeContent() {
+    try {
+      return this._content();
+    } catch (err) {
+      console.error("AI Heating Assistant panel:", err);
+      return `<div class="card error">${esc(this.ui.renderError)}: ${esc(err.message || String(err))}</div>`;
+    }
+  }
+
   _content() {
-    if (this._error) return `<div class="card error">${esc(this.ui.loadError)}: ${esc(this._error)}</div>`;
-    if (!this._cfg) return `<div class="card">…</div>`;
+    const ui = this.ui;
+    if (this._error) {
+      return `<div class="card error"><div>${esc(ui.loadError)}: ${esc(this._error)}</div>
+        <div class="muted small">${esc(ui.retryHint)}</div>
+        <div class="actions"><button class="btn" data-action="retry">${esc(ui.retry)}</button></div></div>`;
+    }
+    if (!this._cfg) return `<div class="card muted">${esc(ui.loading)}</div>`;
     if (this._edit) return this._editor();
     if (this._tab === "overview") return this._overview();
     if (this._tab === "areas") return this._areasTab();
     if (this._tab === "learned") return this._learnedTab();
     return (SETTINGS[this._tab] || []).map((card) => this._settingsCard(card)).join("");
+  }
+
+  _safeDatalists() {
+    try {
+      return this._datalists();
+    } catch (err) {
+      console.error("AI Heating Assistant panel:", err);
+      return ""; // only suggestions for the text fields
+    }
   }
 
   _datalists() {
@@ -681,6 +773,15 @@ class AiHeatingAssistantPanel extends HTMLElement {
   // ------------------------------------------------------------------ live updates
 
   _signature() {
+    try {
+      return this._stateSignature();
+    } catch (err) {
+      console.error("AI Heating Assistant panel:", err);
+      return ""; // no live updates instead of an error on every hass update
+    }
+  }
+
+  _stateSignature() {
     if (!this._hass || !this._cfg) return "";
     const ids = [
       ...Object.values(this._cfg.entities || {}),
@@ -1483,7 +1584,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
       else this._openDetails.delete(details.dataset.keep);
     }
     const scroll = content.scrollTop;
-    content.innerHTML = this._content();
+    content.innerHTML = this._safeContent();
     this._upgradeSelectors();
     content.scrollTop = scroll;
     if (focusSelector) content.querySelector(focusSelector)?.focus();
@@ -1538,6 +1639,10 @@ class AiHeatingAssistantPanel extends HTMLElement {
     switch (d.action) {
       case "menu":
         this.dispatchEvent(new Event("hass-toggle-menu", { bubbles: true, composed: true }));
+        break;
+      case "retry":
+        el.disabled = true; // until the answer (or the next failure) renders the content again
+        this._load(!!this._cfg);
         break;
       case "toggle": {
         const st = this._state(d.entity);
