@@ -13,6 +13,7 @@ from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_capture_events
 
 from custom_components.ai_heating_assistant.const import DOMAIN, EVENT_LOGBOOK
+from custom_components.ai_heating_assistant.logic.ai_schema import VENT_PARAMS
 
 from .conftest import make_entry
 from .test_control import STRUCTURED, USAGE, _advance, _setup
@@ -45,19 +46,7 @@ async def test_ventilation_check_runs_all_year_and_backs_off(
         payload = json.loads(user)
         assert mock.call_args.args[2]["properties"]["adjustments"]["items"]["properties"][
             "parameter"
-        ]["enum"] == sorted(
-            [
-                "cooling_margin",
-                "cooling_min_temp",
-                "energy_rh_per_k",
-                "max_reference_excess",
-                "min_ah_advantage",
-                "min_cooling_advantage",
-                "min_rh_drop",
-                "rh_hysteresis",
-                "rh_threshold",
-            ]
-        )
+        ]["enum"] == sorted(VENT_PARAMS)
         assert "rh_threshold" in system
         assert not payload["heating_period"]
         storage = next(a for a in payload["areas"] if a["id"] == "a2")

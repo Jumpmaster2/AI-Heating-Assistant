@@ -11,7 +11,11 @@ The profile learns from the measured values
 * the moisture load: how fast the absolute humidity rises with the windows closed,
 * the effect of an airing: which share of the difference to the reference air an
   airing removes, how fast, and how much of it comes back after closing (walls and
-  furniture release moisture again).
+  furniture release moisture again),
+* the air exchange rate of the room's windows: the room approaches the reference air
+  exponentially, ``gap(t) = gap(0) * exp(-k t)``, and ``k`` grows with the square root
+  of the temperature difference (thermal draft). ``k / sqrt(dT)`` is learned, so the
+  minutes needed to reach a target humidity follow for any weather.
 
 The local recommendation uses the humidity an airing is expected to reach; the AI
 gets the whole profile to choose thresholds that fit the room.
@@ -19,6 +23,7 @@ gets the whole profile to choose thresholds that fit the room.
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -37,6 +42,9 @@ MIN_AIRINGS = 2  # judged airings before the expected effect is used
 MIN_DAY_SAMPLES = 360  # samples (minutes) a day needs to count for the usual course
 TYPICAL_ALPHA = 0.1  # the usual course follows the season slowly
 EFFECT_ALPHA = 0.2
+RATE_START = 0.03  # 1/min per sqrt(K): about 15 minutes for half the gap at 4 K difference
+RATE_BOUNDS = (0.002, 1.0)
+MIN_REMAINING = 0.05  # g/m³ the room must stay above the reference to judge the rate
 
 
 def _ewma(data: Any, default: float, alpha: float) -> Ewma:
@@ -126,6 +134,8 @@ class HumidityProfile:
     exchange: Ewma = field(default_factory=lambda: _ewma(None, 0.5, EFFECT_ALPHA))
     rebound: Ewma = field(default_factory=lambda: _ewma(None, 0.2, EFFECT_ALPHA))
     drop_rate: Ewma = field(default_factory=lambda: _ewma(None, 0.0, EFFECT_ALPHA))
+    rate: Ewma = field(default_factory=lambda: _ewma(None, RATE_START, EFFECT_ALPHA))
+    last_closed: float | None = None  # end of the last airing
     events: list[dict[str, Any]] = field(default_factory=list)
     day: DayStats = field(default_factory=DayStats)
     hour: list[float] | None = None  # [start ts, absolute humidity] of the load sample
@@ -144,9 +154,13 @@ class HumidityProfile:
         rh: float | None,
         ah_ref: float | None,
         window_open: bool,
+        delta_t: float | None = None,
+        suggested: int | None = None,
     ) -> None:
         """One measurement (every minute). ``date`` is the local date, ``season`` one
-        of ``SEASONS``, ``ah_ref`` the absolute humidity of the reference air."""
+        of ``SEASONS``, ``ah_ref`` the absolute humidity of the reference air,
+        ``delta_t`` the room minus the reference temperature and ``suggested`` the
+        airing time recommended when a window opens."""
         if date != self.day.date:
             self._close_day()
             self.day = DayStats(date=date, season=season)
@@ -166,6 +180,8 @@ class HumidityProfile:
                     "ah_ref": ah_ref,
                     "min_ah": ah,
                     "min_rh": rh,
+                    "dt": delta_t,
+                    "suggested": suggested,
                 }
             else:
                 self.airing["min_ah"] = min(self.airing["min_ah"], ah)
@@ -209,10 +225,19 @@ class HumidityProfile:
             "rh_min": round(airing["min_rh"], 1),
             "ah_drop": round(drop, 2),
         }
+        if airing.get("suggested") is not None:
+            event["suggested_min"] = airing["suggested"]
+        self.last_closed = ts
         ah_ref = airing["ah_ref"]
         if ah_ref is not None and airing["ah"] - ah_ref >= MIN_GAP:
             self.exchange.add(clamp(drop / (airing["ah"] - ah_ref), 0.0, 1.0))
             _learn(self.drop_rate, drop / (seconds / 60))
+            remaining = airing["min_ah"] - ah_ref
+            delta_t = _num(airing.get("dt"))
+            if drop > 0 and remaining >= MIN_REMAINING and delta_t is not None:
+                k = -math.log(remaining / (airing["ah"] - ah_ref)) / (seconds / 60)
+                normalized = k / math.sqrt(max(1.0, abs(delta_t)))
+                _learn(self.rate, clamp(normalized, *RATE_BOUNDS))
             event["share"] = round(clamp(drop / (airing["ah"] - ah_ref), 0.0, 1.0), 2)
         self.events = [*self.events, event][-EVENT_COUNT:]
         self.pending = {"closed": ts, "drop": drop, "min_ah": airing["min_ah"]}
@@ -251,6 +276,30 @@ class HumidityProfile:
         lasting = self.exchange.value * (1.0 - self.rebound.value)
         return 100.0 * (ah - lasting * gap) / absolute_humidity(temp, 100.0)
 
+    def airing_minutes(
+        self,
+        temp: float | None,
+        rh: float | None,
+        ah_ref: float | None,
+        delta_t: float | None,
+        target_rh: float,
+    ) -> float | None:
+        """Minutes of airing the room needs to reach ``target_rh`` with the learned
+        exchange rate, or None while the rate is not known. A target the reference air
+        cannot reach is aimed at 90 % of the way."""
+        if self.rate.count < MIN_AIRINGS or None in (temp, rh, ah_ref, delta_t):
+            return None
+        assert temp is not None and rh is not None and ah_ref is not None
+        assert delta_t is not None
+        ah = absolute_humidity(temp, rh)
+        gap = ah - ah_ref
+        if gap <= 0:
+            return None
+        target = absolute_humidity(temp, target_rh) - ah_ref
+        remaining = clamp(target / gap, 0.1, 1.0)
+        k = self.rate.value * math.sqrt(max(1.0, abs(delta_t)))
+        return -math.log(remaining) / k
+
     def summary(
         self, season: str, temp: float | None, rh: float | None, ah_ref: float | None
     ) -> dict[str, Any]:
@@ -270,6 +319,7 @@ class HumidityProfile:
                 "share": round(self.exchange.value, 2),
                 "rebound": round(self.rebound.value, 2),
                 "drop_per_min": round(self.drop_rate.value, 3),
+                "rate_per_sqrt_k": round(self.rate.value, 4) if self.rate.count else None,
             }
             if self.known_effect
             else None,
@@ -288,6 +338,8 @@ class HumidityProfile:
             "exchange": self.exchange.as_dict(),
             "rebound": self.rebound.as_dict(),
             "drop_rate": self.drop_rate.as_dict(),
+            "rate": self.rate.as_dict(),
+            "last_closed": self.last_closed,
             "events": self.events,
             "day": self.day.as_dict(),
             "hour": self.hour,
@@ -318,6 +370,8 @@ class HumidityProfile:
         profile.exchange = _ewma(data.get("exchange"), 0.5, EFFECT_ALPHA)
         profile.rebound = _ewma(data.get("rebound"), 0.2, EFFECT_ALPHA)
         profile.drop_rate = _ewma(data.get("drop_rate"), 0.0, EFFECT_ALPHA)
+        profile.rate = _ewma(data.get("rate"), RATE_START, EFFECT_ALPHA)
+        profile.last_closed = _num(data.get("last_closed"))
         events = data.get("events")
         if isinstance(events, list):
             profile.events = [e for e in events if isinstance(e, dict)][-EVENT_COUNT:]

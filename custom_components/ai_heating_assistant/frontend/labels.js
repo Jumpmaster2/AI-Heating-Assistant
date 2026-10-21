@@ -106,6 +106,30 @@ export const LABELS = {
     "Energiespar-Zuschlag",
     "Energiesparen: In der Heizperiode kostet Lüften Wärme, umso mehr, je kälter es draußen ist. Die Feuchte muss die Schwelle dann um so viel je Kelvin übersteigen, wie es draußen kälter ist als im Raum (z. B. 0,25 %/K: bei 21 °C innen und 1 °C außen 5 % mehr), höchstens bis 70 %; darüber wird gegen Schimmel immer gelüftet. 0 = aus. Startwert, die KI passt ihn je Bereich an."
    ],
+   "ventilation_mould_rh": [
+    "Schimmelgrenze",
+    "Ab dieser relativen Feuchte wird immer zum Lüften geraten, auch bei Frost und direkt nach einer Lüftung; der Energiespar-Zuschlag geht nie darüber. Für Räume mit kalten Außenwänden niedriger setzen. Startwert, die KI passt ihn je Bereich an."
+   ],
+   "ventilation_airing_target_below": [
+    "Lüftziel unter der Schwelle",
+    "Die vorgeschlagene Lüftdauer zielt so weit unter die Feuchte-Schwelle. Startwert für die KI."
+   ],
+   "ventilation_airing_time_factor": [
+    "Lüftdauer-Faktor",
+    "Skaliert die vorgeschlagene Lüftdauer. Sobald zwei Lüftungen ausgewertet sind, wird sie aus dem gelernten Luftaustausch des Raums und dem Temperaturunterschied berechnet, vorher aus der Außentemperatur (5 Minuten bei Frost bis 20 Minuten bei Wärme). Startwert für die KI."
+   ],
+   "ventilation_airing_min_minutes": [
+    "Kürzeste Lüftdauer",
+    "Startwert für die KI."
+   ],
+   "ventilation_airing_max_minutes": [
+    "Längste Lüftdauer",
+    "Startwert für die KI."
+   ],
+   "ventilation_airing_pause": [
+    "Pause nach dem Lüften",
+    "Nach dem Lüften kommt Feuchte aus Wänden und Möbeln zurück. Erst nach dieser Pause wird wieder zum Trocknen geraten (unter der Schimmelgrenze); das spart Wärme und Nerven. Startwert für die KI."
+   ],
    "ventilation_min_cooling_advantage": [
     "Mindest-Kühlvorteil",
     "'Lüften sinnvoll', wenn es innen mindestens so viel wärmer ist als außen (nicht während Heizbetrieb)."
@@ -397,7 +421,13 @@ export const LABELS = {
    "min_cooling_advantage": "Mindest-Kühlvorteil",
    "cooling_margin": "Kühl-Abstand über Sollwert",
    "cooling_min_temp": "Kühlen erst ab Raumtemperatur",
-   "energy_rh_per_k": "Energiespar-Zuschlag"
+   "energy_rh_per_k": "Energiespar-Zuschlag",
+   "mould_rh": "Schimmelgrenze",
+   "airing_target_below": "Lüftziel unter der Schwelle",
+   "airing_time_factor": "Lüftdauer-Faktor",
+   "airing_min_minutes": "Kürzeste Lüftdauer",
+   "airing_max_minutes": "Längste Lüftdauer",
+   "airing_pause_min": "Pause nach dem Lüften"
   },
   "limit_columns": {
    "min": "Minimum",
@@ -574,6 +604,30 @@ export const LABELS = {
    "ventilation_energy_rh_per_k": [
     "Energy saving surcharge",
     "Energy saving: within the heating period airing costs heat, the more the colder it is outside. The humidity must then exceed the threshold by this much per Kelvin outside is colder than the room (e.g. 0.25 %/K: at 21 °C inside and 1 °C outside 5 % more), at most up to 70 %, above which airing is always recommended against mould. 0 = off. Start value, the AI adjusts it per area."
+   ],
+   "ventilation_mould_rh": [
+    "Mould limit",
+    "From this relative humidity airing is always recommended, even in frost and right after an airing; the energy saving surcharge never goes beyond it. Lower it for rooms with cold exterior walls. Start value, the AI adjusts it per area."
+   ],
+   "ventilation_airing_target_below": [
+    "Airing target below threshold",
+    "The suggested airing time aims at this far below the humidity threshold. Start value for the AI."
+   ],
+   "ventilation_airing_time_factor": [
+    "Airing time factor",
+    "Scales the suggested airing time. Once two airings are evaluated it is computed from the learned air exchange of the room and the temperature difference, before that from the outside temperature (5 min in frost up to 20 min when warm). Start value for the AI."
+   ],
+   "ventilation_airing_min_minutes": [
+    "Shortest airing time",
+    "Start value for the AI."
+   ],
+   "ventilation_airing_max_minutes": [
+    "Longest airing time",
+    "Start value for the AI."
+   ],
+   "ventilation_airing_pause": [
+    "Pause after airing",
+    "After an airing moisture comes back from walls and furniture. Drying is recommended again only after this pause (below the mould limit), which saves heat and nagging. Start value for the AI."
    ],
    "ventilation_min_cooling_advantage": [
     "Minimum cooling advantage",
@@ -866,7 +920,13 @@ export const LABELS = {
    "min_cooling_advantage": "Minimum cooling advantage",
    "cooling_margin": "Cooling distance above target",
    "cooling_min_temp": "Cool only from room temperature",
-   "energy_rh_per_k": "Energy saving surcharge"
+   "energy_rh_per_k": "Energy saving surcharge",
+   "mould_rh": "Mould limit",
+   "airing_target_below": "Airing target below threshold",
+   "airing_time_factor": "Airing time factor",
+   "airing_min_minutes": "Shortest airing time",
+   "airing_max_minutes": "Longest airing time",
+   "airing_pause_min": "Pause after airing"
   },
   "limit_columns": {
    "min": "Minimum",

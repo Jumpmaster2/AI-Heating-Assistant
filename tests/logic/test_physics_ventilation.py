@@ -267,3 +267,38 @@ def test_slightly_humid_room_waits_while_it_is_cold_outside() -> None:
     # outside the heating period no surcharge
     summer = recommend(_humid(62.0, heating_active=False, ref_temp=15.0), settings)
     assert summer.required_rh == 60.0 and not summer.energy_hold
+
+
+def test_room_settles_after_airing_before_the_next_recommendation() -> None:
+    settings = VentilationSettings(rh_threshold=60.0, energy_rh_per_k=0.0, airing_pause_min=30)
+    held = recommend(_humid(63.0, minutes_since_airing=10.0), settings)
+    assert held.state == VentilationState.DO_NOT_VENTILATE and held.pause_hold
+    assert recommend(_humid(63.0, minutes_since_airing=31.0), settings).state == (
+        VentilationState.VENTILATE_NOW
+    )
+    # at the mould limit no pause
+    assert recommend(_humid(71.0, minutes_since_airing=10.0), settings).state == (
+        VentilationState.VENTILATE_NOW
+    )
+
+
+def test_mould_limit_caps_the_energy_surcharge() -> None:
+    settings = VentilationSettings(rh_threshold=60.0, energy_rh_per_k=1.0, mould_rh=64.0)
+    result = recommend(_humid(64.0), settings)
+    assert result.required_rh == 64.0 and result.state == VentilationState.VENTILATE_NOW
+
+
+def test_airing_time_from_learned_rate_factor_and_bounds() -> None:
+    settings = VentilationSettings(rh_threshold=60.0, energy_rh_per_k=0.0)
+    learned = recommend(_humid(65.0, learned_airing_minutes=7.4), settings)
+    assert learned.airing_minutes == 7
+    longer = VentilationSettings(rh_threshold=60.0, energy_rh_per_k=0.0, airing_time_factor=2.0)
+    assert recommend(_humid(65.0, learned_airing_minutes=7.4), longer).airing_minutes == 15
+    capped = VentilationSettings(
+        rh_threshold=60.0, energy_rh_per_k=0.0, airing_time_factor=3.0, airing_max_minutes=12
+    )
+    assert recommend(_humid(65.0, learned_airing_minutes=7.4), capped).airing_minutes == 12
+    short = VentilationSettings(rh_threshold=60.0, energy_rh_per_k=0.0, airing_min_minutes=4)
+    assert recommend(_humid(65.0, learned_airing_minutes=1.0), short).airing_minutes == 4
+    # not learned yet: table by outdoor temperature (5 °C -> 10 minutes)
+    assert recommend(_humid(65.0), settings).airing_minutes == 10

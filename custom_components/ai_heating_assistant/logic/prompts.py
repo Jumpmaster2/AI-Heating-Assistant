@@ -158,7 +158,12 @@ PROMPTS: dict[str, PromptSpec] = {
                 "an airing reaches (achievable_now, from the learned profile) at least "
                 "min_rh_drop below the current one; in the heating period airing costs heat, so the "
                 "humidity must also exceed rh_threshold by energy_rh_per_k per K the reference "
-                "is colder than the room (capped at 70 %), otherwise energy_hold. "
+                "is colder than the room (capped at mould_rh), otherwise energy_hold; within "
+                "airing_pause_min after an airing it waits (pause_hold) unless at mould_rh. "
+                "While airing is recommended it suggests an airing time: the minutes the "
+                "learned exchange rate needs to reach rh_threshold - airing_target_below "
+                "(before two airings are known a table by outdoor temperature), times "
+                "airing_time_factor, within airing_min_minutes and airing_max_minutes. "
                 "ventilation_useful: cooling, the room is "
                 "min_cooling_advantage warmer than the reference, nobody heats, in the heating "
                 "period only cooling_margin above target and from cooling_min_temp on, and "
@@ -174,9 +179,13 @@ PROMPTS: dict[str, PromptSpec] = {
                 "days, airing included; achievable_now = humidity a usual airing leaves now "
                 "once moisture from walls came back; load_gph = rise of ah per hour with "
                 "windows closed; airing.share = part of the difference to the reference air "
-                "an airing removes, rebound = part of that coming back within 30 minutes; "
-                "last_airings = recent airings (minutes, humidity at start, lowest, 30 "
-                "minutes after closing).",
+                "an airing removes, rebound = part of that coming back within 30 minutes, "
+                "rate_per_sqrt_k = learned air exchange per minute and square root of the "
+                "temperature difference; "
+                "last_airings = recent airings (min = actual minutes, suggested_min = airing time "
+                "suggested when the window opened, humidity at start, lowest, 30 minutes after "
+                "closing). Compare actual and suggested times with the result: residents who "
+                "close earlier or air longer show what fits the room.",
             ),
             PromptBlock(
                 "ranges",
@@ -195,7 +204,8 @@ PROMPTS: dict[str, PromptSpec] = {
                 "the window was open although airing brought nothing, heat_window_min = "
                 "minutes open while the area was heated, blocked_min = minutes a blocking "
                 "entity held back the recommendation, energy_hold_min = minutes drying would help "
-                "but was held back to save heat, flips = changes of the recommendation "
+                "but was held back to save heat, pause_hold_min = minutes held back while the room "
+                "settled after airing, flips = changes of the recommendation "
                 "(many flips annoy the residents).",
             ),
             PromptBlock(
@@ -214,7 +224,13 @@ PROMPTS: dict[str, PromptSpec] = {
                 "that barely lower the humidity: raise min_rh_drop or min_ah_advantage; many "
                 "flips: raise rh_hysteresis; airing too often in the heating period without "
                 "need: raise rh_threshold towards the usual level or raise energy_rh_per_k; a room "
-                "humid for long while energy_hold_min is high: lower energy_rh_per_k; summer overheating: lower "
+                "humid for long while energy_hold_min is high: lower energy_rh_per_k; humidity "
+                "back at the threshold soon after airing (high rebound, rh_after_30 high): raise "
+                "airing_target_below or airing_time_factor, or lengthen airing_pause_min if it "
+                "settles by itself; humidity far below target after airing or heat_window_min "
+                "high: lower airing_time_factor or airing_max_minutes; residents regularly airing "
+                "shorter or longer than suggested_min: move airing_time_factor towards what "
+                "worked; mould_min > 0 or a room with cold walls: lower mould_rh; summer overheating: lower "
                 "min_cooling_advantage or cooling_min_temp.",
             ),
             PromptBlock(

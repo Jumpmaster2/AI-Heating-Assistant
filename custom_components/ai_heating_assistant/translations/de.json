@@ -204,6 +204,12 @@
           "ventilation_min_ah_advantage": "Mindestvorteil absolute Feuchte",
           "ventilation_max_reference_excess": "Außen höchstens wärmer um",
           "ventilation_energy_rh_per_k": "Energiespar-Zuschlag",
+          "ventilation_mould_rh": "Schimmelgrenze",
+          "ventilation_airing_target_below": "Lüftziel unter der Schwelle",
+          "ventilation_airing_time_factor": "Lüftdauer-Faktor",
+          "ventilation_airing_min_minutes": "Kürzeste Lüftdauer",
+          "ventilation_airing_max_minutes": "Längste Lüftdauer",
+          "ventilation_airing_pause": "Pause nach dem Lüften",
           "ventilation_min_cooling_advantage": "Mindest-Kühlvorteil",
           "ventilation_cooling_margin": "Mindestabstand über Sollwert für Kühlen",
           "ventilation_cooling_min_temp": "Kühlen erst ab Raumtemperatur",
@@ -224,7 +230,13 @@
           "ventilation_ai_enabled": "Ganzjährig prüft die KI die Lüftungsschwellen jedes Bereichs mit Feuchtesensor: Sie lernt, was in jedem Raum üblich ist, wie tief die Feuchte überhaupt sinken kann und was Lüften wirklich bringt. Nutzt das gemeinsame KI-Monatsbudget.",
           "ventilation_check_interval": "Erstes Intervall; es verdoppelt sich mit jeder Prüfung ohne relevante Änderung und beginnt von vorn, wenn ein Raum lange feucht bleibt oder sich ein Wert ändert.",
           "ventilation_check_max_interval": "Länger wird das Intervall nie.",
-          "ventilation_energy_rh_per_k": "Energiesparen: In der Heizperiode kostet Lüften Wärme, umso mehr, je kälter es draußen ist. Die Feuchte muss die Schwelle dann um so viel je Kelvin übersteigen, wie es draußen kälter ist als im Raum (z. B. 0,25 %/K: bei 21 °C innen und 1 °C außen 5 % mehr), höchstens bis 70 %; darüber wird gegen Schimmel immer gelüftet. 0 = aus. Startwert, die KI passt ihn je Bereich an."
+          "ventilation_energy_rh_per_k": "Energiesparen: In der Heizperiode kostet Lüften Wärme, umso mehr, je kälter es draußen ist. Die Feuchte muss die Schwelle dann um so viel je Kelvin übersteigen, wie es draußen kälter ist als im Raum (z. B. 0,25 %/K: bei 21 °C innen und 1 °C außen 5 % mehr), höchstens bis 70 %; darüber wird gegen Schimmel immer gelüftet. 0 = aus. Startwert, die KI passt ihn je Bereich an.",
+          "ventilation_mould_rh": "Ab dieser relativen Feuchte wird immer zum Lüften geraten, auch bei Frost und direkt nach einer Lüftung; der Energiespar-Zuschlag geht nie darüber. Für Räume mit kalten Außenwänden niedriger setzen. Startwert, die KI passt ihn je Bereich an.",
+          "ventilation_airing_target_below": "Die vorgeschlagene Lüftdauer zielt so weit unter die Feuchte-Schwelle. Startwert für die KI.",
+          "ventilation_airing_time_factor": "Skaliert die vorgeschlagene Lüftdauer. Sobald zwei Lüftungen ausgewertet sind, wird sie aus dem gelernten Luftaustausch des Raums und dem Temperaturunterschied berechnet, vorher aus der Außentemperatur (5 Minuten bei Frost bis 20 Minuten bei Wärme). Startwert für die KI.",
+          "ventilation_airing_min_minutes": "Startwert für die KI.",
+          "ventilation_airing_max_minutes": "Startwert für die KI.",
+          "ventilation_airing_pause": "Nach dem Lüften kommt Feuchte aus Wänden und Möbeln zurück. Erst nach dieser Pause wird wieder zum Trocknen geraten (unter der Schimmelgrenze); das spart Wärme und Nerven. Startwert für die KI."
         }
       },
       "ai": {
@@ -453,6 +465,54 @@
           },
           "energy_rh_per_k": {
             "name": "Energiespar-Zuschlag",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "mould_rh": {
+            "name": "Schimmelgrenze",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "airing_target_below": {
+            "name": "Lüftziel unter der Schwelle",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "airing_time_factor": {
+            "name": "Lüftdauer-Faktor",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "airing_min_minutes": {
+            "name": "Kürzeste Lüftdauer",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "airing_max_minutes": {
+            "name": "Längste Lüftdauer",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "airing_pause_min": {
+            "name": "Pause nach dem Lüften",
             "data": {
               "min": "Minimum",
               "max": "Maximum",

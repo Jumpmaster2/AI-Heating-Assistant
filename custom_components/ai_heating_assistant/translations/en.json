@@ -204,6 +204,12 @@
           "ventilation_min_ah_advantage": "Minimum drying advantage",
           "ventilation_max_reference_excess": "Maximum outside warmer by",
           "ventilation_energy_rh_per_k": "Energy saving surcharge",
+          "ventilation_mould_rh": "Mould limit",
+          "ventilation_airing_target_below": "Airing target below threshold",
+          "ventilation_airing_time_factor": "Airing time factor",
+          "ventilation_airing_min_minutes": "Shortest airing time",
+          "ventilation_airing_max_minutes": "Longest airing time",
+          "ventilation_airing_pause": "Pause after airing",
           "ventilation_min_cooling_advantage": "Minimum cooling advantage",
           "ventilation_cooling_margin": "Minimum distance above target for cooling",
           "ventilation_cooling_min_temp": "Cool only from room temperature",
@@ -224,7 +230,13 @@
           "ventilation_ai_enabled": "All year the AI reviews the ventilation thresholds of every area with a humidity sensor: it learns what is usual in each room, how low the humidity can get and what airing really achieves. Shares the monthly AI budget.",
           "ventilation_check_interval": "First interval; it doubles with every check that changed nothing relevant and starts over when a room stays humid or a value changes.",
           "ventilation_check_max_interval": "The interval never grows beyond this.",
-          "ventilation_energy_rh_per_k": "Energy saving: within the heating period airing costs heat, the more the colder it is outside. The humidity must then exceed the threshold by this much per Kelvin outside is colder than the room (e.g. 0.25 %/K: at 21 °C inside and 1 °C outside 5 % more), at most up to 70 %, above which airing is always recommended against mould. 0 = off. Start value, the AI adjusts it per area."
+          "ventilation_energy_rh_per_k": "Energy saving: within the heating period airing costs heat, the more the colder it is outside. The humidity must then exceed the threshold by this much per Kelvin outside is colder than the room (e.g. 0.25 %/K: at 21 °C inside and 1 °C outside 5 % more), at most up to 70 %, above which airing is always recommended against mould. 0 = off. Start value, the AI adjusts it per area.",
+          "ventilation_mould_rh": "From this relative humidity airing is always recommended, even in frost and right after an airing; the energy saving surcharge never goes beyond it. Lower it for rooms with cold exterior walls. Start value, the AI adjusts it per area.",
+          "ventilation_airing_target_below": "The suggested airing time aims at this far below the humidity threshold. Start value for the AI.",
+          "ventilation_airing_time_factor": "Scales the suggested airing time. Once two airings are evaluated it is computed from the learned air exchange of the room and the temperature difference, before that from the outside temperature (5 min in frost up to 20 min when warm). Start value for the AI.",
+          "ventilation_airing_min_minutes": "Start value for the AI.",
+          "ventilation_airing_max_minutes": "Start value for the AI.",
+          "ventilation_airing_pause": "After an airing moisture comes back from walls and furniture. Drying is recommended again only after this pause (below the mould limit), which saves heat and nagging. Start value for the AI."
         }
       },
       "ai": {
@@ -453,6 +465,54 @@
           },
           "energy_rh_per_k": {
             "name": "Energy saving surcharge",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. change per check"
+            }
+          },
+          "mould_rh": {
+            "name": "Mould limit",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. change per check"
+            }
+          },
+          "airing_target_below": {
+            "name": "Airing target below threshold",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. change per check"
+            }
+          },
+          "airing_time_factor": {
+            "name": "Airing time factor",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. change per check"
+            }
+          },
+          "airing_min_minutes": {
+            "name": "Shortest airing time",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. change per check"
+            }
+          },
+          "airing_max_minutes": {
+            "name": "Longest airing time",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. change per check"
+            }
+          },
+          "airing_pause_min": {
+            "name": "Pause after airing",
             "data": {
               "min": "Minimum",
               "max": "Maximum",

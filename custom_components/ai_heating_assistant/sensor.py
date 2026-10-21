@@ -163,6 +163,7 @@ def _ventilation_attrs(area: Area) -> dict[str, Any]:
         "humidity_after_exchange": vent.rh_after_exchange,
         "humidity_after_airing": vent.achievable_rh,
         "energy_saving_hold": vent.energy_hold,
+        "settling_after_airing": vent.pause_hold,
         "humidity_worth_airing": vent.required_rh,
         "airing_minutes": vent.airing_minutes,
         "humidity_threshold": area.vent_params.rh_threshold,

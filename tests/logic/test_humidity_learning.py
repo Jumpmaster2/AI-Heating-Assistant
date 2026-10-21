@@ -1,5 +1,7 @@
 """Tests for the learned humidity profile of an area."""
 
+import math
+
 import pytest
 from logic.humidity_learning import FLOOR_DAYS, MIN_DAY_SAMPLES, HumidityProfile
 from logic.physics import absolute_humidity
@@ -119,3 +121,39 @@ def test_missing_values_are_skipped() -> None:
     profile = HumidityProfile()
     profile.add_sample(0.0, "d", "heating", False, None, 50.0, REF_AH, False)
     assert profile.day.n == 0 and profile.hour is None
+
+
+def _exp_airing(profile: HumidityProfile, ts: float, k: float, minutes: int) -> float:
+    """Airing where the gap to the reference shrinks with exp(-k t), 16 K difference."""
+    ah0 = absolute_humidity(21.0, 65.0)
+    for i in range(minutes + 1):
+        ah = REF_AH + (ah0 - REF_AH) * math.exp(-k * i)
+        rh = 100.0 * ah / absolute_humidity(21.0, 100.0)
+        profile.add_sample(ts + i * 60, "d", "heating", False, 21.0, rh, REF_AH, True, 16.0, 7)
+    profile.add_sample(ts + (minutes + 1) * 60, "d", "heating", False, 21.0, 50.0, REF_AH, False)
+    return ts + (minutes + 40) * 60
+
+
+def test_air_exchange_rate_gives_the_airing_time() -> None:
+    profile = HumidityProfile()
+    assert profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0) is None
+    ts = _exp_airing(profile, 0.0, 0.1, 10)
+    _exp_airing(profile, ts, 0.1, 10)
+    # 0.1/min over 10 of the 11 open minutes (closing is seen a minute later), at 16 K
+    k = 0.1 * 10 / 11
+    assert profile.rate.value == pytest.approx(k / 4, rel=0.02)
+    assert profile.events[-1]["suggested_min"] == 7
+    assert profile.last_closed is not None
+    ah0 = absolute_humidity(21.0, 65.0)
+    target = absolute_humidity(21.0, 55.0)
+    expected = -math.log((target - REF_AH) / (ah0 - REF_AH)) / k
+    assert profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0) == pytest.approx(
+        expected, rel=0.03
+    )
+    # less temperature difference: less draft, longer airing
+    assert profile.airing_minutes(21.0, 65.0, REF_AH, 4.0, 55.0) == pytest.approx(
+        expected * 2, rel=0.03
+    )
+    restored = HumidityProfile.from_dict(profile.as_dict())
+    assert restored.rate.value == profile.rate.value
+    assert restored.last_closed == profile.last_closed

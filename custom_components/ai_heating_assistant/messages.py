@@ -154,6 +154,15 @@ _VALUES: dict[str, dict[str, dict[str, str]]] = {
         },
         "min_rh_drop": {"de": "Mindest-Feuchteabfall", "en": "minimum humidity drop"},
         "energy_rh_per_k": {"de": "Energiespar-Zuschlag", "en": "energy saving surcharge"},
+        "mould_rh": {"de": "Schimmelgrenze", "en": "mould limit"},
+        "airing_target_below": {
+            "de": "Lüftziel unter Schwelle",
+            "en": "airing target below threshold",
+        },
+        "airing_time_factor": {"de": "Lüftdauer-Faktor", "en": "airing time factor"},
+        "airing_min_minutes": {"de": "Kürzeste Lüftdauer", "en": "shortest airing time"},
+        "airing_max_minutes": {"de": "Längste Lüftdauer", "en": "longest airing time"},
+        "airing_pause_min": {"de": "Pause nach dem Lüften", "en": "pause after airing"},
         "min_cooling_advantage": {"de": "Mindest-Kühlvorteil", "en": "minimum cooling advantage"},
         "cooling_margin": {"de": "Kühl-Abstand zum Sollwert", "en": "cooling margin"},
         "cooling_min_temp": {

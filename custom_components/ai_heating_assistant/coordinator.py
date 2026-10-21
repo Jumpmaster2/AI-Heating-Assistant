@@ -105,9 +105,15 @@ from .const import (
     CONF_VENT_COOL_MIN_TEMP,
     CONF_VENT_ENERGY,
     CONF_VENT_MAX_EXCESS,
+    CONF_VENT_MAX_MINUTES,
     CONF_VENT_MIN_AH,
     CONF_VENT_MIN_COOLING,
+    CONF_VENT_MIN_MINUTES,
+    CONF_VENT_MOULD_RH,
+    CONF_VENT_PAUSE,
     CONF_VENT_RH,
+    CONF_VENT_TARGET_BELOW,
+    CONF_VENT_TIME_FACTOR,
     CONF_WEATHER,
     CONF_WINDOW_DELAY,
     CONF_WINDOWS,
@@ -626,6 +632,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "min_ah_advantage": float(self.opt(CONF_VENT_MIN_AH)),
             "max_reference_excess": float(self.opt(CONF_VENT_MAX_EXCESS)),
             "energy_rh_per_k": float(self.opt(CONF_VENT_ENERGY)),
+            "mould_rh": float(self.opt(CONF_VENT_MOULD_RH)),
+            "airing_target_below": float(self.opt(CONF_VENT_TARGET_BELOW)),
+            "airing_time_factor": float(self.opt(CONF_VENT_TIME_FACTOR)),
+            "airing_min_minutes": float(self.opt(CONF_VENT_MIN_MINUTES)),
+            "airing_max_minutes": float(self.opt(CONF_VENT_MAX_MINUTES)),
+            "airing_pause_min": float(self.opt(CONF_VENT_PAUSE)),
             "min_cooling_advantage": float(self.opt(CONF_VENT_MIN_COOLING)),
             "cooling_margin": float(self.opt(CONF_VENT_COOL_MARGIN)),
             "cooling_min_temp": float(self.opt(CONF_VENT_COOL_MIN_TEMP)),
@@ -1596,6 +1608,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             else None
         )
         profile = area.humidity_profile
+        previous = area.ventilation
+        delta_t = area.temp - ref_temp if area.temp is not None and ref_temp is not None else None
         if area.has_humidity and minutes > 0:  # extra ticks on state changes count once
             profile.add_sample(
                 ts,
@@ -1606,8 +1620,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 area.humidity,
                 ref_ah,
                 area.own_window_open,
+                delta_t=delta_t,
+                suggested=previous.airing_minutes if previous else None,
             )
-        previous = area.ventilation
+        vp = area.vent_params
         area.ventilation = recommend(
             VentilationInput(
                 temp=area.temp,
@@ -1626,6 +1642,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 was_drying=previous is not None
                 and previous.state == VentilationState.VENTILATE_NOW,
                 achievable_rh=profile.achievable_rh(area.temp, area.humidity, ref_ah),
+                learned_airing_minutes=profile.airing_minutes(
+                    area.temp,
+                    area.humidity,
+                    ref_ah,
+                    delta_t,
+                    vp.rh_threshold - vp.airing_target_below,
+                ),
+                minutes_since_airing=(ts - profile.last_closed) / 60
+                if profile.last_closed is not None
+                else None,
             ),
             area.vent_params,
         )
@@ -1637,6 +1663,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             previous.state if previous else None,
             area.own_window_open,
             heating_active and area.has_circuit,
+            vp.mould_rh,
         )
 
     @property
@@ -2483,6 +2510,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "rec_min",
             "useless_min",
             "energy_hold_min",
+            "pause_hold_min",
             "flips",
         )
         entry = {
