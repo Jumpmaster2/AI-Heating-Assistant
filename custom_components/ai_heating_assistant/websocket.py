@@ -46,6 +46,7 @@ from .const import (
     CONF_CHECK_MAX_INTERVAL,
     CONF_LIMITS,
     CONF_OUTDOOR_TEMP,
+    CONF_PROMPTS,
     CONF_SEASON_END,
     CONF_SEASON_START,
     CONF_TEMP_SENSOR,
@@ -58,6 +59,7 @@ from .const import (
 )
 from .logic.ai_schema import PARAMS, default_limits
 from .logic.physics import parse_day_month
+from .logic.prompts import PromptError, clean_prompts, prompt_defaults
 from .sensor import AREA_SENSORS
 
 DATA_WS = f"{DOMAIN}_ws_registered"
@@ -212,6 +214,12 @@ def apply_options(current: dict[str, Any], changes: dict[str, Any]) -> dict[str,
         if key == CONF_LIMITS:
             updates[key] = _limits(value, current.get(CONF_LIMITS))
             continue
+        if key == CONF_PROMPTS:
+            try:
+                updates[key] = clean_prompts(value)
+            except PromptError as err:
+                raise PanelError(str(err), CONF_PROMPTS) from err
+            continue
         if key not in fields:
             raise PanelError("unknown_option", key)
         try:
@@ -318,6 +326,7 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         )
     options = {**DEFAULTS, **entry.options}
     options[CONF_LIMITS] = _limits({}, entry.options.get(CONF_LIMITS))
+    options[CONF_PROMPTS] = entry.options.get(CONF_PROMPTS) or {}
     learned_specs: dict[str, Any] = {}
     if coordinator is not None:
         keys = dict.fromkeys((LEARNED_THETA, *START_KEYS), 0.0)
@@ -338,6 +347,7 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "learned_specs": learned_specs,
         "limit_params": [{"key": p.key, "unit": p.unit} for p in PARAMS.values()],
         "model_prices": {k: list(v) for k, v in MODEL_PRICE_SUGGESTIONS.items()},
+        "prompt_defaults": prompt_defaults(),
     }
 
 

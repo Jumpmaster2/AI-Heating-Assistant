@@ -1203,3 +1203,75 @@ async def test_import_reports_bad_data_but_not_programming_errors(
         await hass.services.async_call(
             DOMAIN, "import_parameters", {"data": {}}, blocking=True, return_response=True
         )
+
+
+DRAFT_WINDOWS = ["binary_sensor.kids_room_window", "binary_sensor.bedroom_window"]
+
+
+async def _heating_with_draft(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, mode: str
+) -> None:
+    for window in DRAFT_WINDOWS:
+        hass.states.async_set(window, "off")
+    area = {**AREA_DATA, "draft_window_sensors": DRAFT_WINDOWS, "draft_mode": mode}
+    await _setup(hass, make_entry(areas=[area]))
+    await _advance(hass, freezer, 11)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "on"
+
+
+async def test_cross_draft_from_other_rooms_pauses_heating(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    await _heating_with_draft(hass, freezer, "all")
+    # one of the opposite rooms open: no cross ventilation yet
+    hass.states.async_set(DRAFT_WINDOWS[0], "on")
+    await _advance(hass, freezer, 7)
+    assert hass.states.get("sensor.living_room_status").state == "heating"
+    assert not hass.states.get("climate.living_room").attributes["draft"]
+
+    # both open: the living room behaves as with its own window open
+    hass.states.async_set(DRAFT_WINDOWS[1], "on")
+    await _advance(hass, freezer, 1)
+    hass.states.async_set("sensor.living_room_temperature", "18.0")
+    await _advance(hass, freezer, 5)
+    assert hass.states.get("sensor.living_room_status").state == "window_open"
+    assert hass.states.get("climate.living_room").attributes["draft"]
+    await _advance(hass, freezer, 5)
+    assert hass.states.get("input_boolean.heating_circuit_1").state == "off"
+    # the own window is closed: no request to close it
+    vent = hass.states.get("sensor.living_room_ventilation_recommendation")
+    assert vent.state != "close_window"
+
+    hass.states.async_set(DRAFT_WINDOWS[0], "off")
+    await _advance(hass, freezer, 1)
+    assert hass.states.get("sensor.living_room_status").state == "recovery"
+
+
+async def test_draft_from_any_open_window(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    await _heating_with_draft(hass, freezer, "any")
+    hass.states.async_set(DRAFT_WINDOWS[1], "on")
+    await _advance(hass, freezer, 6)
+    assert hass.states.get("sensor.living_room_status").state == "window_open"
+
+
+async def test_prompt_blocks_reach_the_ai(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    answer = (
+        {"heating_day": True, "confidence": 80, "reason": "Cold.", "critical_area": ""},
+        USAGE,
+    )
+    prompts = {
+        "nightly": {
+            "disabled": ["learn"],
+            "custom": [{"text": "Abends brennt meist der Kaminofen.", "enabled": True}],
+        }
+    }
+    with patch(STRUCTURED, return_value=answer) as mock:
+        await _setup(hass, make_entry(api_key="test-key", prompt_blocks=prompts))
+    system = mock.call_args.args[0]
+    assert "Kaminofen" in system
+    assert "Learn from recent errors" not in system

@@ -46,6 +46,8 @@ from .const import (
     CONF_CHECK_MAX_INTERVAL,
     CONF_DEAD_TIME,
     CONF_DEFAULT_TARGET,
+    CONF_DRAFT_MODE,
+    CONF_DRAFT_WINDOWS,
     CONF_EMERGENCY_DELTA,
     CONF_EMERGENCY_DURATION,
     CONF_EMERGENCY_ENABLED,
@@ -72,6 +74,7 @@ from .const import (
     CONF_PRICE_CACHE_WRITE,
     CONF_PRICE_INPUT,
     CONF_PRICE_OUTPUT,
+    CONF_PROMPTS,
     CONF_PUFFER,
     CONF_PUFFER_DOWN,
     CONF_PUFFER_UP,
@@ -236,7 +239,9 @@ class Area:
     check: dict[str, float]
     temp: float | None = None
     humidity: float | None = None
-    window_open: bool = False
+    window_open: bool = False  # own window or draft: the controller pauses either way
+    own_window_open: bool = False
+    draft: bool = False  # draft through windows open in other rooms
     switch_on: bool = False
     switch_available: bool = False
     last_switch_change: float | None = None
@@ -672,6 +677,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 if area.cfg.get(key):
                     watched.add(area.cfg[key])
             watched.update(area.cfg.get(CONF_WINDOWS) or [])
+            watched.update(area.cfg.get(CONF_DRAFT_WINDOWS) or [])
             if area.has_circuit:
                 switches[area.cfg[CONF_SWITCH]] = area.area_id
         self._switch_map = switches
@@ -1239,7 +1245,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         cfg = area.cfg
         area.temp = self._temp(cfg.get(CONF_TEMP_SENSOR))
         area.humidity = self._humidity(cfg.get(CONF_HUMIDITY_SENSOR))
-        area.window_open = any(self._is_on(w) for w in cfg.get(CONF_WINDOWS) or [])
+        area.own_window_open = any(self._is_on(w) for w in cfg.get(CONF_WINDOWS) or [])
+        area.draft = self._draft(cfg)
+        area.window_open = area.own_window_open or area.draft
 
         if area.has_circuit:
             switch_state = self._state(cfg[CONF_SWITCH])
@@ -1261,6 +1269,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             area.effective_target = None
 
         self._ventilation(area, heating_day)
+
+    def _draft(self, cfg: dict[str, Any]) -> bool:
+        """Draft through windows of other rooms: all of them open (cross ventilation) or
+        any one, as configured. A sensor that is also an own window counts only there."""
+        own = set(cfg.get(CONF_WINDOWS) or [])
+        sensors = [w for w in cfg.get(CONF_DRAFT_WINDOWS) or [] if w not in own]
+        if not sensors:
+            return False
+        states = [self._is_on(w) for w in sensors]
+        return any(states) if cfg.get(CONF_DRAFT_MODE) == "any" else all(states)
 
     async def _control_area(
         self, area: Area, ts: float, minutes: float, heating_day: bool, return_ts: float | None
@@ -1487,7 +1505,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 humidity=area.humidity,
                 ref_temp=ref_temp,
                 ref_humidity=ref_hum,
-                window_open=area.window_open,
+                # only an own window: a draft from elsewhere is closed in the other rooms
+                window_open=area.own_window_open,
                 heating_active=heating_active,
                 blocked=self._is_blocking(cfg.get(CONF_VENT_BLOCK)),
                 reference_is_indoor=indoor_ref,
@@ -1881,6 +1900,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     "target": a.effective_target or a.target,
                     "puffer": a.params.puffer,
                     "window_open": a.window_open,
+                    **({"draft": True} if a.draft else {}),
                     "cool_kph": r(a.learned_values.cool_rate_kph, 3),
                     "confidence": a.learner.confidence() if a.learner else 0,
                 }
@@ -1909,7 +1929,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 for h in history
             ],
         }
-        system, user = nightly_messages(payload, self.language)
+        system, user = nightly_messages(payload, self.language, self.opt(CONF_PROMPTS))
         data = await self._ai_call("nightly", system, user, NIGHTLY_SCHEMA)
         if data is None:
             return None
@@ -2090,7 +2110,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "history": self.ai_state.get("check_history", []),
             "limits": {k: [v["min"], v["max"], v["step"]] for k, v in limits.items()},
         }
-        system, user = check_messages(payload, self.language)
+        system, user = check_messages(payload, self.language, self.opt(CONF_PROMPTS))
         data = await self._ai_call("check", system, user, CHECK_SCHEMA)
         self.ai_state["last_check"] = now.isoformat()
         comfort_issue = any(

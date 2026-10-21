@@ -265,6 +265,8 @@ async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, b
             "temperature_sensor": "sensor.storage_temperature",
             "humidity_sensor": "sensor.storage_humidity",
             "window_sensors": [],
+            "draft_window_sensors": ["binary_sensor.living_room_window"],
+            "draft_mode": "any",
         },
         "heating": {
             "default_target": 18.0,
@@ -280,6 +282,9 @@ async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, b
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["reason"] == "reconfigure_successful"
     assert entry.runtime_data.areas[sub.subentry_id].target == 18.0
+    data = entry.subentries[sub.subentry_id].data
+    assert data["draft_window_sensors"] == ["binary_sensor.living_room_window"]
+    assert data["draft_mode"] == "any"
 
 
 async def test_existing_area_edits_learned_values(hass: HomeAssistant, base_states) -> None:

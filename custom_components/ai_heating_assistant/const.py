@@ -67,6 +67,7 @@ CONF_PRICE_CACHE_WRITE = "price_cache_write"
 CONF_PRICE_CACHE_READ = "price_cache_read"
 CONF_MAX_OUTPUT_TOKENS = "max_output_tokens"
 CONF_LIMITS = "limits"
+CONF_PROMPTS = "prompt_blocks"
 
 CONF_THETA_START = "theta_start"
 CONF_TOO_COLD_MARGIN = "too_cold_margin"
@@ -91,6 +92,10 @@ HEATING_TYPES: Final = ("underfloor", "radiator", "other")
 CONF_TEMP_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_WINDOWS = "window_sensors"
+# windows of other rooms whose draft cools this area too (cross ventilation)
+CONF_DRAFT_WINDOWS = "draft_window_sensors"
+CONF_DRAFT_MODE = "draft_mode"
+DRAFT_MODES: Final = ("all", "any")
 CONF_DEFAULT_TARGET = "default_target"
 CONF_MIN_TARGET = "min_target"
 CONF_MAX_TARGET = "max_target"
@@ -178,6 +183,8 @@ DEFAULTS: Final[dict[str, object]] = {
 
 AREA_DEFAULTS: Final[dict[str, object]] = {
     CONF_WINDOWS: [],
+    CONF_DRAFT_WINDOWS: [],
+    CONF_DRAFT_MODE: "all",
     CONF_DEFAULT_TARGET: 21.0,
     CONF_MIN_TARGET: 16.0,
     CONF_MAX_TARGET: 24.0,

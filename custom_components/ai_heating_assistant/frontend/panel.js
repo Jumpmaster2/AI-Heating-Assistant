@@ -31,6 +31,7 @@ const UI = {
       schedule: ["Zeiten", "Nachtlauf und periodische Prüfung an Heiztagen."],
       costs: ["Budget und Preise", "Preise je Million Tokens."],
       limits: ["KI-Grenzen", "Minimum, Maximum und größte Änderung je Prüfung für jeden Parameter, den die KI anpassen darf."],
+      prompts: ["KI-Anweisungen", "Bausteine der Anweisungen an die KI. Standard-Bausteine lassen sich abschalten oder umformulieren, eigene Bausteine ergänzen sie (in jeder Sprache). Aufgabe und Antwortformat bleiben fest."],
       dayrule: ["Heiztag-Regel", "Gelernte Schwelle theta. Der Startwert wird nur beim Einrichten gesetzt; eine Änderung hier ersetzt den gelernten Wert."],
       evaluation: ["Bewertung", "Wann ein Bereich als zu kalt gilt."],
       learning: ["Lernschritte", "Wie stark theta und puffer nach einem Fehler angepasst werden."],
@@ -125,6 +126,38 @@ const UI = {
       invalid_value: "Ungültiger Wert",
       unknown_option: "Unbekannte Einstellung",
       api_key_required: "Bitte einen API-Key eingeben.",
+      too_many_blocks: "Höchstens 10 eigene Bausteine je Aufruf.",
+      text_too_long: "Ein Baustein darf höchstens 2000 Zeichen lang sein.",
+    },
+    prompts: {
+      kinds: { nightly: "Nachtentscheidung (Heiztag ja/nein)", check: "Parameterprüfung" },
+      blocks: {
+        nightly: {
+          rules: "Regeln an Heiztagen und Tagen ohne Heizbetrieb",
+          types: "Heizungsarten",
+          goal: "Ziel und gespeicherte Wärme",
+          data: "Erklärung der Daten",
+          learn: "Aus Fehlern lernen",
+        },
+        check: {
+          types: "Heizungsarten",
+          controller: "Arbeitsweise der Regelung",
+          stats: "Erklärung der Statistik",
+          comfort: "Komfort vor Einsparung",
+          levers: "Stellhebel",
+          history: "Verlauf beurteilen",
+          changes: "Umfang der Änderungen",
+        },
+      },
+      standard: "Standard-Bausteine",
+      custom: "Eigene Bausteine",
+      changed: "geändert",
+      reset: "Standard wiederherstellen",
+      addBlock: "Baustein hinzufügen",
+      removeBlock: "Entfernen",
+      placeholder: "z. B. Im Wohnbereich ist abends meist ein Kaminofen an.",
+      preview: "Vorschau der Anweisung",
+      previewNote: "Dazu kommen die Antwortsprache und, bei der Parameterprüfung, die Liste der Parameter.",
     },
     loadError: "Konfiguration konnte nicht geladen werden",
   },
@@ -150,6 +183,7 @@ const UI = {
       schedule: ["Times", "Nightly run and periodic check on heating days."],
       costs: ["Budget and prices", "Prices per million tokens."],
       limits: ["AI limits", "Minimum, maximum and largest change per check for every parameter the AI may adjust."],
+      prompts: ["AI instructions", "Building blocks of the instructions to the AI. Standard blocks can be switched off or reworded, own blocks add to them (in any language). Task and answer format stay fixed."],
       dayrule: ["Heating day rule", "Learned threshold theta. Its start value is only set during setup; a change here replaces the learned value."],
       evaluation: ["Evaluation", "When an area counts as too cold."],
       learning: ["Learning steps", "How much theta and puffer change after an error."],
@@ -244,6 +278,38 @@ const UI = {
       invalid_value: "Invalid value",
       unknown_option: "Unknown setting",
       api_key_required: "Please enter an API key.",
+      too_many_blocks: "At most 10 own blocks per call.",
+      text_too_long: "A block may have at most 2000 characters.",
+    },
+    prompts: {
+      kinds: { nightly: "Nightly decision (heating day yes/no)", check: "Parameter check" },
+      blocks: {
+        nightly: {
+          rules: "Rules on heating and no-heating days",
+          types: "Heating types",
+          goal: "Goal and stored heat",
+          data: "Explanation of the data",
+          learn: "Learn from errors",
+        },
+        check: {
+          types: "Heating types",
+          controller: "How the controller works",
+          stats: "Explanation of the statistics",
+          comfort: "Comfort before savings",
+          levers: "Levers",
+          history: "Judging the history",
+          changes: "Extent of changes",
+        },
+      },
+      standard: "Standard blocks",
+      custom: "Own blocks",
+      changed: "changed",
+      reset: "Restore standard",
+      addBlock: "Add block",
+      removeBlock: "Remove",
+      placeholder: "e.g. A wood stove usually burns in the living area in the evening.",
+      preview: "Preview of the instruction",
+      previewNote: "The answer language and, for the parameter check, the list of parameters are added.",
     },
     loadError: "Could not load the configuration",
   },
@@ -288,6 +354,7 @@ const SETTINGS = {
     { id: "schedule", icon: "mdi:clock-outline", fields: ["nightly_time", "check_interval", "check_max_interval"] },
     { id: "costs", icon: "mdi:currency-usd", fields: ["monthly_budget", "price_input", "price_output", "price_cache_write", "price_cache_read"] },
     { id: "limits", icon: "mdi:arrow-expand-horizontal", special: "limits" },
+    { id: "prompts", icon: "mdi:text-box-edit-outline", special: "prompts" },
   ],
   decision: [
     { id: "dayrule", icon: "mdi:thermometer-lines", special: "theta" },
@@ -312,7 +379,7 @@ const SETTINGS = {
 // Groups of the heating area editor as in the dialog: [section, fields, collapsed].
 // The start values only when an area is created; an existing one shows its learned values.
 const AREA_GROUPS = [
-  ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors"], false],
+  ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors", "draft_window_sensors", "draft_mode"], false],
   ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time", "heating_type"], false],
   ["start_values", ["window_delay", "recovery_time", "dead_time", "puffer"], true],
   ["learned_values", ["window_delay", "recovery_time", "dead_time", "puffer"], false],
@@ -433,7 +500,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const texts = { ...this.labels.errors, ...(area ? this.labels.area_errors : {}), ...this.ui.errors };
     const text = texts[code] || message;
     if (!field) return text;
-    const name = this.labels.limits[field] || this.label(field)[0];
+    const name = this.labels.limits[field] || this.ui.cards[field]?.[0] || this.label(field)[0];
     return `${name}: ${text}`;
   }
 
@@ -962,6 +1029,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
   _settingsCard(card) {
     if (card.special === "apikey") return this._apiKeyCard(card);
     if (card.special === "limits") return this._limitsCard(card);
+    if (card.special === "prompts") return this._promptsCard(card);
     if (card.special === "theta") return this._thetaCard(card);
     const specs = this._cfg.option_specs;
     const fields = card.fields.map((key) => this._field(card.id, key, specs[key], this._value(card.id, key))).join("");
@@ -1009,6 +1077,133 @@ class AiHeatingAssistantPanel extends HTMLElement {
     return `<div class="card" data-card="limits">${this._head(card)}
       <div class="table-wrap"><table class="limits"><thead><tr><th class="c-name"></th><th>${esc(cols.min)}</th><th>${esc(cols.max)}</th><th>${esc(cols.step)}</th></tr></thead>
       <tbody>${rows}</tbody></table></div>${this._actions("limits")}</div>`;
+  }
+
+  // Prompt configuration of one call from the draft or the saved options.
+  _promptConfig(kind) {
+    const all = this._drafts.prompts?.prompt_blocks || this._cfg.options.prompt_blocks || {};
+    const config = all[kind] || {};
+    return { disabled: config.disabled || [], overrides: config.overrides || {}, custom: config.custom || [] };
+  }
+
+  _promptDraft(kind) {
+    const draft = (this._drafts.prompts = this._drafts.prompts || { prompt_blocks: clone(this._cfg.options.prompt_blocks || {}) });
+    const config = (draft.prompt_blocks[kind] = { ...this._promptConfig(kind), ...(draft.prompt_blocks[kind] || {}) });
+    const save = this.shadowRoot.querySelector('[data-save="prompts"]');
+    if (save) save.disabled = false;
+    return config;
+  }
+
+  // Same assembly as logic/prompts.py build_system.
+  _promptPreview(kind) {
+    const spec = this._cfg.prompt_defaults[kind];
+    const config = this._promptConfig(kind);
+    const parts = [spec.head];
+    for (const block of spec.blocks) {
+      if (!config.disabled.includes(block.id)) parts.push(String(config.overrides[block.id] || block.text).trim());
+    }
+    const custom = config.custom.filter((c) => c.enabled !== false).map((c) => String(c.text || "").trim()).filter(Boolean);
+    const text = parts.filter(Boolean).join(" ");
+    if (custom.length) return [text, spec.custom_head, ...custom.map((c) => `- ${c}`), spec.tail].join("\n");
+    return `${text} ${spec.tail}`;
+  }
+
+  _promptsCard(card) {
+    const ui = this.ui.prompts;
+    const kinds = Object.keys(this._cfg.prompt_defaults || {});
+    const opened = (key) => (this._openDetails?.has(key) ? "open" : "");
+    const switchHtml = (attrs, on) =>
+      `<input type="checkbox" class="switch-input" ${attrs} ${on ? "checked" : ""}><span class="switch ${on ? "on" : ""}"></span>`;
+    const groups = kinds
+      .map((kind) => {
+        const spec = this._cfg.prompt_defaults[kind];
+        const config = this._promptConfig(kind);
+        const standard = spec.blocks
+          .map((block) => {
+            const on = !config.disabled.includes(block.id);
+            const changed = block.id in config.overrides;
+            const text = changed ? config.overrides[block.id] : block.text;
+            const name = ui.blocks[kind]?.[block.id] || block.id;
+            const keep = `prompt-${kind}-${block.id}`;
+            return `<div class="prompt-block ${on ? "" : "off"}">
+              <label class="field toggle-row"><span><span class="lbl">${esc(name)}${changed ? ` <span class="pill muted">${esc(ui.changed)}</span>` : ""}</span></span>
+                ${switchHtml(`data-prompt="toggle" data-kind="${kind}" data-block="${esc(block.id)}"`, on)}</label>
+              <details data-keep="${keep}" ${opened(keep)}><summary class="small muted">${esc(text.slice(0, 90))}${text.length > 90 ? " …" : ""}</summary>
+                <textarea rows="4" data-prompt="override" data-kind="${kind}" data-block="${esc(block.id)}">${esc(text)}</textarea>
+                ${changed ? `<div class="actions"><button class="btn" data-prompt-action="reset" data-kind="${kind}" data-block="${esc(block.id)}">${esc(ui.reset)}</button></div>` : ""}
+              </details></div>`;
+          })
+          .join("");
+        const custom = config.custom
+          .map((item, i) => {
+            const on = item.enabled !== false;
+            return `<div class="prompt-block ${on ? "" : "off"}">
+              <textarea rows="3" data-prompt="custom" data-kind="${kind}" data-index="${i}" placeholder="${esc(ui.placeholder)}">${esc(item.text || "")}</textarea>
+              <div class="actions">
+                <label class="toggle-row">${switchHtml(`data-prompt="custom-toggle" data-kind="${kind}" data-index="${i}"`, on)}</label>
+                <button class="btn danger" data-prompt-action="remove" data-kind="${kind}" data-index="${i}">${esc(ui.removeBlock)}</button>
+              </div></div>`;
+          })
+          .join("");
+        const keep = `prompt-${kind}-preview`;
+        return `<h3>${esc(ui.kinds[kind] || kind)}</h3>
+          <div class="lbl small muted">${esc(ui.standard)}</div>${standard}
+          <div class="lbl small muted">${esc(ui.custom)}</div>${custom}
+          <div class="actions"><button class="btn" data-prompt-action="add" data-kind="${kind}" ${config.custom.length >= 10 ? "disabled" : ""}>
+            <ha-icon icon="mdi:plus"></ha-icon>${esc(ui.addBlock)}</button></div>
+          <details data-keep="${keep}" ${opened(keep)}><summary>${esc(ui.preview)}</summary>
+            <pre class="prompt-preview" data-preview="${kind}">${esc(this._promptPreview(kind))}</pre>
+            <small class="muted">${esc(ui.previewNote)}</small></details>`;
+      })
+      .join("");
+    return `<div class="card" data-card="prompts">${this._head(card)}${groups}${this._actions("prompts")}</div>`;
+  }
+
+  _onPromptInput(el) {
+    const { kind, block, index } = el.dataset;
+    const config = this._promptDraft(kind);
+    switch (el.dataset.prompt) {
+      case "toggle":
+        config.disabled = el.checked ? config.disabled.filter((id) => id !== block) : [...config.disabled, block];
+        el.nextElementSibling?.classList.toggle("on", el.checked);
+        el.closest(".prompt-block")?.classList.toggle("off", !el.checked);
+        break;
+      case "override": {
+        const standard = this._cfg.prompt_defaults[kind].blocks.find((b) => b.id === block)?.text;
+        const overrides = { ...config.overrides };
+        if (el.value.trim() && el.value.trim() !== standard) overrides[block] = el.value;
+        else delete overrides[block];
+        config.overrides = overrides;
+        break;
+      }
+      case "custom":
+        config.custom = config.custom.map((c, i) => (i === Number(index) ? { ...c, text: el.value } : c));
+        break;
+      case "custom-toggle":
+        config.custom = config.custom.map((c, i) => (i === Number(index) ? { ...c, enabled: el.checked } : c));
+        el.nextElementSibling?.classList.toggle("on", el.checked);
+        el.closest(".prompt-block")?.classList.toggle("off", !el.checked);
+        break;
+      default:
+        break;
+    }
+    const preview = this.shadowRoot.querySelector(`[data-preview="${kind}"]`);
+    if (preview) preview.textContent = this._promptPreview(kind);
+  }
+
+  _onPromptAction(el) {
+    const { kind, block, index } = el.dataset;
+    const config = this._promptDraft(kind);
+    if (el.dataset.promptAction === "reset") {
+      const overrides = { ...config.overrides };
+      delete overrides[block];
+      config.overrides = overrides;
+    } else if (el.dataset.promptAction === "add") {
+      config.custom = [...config.custom, { text: "", enabled: true }];
+    } else if (el.dataset.promptAction === "remove") {
+      config.custom = config.custom.filter((_, i) => i !== Number(index));
+    }
+    this._rerenderContent(el.dataset.promptAction === "add" ? `[data-prompt="custom"][data-kind="${kind}"][data-index="${config.custom.length - 1}"]` : undefined);
   }
 
   _toggle(cardId, key, name, help, on) {
@@ -1100,6 +1295,11 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const el = ev.target;
     // typing in the search of a picker is no value; ha-selector reports value-changed
     if (el.localName === "ha-selector") return;
+    if (el.dataset.prompt) {
+      // text: every keystroke; switches: only once (change), not twice
+      if (el.type !== "checkbox" || isChange) this._onPromptInput(el);
+      return;
+    }
     if (el.dataset.limit) {
       const draft = (this._drafts.limits = this._drafts.limits || { limits: clone(this._cfg.options.limits) });
       draft.limits[el.dataset.limit] = { ...draft.limits[el.dataset.limit], [el.dataset.part]: el.value === "" ? null : Number(el.value) };
@@ -1227,6 +1427,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
       this._rerenderContent();
       return;
     }
+    if (d.promptAction) return this._onPromptAction(el);
     if (d.save) return this._saveCard(d.save, el);
     if (d.cancel) {
       delete this._drafts[d.cancel];
@@ -1473,6 +1674,13 @@ table.limits td { padding:4px; }
 .card.learn details { margin-top:8px; }
 .card.learn summary { font-size:13px; }
 details { margin-top:16px; }
+.prompt-block { border-top:1px solid var(--divider-color, #e0e0e0); padding:8px 0; }
+.prompt-block.off .lbl, .prompt-block.off textarea { opacity:.55; }
+.prompt-block details { margin-top:4px; }
+.prompt-block .actions { margin-top:6px; }
+.card[data-card="prompts"] h3 { margin:20px 0 8px; font-size:15px; }
+textarea { width:100%; box-sizing:border-box; font:inherit; font-size:13px; padding:8px; border-radius:6px; border:1px solid var(--divider-color); background:var(--card-background-color, #fff); color:var(--primary-text-color); resize:vertical; }
+.prompt-preview { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; background:var(--secondary-background-color, #f5f5f5); padding:8px; border-radius:6px; max-height:320px; overflow:auto; }
 summary { cursor:pointer; font-weight:500; color:var(--primary-color); }
 details .desc { margin-top:8px; }
 .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--primary-text-color); color:var(--primary-background-color); padding:10px 18px; border-radius:8px; z-index:10; }

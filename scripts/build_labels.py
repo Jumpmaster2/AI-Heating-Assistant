@@ -71,6 +71,7 @@ def labels(translation: dict[str, Any]) -> dict[str, Any]:
         },
         "effort": translation["selector"]["effort"]["options"],
         "heating_type": translation["selector"]["heating_type"]["options"],
+        "draft_mode": translation["selector"]["draft_mode"]["options"],
     }
 
 

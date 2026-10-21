@@ -191,6 +191,24 @@ async def test_areas(hass: HomeAssistant, base_states, hass_ws_client) -> None:
     assert msg["success"], msg
     assert entry.subentries[sub_id].title == "Bathroom"
     assert entry.subentries[sub_id].data["default_target"] == 22.5
+    # draft from the windows of other rooms; the mode defaults to cross ventilation
+    assert entry.subentries[sub_id].data["draft_mode"] == "all"
+    msg = await _send(
+        client,
+        type=f"{DOMAIN}/save_area",
+        subentry_id=sub_id,
+        title="Bathroom",
+        data={
+            **entry.subentries[sub_id].data,
+            "draft_window_sensors": ["binary_sensor.living_room_window"],
+            "draft_mode": "any",
+        },
+    )
+    assert msg["success"], msg
+    assert entry.subentries[sub_id].data["draft_window_sensors"] == [
+        "binary_sensor.living_room_window"
+    ]
+    assert entry.subentries[sub_id].data["draft_mode"] == "any"
 
     for title, data, error in (
         ("", {"temperature_sensor": "sensor.x"}, "name_required"),
@@ -340,3 +358,35 @@ async def test_saved_limits_are_in_the_reply_at_once(
     limits = {**entry.options["limits"], "theta": {**entry.options["limits"]["theta"], "max": 25.0}}
     hass.config_entries.async_update_entry(entry, options={**entry.options, "limits": limits})
     assert coordinator.limits["theta"]["max"] == 25.0
+
+
+async def test_save_prompt_blocks(hass: HomeAssistant, base_states, hass_ws_client) -> None:
+    entry = await _setup(hass)
+    client = await hass_ws_client(hass)
+    msg = await _send(client, type=f"{DOMAIN}/config")
+    defaults = msg["result"]["prompt_defaults"]
+    assert {b["id"] for b in defaults["nightly"]["blocks"]} >= {"types", "learn"}
+    assert msg["result"]["options"]["prompt_blocks"] == {}
+
+    prompts = {
+        "nightly": {"disabled": ["learn"], "custom": [{"text": " Kaminofen ", "enabled": True}]},
+        "check": {"overrides": {"levers": "Own levers."}},
+    }
+    msg = await _send(client, type=f"{DOMAIN}/save_options", options={"prompt_blocks": prompts})
+    assert msg["success"], msg
+    assert entry.options["prompt_blocks"] == {
+        "nightly": {"disabled": ["learn"], "custom": [{"text": "Kaminofen", "enabled": True}]},
+        "check": {"overrides": {"levers": "Own levers."}},
+    }
+    assert msg["result"]["options"]["prompt_blocks"] == entry.options["prompt_blocks"]
+
+    for options, error in (
+        ({"prompt_blocks": {"nightly": {"disabled": ["x"]}}}, "invalid_value:prompt_blocks"),
+        (
+            {"prompt_blocks": {"check": {"custom": [{"text": "x" * 2001}]}}},
+            "text_too_long:prompt_blocks",
+        ),
+    ):
+        msg = await _send(client, type=f"{DOMAIN}/save_options", options=options)
+        assert not msg["success"], options
+        assert msg["error"]["message"] == error

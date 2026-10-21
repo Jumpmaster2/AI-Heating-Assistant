@@ -414,12 +414,16 @@
               "data": {
                 "temperature_sensor": "Temperature sensor",
                 "humidity_sensor": "Humidity sensor",
-                "window_sensors": "Window sensors"
+                "window_sensors": "Window sensors",
+                "draft_window_sensors": "Draft from other rooms",
+                "draft_mode": "Draft when"
               },
               "data_description": {
                 "temperature_sensor": "Room temperature of the area.",
                 "humidity_sensor": "Relative humidity, needed for the ventilation recommendation.",
-                "window_sensors": "One or more window/door contacts ('on' = open)."
+                "window_sensors": "One or more window/door contacts ('on' = open).",
+                "draft_window_sensors": "Window contacts of other rooms whose draft also cools this area, e.g. two opposite rooms aired at the same time. While draft is detected the area behaves as with an open own window: heating pauses after the window delay and waits the recovery time.",
+                "draft_mode": "All open: only cross ventilation (every selected window open) counts. Any open: one open window is enough."
               }
             },
             "heating": {
@@ -491,12 +495,16 @@
               "data": {
                 "temperature_sensor": "Temperature sensor",
                 "humidity_sensor": "Humidity sensor",
-                "window_sensors": "Window sensors"
+                "window_sensors": "Window sensors",
+                "draft_window_sensors": "Draft from other rooms",
+                "draft_mode": "Draft when"
               },
               "data_description": {
                 "temperature_sensor": "Room temperature of the area.",
                 "humidity_sensor": "Relative humidity, needed for the ventilation recommendation.",
-                "window_sensors": "One or more window/door contacts ('on' = open)."
+                "window_sensors": "One or more window/door contacts ('on' = open).",
+                "draft_window_sensors": "Window contacts of other rooms whose draft also cools this area, e.g. two opposite rooms aired at the same time. While draft is detected the area behaves as with an open own window: heating pauses after the window delay and waits the recovery time.",
+                "draft_mode": "All open: only cross ventilation (every selected window open) counts. Any open: one open window is enough."
               }
             },
             "heating": {
@@ -578,6 +586,12 @@
         "underfloor": "Underfloor heating",
         "radiator": "Radiators",
         "other": "Other (e.g. wall heating)"
+      }
+    },
+    "draft_mode": {
+      "options": {
+        "all": "All selected windows are open",
+        "any": "Any selected window is open"
       }
     },
     "month": {
