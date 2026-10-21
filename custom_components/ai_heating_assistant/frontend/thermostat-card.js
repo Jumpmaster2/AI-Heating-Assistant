@@ -1,10 +1,13 @@
-// AI Heating Assistant thermostat card: the dial of the Home Assistant thermostat
-// card, with the room humidity next to the second temperature (same size).
-// Plain web component without build step, loaded on every dashboard by the
-// integration. Type: custom:ai-heating-thermostat-card
+// AI Heating Assistant cards, plain web components without build step, loaded on
+// every dashboard by the integration:
+// custom:ai-heating-thermostat-card: the dial of the Home Assistant thermostat card,
+//   with the room humidity next to the second temperature (same size).
+// custom:ai-heating-climate-tile-card: a tile with the name and temperature and
+//   humidity side by side.
 
 const DOMAIN = "ai_heating_assistant";
 const CARD = "ai-heating-thermostat-card";
+const TILE = "ai-heating-climate-tile-card";
 
 const UI = {
   de: {
@@ -17,6 +20,10 @@ const UI = {
     notFound: "Entität nicht gefunden",
     unavailable: "Nicht verfügbar",
     target: "Solltemperatur",
+    tileName: "AI Heating Assistant Raumklima",
+    tileDescription: "Name mit Temperatur und Luftfeuchte nebeneinander.",
+    temperatureEntity: "Temperatursensor (statt Thermostat)",
+    humidityEntity: "Feuchtesensor (statt Thermostat)",
   },
   en: {
     name: "AI Heating Assistant thermostat",
@@ -28,6 +35,10 @@ const UI = {
     notFound: "Entity not found",
     unavailable: "Unavailable",
     target: "Target temperature",
+    tileName: "AI Heating Assistant room climate",
+    tileDescription: "Name with temperature and humidity side by side.",
+    temperatureEntity: "Temperature sensor (instead of the thermostat)",
+    humidityEntity: "Humidity sensor (instead of the thermostat)",
   },
 };
 
@@ -434,6 +445,140 @@ class AiHeatingThermostatCard extends HTMLElement {
       this._hass.callService("climate", "set_temperature", { entity_id: this._config.entity, temperature: value });
     }, delay);
   }
+}
+
+// Tile with the name and temperature and humidity side by side. The values come
+// from the thermostat (entity) or from sensors (temperature_entity, humidity_entity,
+// also for areas without a heating circuit); a sensor wins over the thermostat.
+class AiHeatingClimateTileCard extends HTMLElement {
+  static getStubConfig(hass) {
+    return AiHeatingThermostatCard.getStubConfig(hass);
+  }
+
+  static getConfigForm() {
+    const t = ui(docLang());
+    const sensor = (deviceClass) => ({ entity: { filter: { domain: "sensor", device_class: deviceClass } } });
+    return {
+      schema: [
+        { name: "entity", selector: { entity: { filter: { domain: "climate", integration: DOMAIN } } } },
+        { name: "name", selector: { text: {} } },
+        { name: "temperature_entity", selector: sensor("temperature") },
+        { name: "humidity_entity", selector: sensor("humidity") },
+      ],
+      computeLabel: (s) =>
+        ({
+          entity: t.entity,
+          name: t.title,
+          temperature_entity: t.temperatureEntity,
+          humidity_entity: t.humidityEntity,
+        })[s.name],
+    };
+  }
+
+  setConfig(config) {
+    if (!config?.entity && !config?.temperature_entity && !config?.humidity_entity) {
+      throw new Error("entity, temperature_entity or humidity_entity required");
+    }
+    this._config = { ...config };
+    this._html = null;
+    if (this._hass) this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  getCardSize() {
+    return 1;
+  }
+
+  getGridOptions() {
+    return { columns: 6, rows: 1, min_columns: 3, min_rows: 1 };
+  }
+
+  _number(value, digits) {
+    const lang = this._hass.locale?.language || this._hass.language;
+    return Number(value).toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+
+  // [text, entity for more-info] of a sensor or of a thermostat attribute
+  _value(sensorId, attribute, digits, unit) {
+    const sensor = sensorId && this._hass.states[sensorId];
+    if (sensorId) {
+      if (!sensor || sensor.state === "unavailable" || sensor.state === "unknown") return ["–", sensorId];
+      const text =
+        typeof this._hass.formatEntityState === "function"
+          ? this._hass.formatEntityState(sensor)
+          : `${sensor.state} ${sensor.attributes.unit_of_measurement || ""}`.trim();
+      return [text, sensorId];
+    }
+    const climate = this._config.entity && this._hass.states[this._config.entity];
+    const value = climate?.attributes[attribute];
+    if (value == null || Number.isNaN(Number(value))) return [null, this._config.entity];
+    return [`${this._number(value, digits)} ${unit}`, this._config.entity];
+  }
+
+  _render() {
+    if (!this._config || !this._hass) return;
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.addEventListener("click", (ev) => {
+        const target = ev.composedPath().find((el) => el.dataset?.entity);
+        if (!target) return;
+        this.dispatchEvent(
+          new CustomEvent("hass-more-info", { detail: { entityId: target.dataset.entity }, bubbles: true, composed: true })
+        );
+      });
+    }
+    const c = this._config;
+    const t = ui(this._hass.locale?.language || this._hass.language);
+    const main = c.entity || c.temperature_entity || c.humidity_entity;
+    const st = this._hass.states[main];
+    const name = c.name || st?.attributes.friendly_name || main;
+    const unit = this._hass.config?.unit_system?.temperature || "°C";
+    const values = [];
+    const temp = this._value(c.temperature_entity, "current_temperature", 1, unit);
+    if (temp[0] != null) values.push(["mdi:thermometer", ...temp]);
+    const hum = this._value(c.humidity_entity, "current_humidity", 0, "%");
+    if (hum[0] != null) values.push(["mdi:water-percent", ...hum]);
+    const body = !st
+      ? `<div class="values"><span class="warning">${esc(t.notFound)}</span></div>`
+      : `<div class="values">${values
+          .map(
+            ([icon, text, entity]) =>
+              `<span class="value" data-entity="${esc(entity)}"><ha-icon icon="${icon}"></ha-icon><span>${esc(text)}</span></span>`
+          )
+          .join("")}</div>`;
+    const html = `<div class="name" data-entity="${esc(main)}">${esc(name)}</div>${body}`;
+    if (html === this._html) return;
+    this._html = html;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; height: 100%; }
+        ha-card { height: 100%; box-sizing: border-box; padding: 0 12px; display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; cursor: pointer; }
+        .name { font-size: var(--ha-font-size-m, 14px); font-weight: var(--ha-font-weight-medium, 500); line-height: 20px; letter-spacing: 0.1px; color: var(--primary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .values { display: flex; align-items: center; gap: 0 16px; min-width: 0; font-size: var(--ha-font-size-s, 12px); line-height: 18px; letter-spacing: 0.4px; color: var(--primary-text-color); white-space: nowrap; overflow: hidden; }
+        .value { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+        .value span { overflow: hidden; text-overflow: ellipsis; }
+        ha-icon { --mdc-icon-size: 18px; flex: none; color: var(--tile-color, var(--state-icon-color, #44739e)); }
+        .warning { color: var(--error-color); }
+      </style>
+      <ha-card>${html}</ha-card>`;
+  }
+}
+
+if (!customElements.get(TILE)) {
+  customElements.define(TILE, AiHeatingClimateTileCard);
+  const t = ui(docLang());
+  window.customCards = window.customCards || [];
+  window.customCards.push({
+    type: TILE,
+    name: t.tileName,
+    description: t.tileDescription,
+    preview: true,
+    documentationURL: "https://github.com/Jumpmaster2/AI-Heating-Assistant",
+  });
 }
 
 if (!customElements.get(CARD)) {

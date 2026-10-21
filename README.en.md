@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.4.2. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.5.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -125,6 +125,18 @@ name: Living area               # optional
 ```
 
 The humidity comes from the humidity sensor of the area (attribute `current_humidity` of the thermostat); without a humidity sensor it is left out. After an update clear the browser cache or reload the app if needed.
+
+### Room climate tile
+
+A compact tile (6 × 1 by default, like the tile card): the name on top, temperature and humidity side by side below. When adding a card it is called **AI Heating Assistant room climate**. The values come from the thermostat of the area or from any sensors (also for areas without a heating circuit); a given sensor takes precedence. Tapping a value opens its entity.
+
+```yaml
+type: custom:ai-heating-climate-tile-card
+entity: climate.living_area            # and/or:
+temperature_entity: sensor.bedroom_temperature
+humidity_entity: sensor.bedroom_humidity
+name: Bedroom                          # optional
+```
 
 ### Setup (global)
 
