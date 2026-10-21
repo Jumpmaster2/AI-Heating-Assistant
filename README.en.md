@@ -114,7 +114,7 @@ The setup itself is still a dialog.
 
 ### Thermostat card
 
-The integration brings its own dashboard card that looks like the Home Assistant thermostat card and also shows the **humidity** of the area, in the same line as the second temperature (so the card does not get any larger). It is loaded automatically and is offered as **AI Heating Assistant thermostat** when adding a card. Drag the ring or use the arrow keys to set the target; the three dots open the thermostat.
+The integration brings its own dashboard card that looks like the Home Assistant thermostat card and also shows the **humidity** of the area, in the same line as the second temperature (so the card does not get any larger). It is loaded automatically and is offered as **AI Heating Assistant thermostat** when adding a card. Drag the ring or use the arrow keys to set the target; the three dots open the thermostat. With a fixed height (`grid_options` with `rows` as a number) the ring shrinks to fit the tile.
 
 ```yaml
 type: custom:ai-heating-thermostat-card
