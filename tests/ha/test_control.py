@@ -1150,6 +1150,7 @@ async def test_changing_services_need_an_admin(
     for service, data in (
         ("decide_heating_day", {"use_ai": False}),
         ("run_ai_check", {}),
+        ("run_ai_ventilation_check", {}),
         ("import_parameters", {"data": {}}),
     ):
         with pytest.raises(Unauthorized):

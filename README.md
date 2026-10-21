@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 1.1.1. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 1.2.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -73,7 +73,15 @@ Optional. Mit einem Wärmezähler sieht die KI die tatsächlich verbrauchte Wär
 ### Lüftungsempfehlung
 
 Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder eines Referenzraums):
-*Jetzt lüften* (Feuchte über Schwelle und Außenluft trockener), *Lüften sinnvoll* (kühlt, wenn nicht geheizt wird; in der Heizperiode nur, wenn der Raum deutlich über dem Sollwert liegt; nie unter der optionalen Mindesttemperatur und nie, wenn die Außenluft die relative Feuchte des Raums über seine Feuchte-Schwelle bringen würde), *Nicht lüften*, *Fenster schließen* (offen, bringt aber nichts), *Lüften blockiert* (Sperr-Entität aktiv, z. B. Klimaanlage) und *Alles optimal*.
+*Jetzt lüften* (Feuchte über Schwelle, Außenluft trockener und Lüften senkt die Feuchte spürbar), *Lüften sinnvoll* (kühlt, wenn nicht geheizt wird; in der Heizperiode nur, wenn der Raum deutlich über dem Sollwert liegt; nie unter der optionalen Mindesttemperatur und nie, wenn die Außenluft die relative Feuchte des Raums über seine Feuchte-Schwelle bringen würde), *Nicht lüften*, *Fenster schließen* (offen, bringt aber nichts), *Lüften blockiert* (Sperr-Entität aktiv, z. B. Klimaanlage) und *Alles optimal*.
+
+**Gelerntes Feuchteprofil je Raum:** Für jeden Bereich mit Feuchtesensor lernt die Integration, was im Raum üblich ist (Tagesminimum, -mittel, -maximum, tags und nachts, getrennt für Heizperiode und Rest des Jahres), die tiefste Feuchte der letzten 14 Tage, wie schnell die Feuchte bei geschlossenem Fenster steigt und was Lüften wirklich bringt: welcher Teil des Unterschieds zur Außenluft beim Lüften verschwindet und wie viel davon innerhalb von 30 Minuten aus Wänden und Möbeln zurückkommt. Sobald zwei Lüftungsvorgänge ausgewertet sind, rechnet die Empfehlung mit der Feuchte, die Lüften tatsächlich erreicht: Sinkt sie dadurch nicht mindestens um den Mindest-Feuchteabfall, lautet die Empfehlung *Nicht lüften* statt *Jetzt lüften* (manchmal geht es eben nicht tiefer). Eine Hysterese verhindert ein Hin und Her um die Schwelle.
+
+**Energiesparend lüften:** In der Heizperiode kostet Lüften Wärme, umso mehr, je kälter die Außenluft ist. Ein nur leicht zu feuchter Raum wartet deshalb: Die Feuchte muss die Schwelle um den *Energiespar-Zuschlag* je Kelvin Temperaturunterschied übersteigen (Standard 0,25 %/K, bei 21 °C innen und 1 °C außen also 5 % mehr). Der Zuschlag reicht nie über 70 %; ab dort wird gegen Schimmel immer gelüftet. Bis dahin lautet die Empfehlung *Nicht lüften*, ein offenes Fenster ergibt *Fenster schließen*. Hat das Lüften begonnen, läuft es bis zur Hysterese unter der nötigen Feuchte weiter. Der Zuschlag reicht nie über die *Schimmelgrenze* (Standard 70 %, je Raum einstellbar, z. B. niedriger bei kalten Außenwänden). Nach einer Lüftung bekommt der Raum eine *Pause* (Standard 30 Minuten), in der Feuchte aus Wänden zurückkommt, bevor erneut zum Trocknen geraten wird.
+
+**Gelernte Lüftdauer:** Jeder Raum lernt aus seinen Lüftungen, wie schnell seine Fenster die Luft austauschen (umgerechnet auf den Temperaturunterschied, denn kalte Luft zieht schneller). Daraus schlägt das Attribut `airing_minutes` die Minuten vor, die bis zum *Lüftziel* (Standard 5 % unter der Schwelle) nötig sind, mal *Lüftdauer-Faktor*, begrenzt auf *kürzeste* und *längste Lüftdauer* (3 bis 20 Minuten). Bis zwei Lüftungen ausgewertet sind, gilt eine Tabelle nach Außentemperatur (5 Minuten bei Frost, 10 bis 10 °C, 15 bis 15 °C, sonst 20). Die KI sieht bei jeder Lüftung vorgeschlagene und tatsächliche Dauer, Feuchte vorher, am tiefsten und 30 Minuten danach und passt alle diese Werte je Raum an.
+
+**KI-Lüftungsprüfung:** Ganzjährig prüft die KI die Lüftungsschwellen jedes Bereichs mit Feuchtesensor, aufgebaut wie die Parameterprüfung der Heizkreise: Sie bekommt das Feuchteprofil, die Statistik seit der letzten Prüfung (Minuten feucht, ab 70 %, empfohlen, Fenster offen, unnötig offen, offen beim Heizen, Wechsel der Empfehlung) und den Verlauf früherer Prüfungen und darf je Bereich Feuchte-Schwelle, Hysterese, Mindest-Trocknungsvorteil, Übertemperatur der Referenz, Mindest-Feuchteabfall, Energiespar-Zuschlag, Schimmelgrenze, Lüftziel, Lüftdauer-Faktor, kürzeste und längste Lüftdauer, Pause nach dem Lüften, Mindest-Kühlvorteil, Kühl-Abstand und Kühlen-ab-Temperatur innerhalb der KI-Grenzen anpassen. Die konfigurierten Werte sind Startwerte; ändert man sie, ersetzen sie den Wert der KI. Das Intervall beginnt beim Grundintervall (6 h) und verdoppelt sich mit jeder Prüfung ohne relevante Änderung bis zum Höchstintervall (72 h); bleibt ein Raum lange feucht oder ändert sich etwas, beginnt es von vorn. Die Prüfung nutzt das gemeinsame Monatsbudget; ihre Anweisungen lassen sich unter *KI-Anweisungen* (Lüftungsprüfung) anpassen. Die gelernten Werte zeigt der Reiter **Lernwerte**.
 
 ## Installation über HACS
 
@@ -133,7 +141,7 @@ Reihenfolge im Optionsmenü: Allgemein, Urlaub, Notfallregel, Lüftung, KI, Heiz
 
 * **Allgemein:** Sensoren, Heizperiode und Frostschutz, Urlaub wie oben.
 * **Notfallregel:** an, 1 K unter Sollwert (voraussichtlich nach der Vorlaufzeit, mindestens die Einschalthysterese), 45 min, Fenster 30 min unverändert.
-* **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20:00 bis 08:00 Uhr (Uhrzeiten, minutengenau).
+* **Lüftung:** Mindestvorteil absolute Feuchte 0,8 g/m³, außen höchstens 4 K wärmer, Mindest-Kühlvorteil 1 K, Kühlen in der Heizperiode erst ab 1 K über Sollwert, optional Kühlen erst ab einer festen Raumtemperatur (z. B. 23,5 °C, ganzjährig, Standard aus), Nacht 20:00 bis 08:00 Uhr (Uhrzeiten, minutengenau). Alle Schwellen sind Startwerte für die KI-Lüftungsprüfung (an, Grundintervall 6 h, Höchstintervall 72 h).
 * **KI:** Modell, Effort (Standard niedrig), Nachtlauf, Prüfintervall 4 h, Maximalintervall 48 h, Budget, Preise in USD je Million Tokens (Anthropic rechnet in US-Dollar ab; es wird nicht umgerechnet) (Eingabe, Ausgabe, Cache schreiben, Cache lesen; vorbelegt mit dem Listenpreis des Modells), maximale Ausgabe-Tokens.
 * **KI-Grenzen:** Minimum, Maximum, größte Änderung je Prüfung für jeden Parameter.
 * **Heiztag-Entscheidung:** gelerntes `theta` (änderbar), Bewertungsschwellen, Lernschritte, Bedingungen der Phasenwechsel.
@@ -184,7 +192,7 @@ Alle wichtigen Entscheidungen und jede KI-Anpassung mit Begründung stehen im **
 
 ## Dienste
 
-`import_parameters`, `reset_learned`, `decide_heating_day` und `run_ai_check` (die beiden letzten können KI-Kosten verursachen) dürfen nur Administratoren aufrufen; Automationen und Skripte ohne Benutzer dürfen sie weiter nutzen.
+`import_parameters`, `reset_learned`, `decide_heating_day`, `run_ai_check` und `run_ai_ventilation_check` (die drei letzten können KI-Kosten verursachen) dürfen nur Administratoren aufrufen; Automationen und Skripte ohne Benutzer dürfen sie weiter nutzen.
 
 | Dienst | Zweck |
 |---|---|
@@ -192,6 +200,7 @@ Alle wichtigen Entscheidungen und jede KI-Anpassung mit Begründung stehen im **
 | `ai_heating_assistant.import_parameters` | Lernwerte und Parameter aus JSON setzen (z. B. Startwerte) |
 | `ai_heating_assistant.reset_learned` | Lernwerte einzelner Bereiche auf die Startwerte zurücksetzen, optional auch die Parameter |
 | `ai_heating_assistant.run_ai_check` | KI-Prüfung sofort starten |
+| `ai_heating_assistant.run_ai_ventilation_check` | KI-Lüftungsprüfung sofort starten |
 | `ai_heating_assistant.decide_heating_day` | Heiztag-Entscheidung sofort ausführen, optional ohne KI |
 
 Beispiel Import:

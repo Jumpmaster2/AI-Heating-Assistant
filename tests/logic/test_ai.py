@@ -8,6 +8,7 @@ from logic.ai_policy import (
     Prices,
     cost_usd,
     estimate_cost,
+    humid_issue,
     next_interval_hours,
     overheat_issue,
     update_stable_count,
@@ -16,6 +17,8 @@ from logic.ai_schema import (
     CHECK_SCHEMA,
     GLOBAL,
     PARAMS,
+    VENT_CHECK_SCHEMA,
+    VENT_PARAMS,
     AnswerError,
     default_limits,
     validate_check,
@@ -31,6 +34,7 @@ from logic.prompts import (
     check_messages,
     clean_prompts,
     nightly_messages,
+    vent_check_messages,
 )
 
 PRICES = Prices(input=4.0, output=20.0, cache_write=5.0, cache_read=0.2)
@@ -255,3 +259,45 @@ def test_clean_prompts() -> None:
     ):
         with pytest.raises(PromptError, match=code):
             clean_prompts(value)
+
+
+def test_ventilation_check_adjusts_only_ventilation_parameters() -> None:
+    current = {"a1": {k: p.default for k, p in VENT_PARAMS.items()}}
+    raw = {
+        "adjustments": [
+            {"area": "a1", "parameter": "rh_threshold", "value": 70, "reason": "bathroom"},
+            {"area": "a1", "parameter": "hysteresis_on", "value": 0.3, "reason": ""},
+            {"area": "a9", "parameter": "rh_hysteresis", "value": 4, "reason": ""},
+        ],
+        "summary": "ok",
+        "confidence": 70,
+    }
+    result = validate_check(raw, current, default_limits(), VENT_PARAMS)
+    assert [(a.parameter, a.new, a.clamped) for a in result.applied] == [
+        ("rh_threshold", 63.0, True)  # one step of 3 % per check
+    ]
+    assert len(result.rejected) == 2
+    enum = VENT_CHECK_SCHEMA["properties"]["adjustments"]["items"]["properties"]["parameter"]
+    assert set(enum["enum"]) == set(VENT_PARAMS)
+    assert set(default_limits()) == set(PARAMS) | set(VENT_PARAMS)
+
+
+def test_ventilation_prompt() -> None:
+    system, user = vent_check_messages({"x": 1}, "de")
+    assert "rh_threshold" in system and "achievable_now" in system and "floor_14d" in system
+    assert "mould" in system and "in German." in system
+    assert json.loads(user) == {"x": 1}
+    assert "ranges" in block_ids("ventilation")
+    custom = {"ventilation": {"disabled": ["levers"], "custom": [{"text": "Bad: 70 %"}]}}
+    assert clean_prompts(custom) == {
+        "ventilation": {"disabled": ["levers"], "custom": [{"text": "Bad: 70 %", "enabled": True}]}
+    }
+    system, _ = vent_check_messages({}, "en", custom)
+    assert "- Bad: 70 %" in system and "Levers:" not in system
+
+
+def test_humid_issue() -> None:
+    assert not humid_issue(0, 0, 0)
+    assert not humid_issue(30, 0, 600)
+    assert humid_issue(60, 0, 600)
+    assert humid_issue(0, 30, 6000)

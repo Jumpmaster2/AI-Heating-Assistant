@@ -85,6 +85,11 @@ async def test_save_options(hass: HomeAssistant, base_states, hass_ws_client) ->
         ({"weather": "sensor.not_weather"}, "invalid_value:weather"),
         ({"season_start": "31.02."}, "invalid_day_month:season_start"),
         ({"check_interval": 10, "check_max_interval": 5}, "max_below_base:check_max_interval"),
+        (
+            {"ventilation_check_interval": 10, "ventilation_check_max_interval": 5},
+            "max_below_base:ventilation_check_max_interval",
+        ),
+        ({"limits": {"rh_threshold": {"min": 70, "max": 50}}}, "min_above_max:rh_threshold"),
         ({"not_an_option": 1}, "unknown_option:not_an_option"),
         ({"limits": {"theta": {"min": 20, "max": 10}}}, "min_above_max:theta"),
     ):
@@ -374,6 +379,10 @@ async def test_save_prompt_blocks(hass: HomeAssistant, base_states, hass_ws_clie
     msg = await _send(client, type=f"{DOMAIN}/config")
     defaults = msg["result"]["prompt_defaults"]
     assert {b["id"] for b in defaults["nightly"]["blocks"]} >= {"types", "learn"}
+    assert {b["id"] for b in defaults["ventilation"]["blocks"]} >= {"profile", "ranges"}
+    groups = {p["key"]: p["group"] for p in msg["result"]["limit_params"]}
+    assert groups["rh_threshold"] == "ventilation" and groups["theta"] == "heating"
+    assert msg["result"]["entities"]["ai_next_vent_check"].startswith("sensor.")
     assert msg["result"]["options"]["prompt_blocks"] == {}
 
     prompts = {

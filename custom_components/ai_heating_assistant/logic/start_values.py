@@ -79,3 +79,54 @@ def apply_start_values(
             setattr(params, name, new)
             applied.append((name, current, new))
     return applied
+
+
+# Thresholds of the ventilation recommendation configured as start values (the area's
+# humidity threshold and the global thresholds); names of VentilationSettings.
+VENT_START_NAMES = (
+    "rh_threshold",
+    "min_ah_advantage",
+    "max_reference_excess",
+    "energy_rh_per_k",
+    "mould_rh",
+    "airing_target_below",
+    "airing_time_factor",
+    "airing_min_minutes",
+    "airing_max_minutes",
+    "airing_pause_min",
+    "min_cooling_advantage",
+    "cooling_margin",
+    "cooling_min_temp",
+)
+
+
+def read_vent_record(data: Any) -> dict[str, float]:
+    """Ventilation start values last applied, from the store."""
+    if not isinstance(data, dict):
+        return {}
+    return {
+        name: float(value)
+        for name in VENT_START_NAMES
+        if isinstance(value := data.get(name), int | float) and not isinstance(value, bool)
+    }
+
+
+def apply_vent_start_values(
+    configured: dict[str, float], recorded: dict[str, float], settings: Any
+) -> list[tuple[str, float, float]]:
+    """Apply configured ventilation thresholds that changed since they were last applied.
+
+    Without a record the stored values stay (they were built from the configuration or
+    adjusted by the AI). Returns (name, old, new) per applied value.
+    """
+    applied: list[tuple[str, float, float]] = []
+    for name in VENT_START_NAMES:
+        new, last = configured[name], recorded.get(name)
+        if last is None or _same(last, new):
+            continue
+        current = float(getattr(settings, name))
+        if _same(current, new):
+            continue
+        setattr(settings, name, new)
+        applied.append((name, current, new))
+    return applied

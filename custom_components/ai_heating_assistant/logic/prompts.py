@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from .ai_schema import PARAMS
+from .ai_schema import PARAMS, VENT_PARAMS, ParamSpec
 
 LANGUAGES = {"de": "German", "en": "English"}
 
@@ -41,6 +41,7 @@ class PromptSpec:
 
 NIGHTLY = "nightly"
 CHECK = "check"
+VENT = "ventilation"
 MAX_CUSTOM_BLOCKS = 10
 MAX_BLOCK_CHARS = 2000
 CUSTOM_HEAD = "Additional instructions from the user:"
@@ -141,6 +142,111 @@ PROMPTS: dict[str, PromptSpec] = {
         ),
         tail="Reasons: one short sentence each, no dashes.",
     ),
+    VENT: PromptSpec(
+        head=(
+            "You tune the local ventilation recommendation of a home, separately for every "
+            "area. You never open or close anything; you only propose parameter values."
+        ),
+        blocks=(
+            PromptBlock(
+                "rules",
+                "Per area the recommendation compares the room with its reference air (outdoor, "
+                "or another room if ref is indoor) by absolute humidity (ah, g/m3). Humidity is "
+                "high from rh_threshold on and stays high until it falls below rh_threshold - "
+                "rh_hysteresis. ventilate_now: humidity high, reference air at least "
+                "min_ah_advantage drier, at most max_reference_excess warmer, and the humidity "
+                "an airing reaches (achievable_now, from the learned profile) at least "
+                "min_rh_drop below the current one; in the heating period airing costs heat, so the "
+                "humidity must also exceed rh_threshold by energy_rh_per_k per K the reference "
+                "is colder than the room (capped at mould_rh), otherwise energy_hold; within "
+                "airing_pause_min after an airing it waits (pause_hold) unless at mould_rh. "
+                "While airing is recommended it suggests an airing time: the minutes the "
+                "learned exchange rate needs to reach rh_threshold - airing_target_below "
+                "(before two airings are known a table by outdoor temperature), times "
+                "airing_time_factor, within airing_min_minutes and airing_max_minutes. "
+                "ventilation_useful: cooling, the room is "
+                "min_cooling_advantage warmer than the reference, nobody heats, in the heating "
+                "period only cooling_margin above target and from cooling_min_temp on, and "
+                "only if the humidity after the exchange stays below rh_threshold. "
+                "do_not_ventilate: humidity high but airing does not help. close_window: a "
+                "window is open although airing brings nothing.",
+            ),
+            PromptBlock(
+                "profile",
+                "profile is learned from the sensors of each area: typical = usual daily "
+                "minimum, mean, maximum, day and night mean of the relative humidity (and mean "
+                "ah) in this season over days days; floor_14d = lowest humidity of the last 14 "
+                "days, airing included; achievable_now = humidity a usual airing leaves now "
+                "once moisture from walls came back; load_gph = rise of ah per hour with "
+                "windows closed; airing.share = part of the difference to the reference air "
+                "an airing removes, rebound = part of that coming back within 30 minutes, "
+                "rate_per_sqrt_k = learned air exchange per minute and square root of the "
+                "temperature difference; "
+                "last_airings = recent airings (min = actual minutes, suggested_min = airing time "
+                "suggested when the window opened, humidity at start, lowest, 30 minutes after "
+                "closing). Compare actual and suggested times with the result: residents who "
+                "close earlier or air longer show what fits the room.",
+            ),
+            PromptBlock(
+                "ranges",
+                "Choose the thresholds of each area from its own profile, not from textbook "
+                "values: a bathroom or a cellar can be humid by nature, and some humidity "
+                "cannot be aired away. Put rh_threshold above the usual level of the room "
+                "where airing really helps, with enough distance to floor_14d and "
+                "achievable_now; an alarm that airing can never clear is useless.",
+            ),
+            PromptBlock(
+                "stats",
+                "stats are since the last check: minutes observed, humid_min = minutes with "
+                "high humidity, mould_min = minutes at 70 % or more, rh_mean and rh_max, "
+                "rec_min = minutes airing was recommended, window_min = minutes an own window "
+                "was open, window_rec_min = of that while recommended, useless_min = minutes "
+                "the window was open although airing brought nothing, heat_window_min = "
+                "minutes open while the area was heated, blocked_min = minutes a blocking "
+                "entity held back the recommendation, energy_hold_min = minutes drying would help "
+                "but was held back to save heat, pause_hold_min = minutes held back while the room "
+                "settled after airing, flips = changes of the recommendation "
+                "(many flips annoy the residents).",
+            ),
+            PromptBlock(
+                "goal",
+                "Protection against mould is the hard limit: humidity of 70 % or more must not "
+                "last, and rooms must not stay humid for long. Within that, avoid "
+                "recommendations that bring little and save heating energy: in the heating period "
+                "a room only slightly above its threshold waits for milder air or clearly "
+                "higher humidity, and airing is short and intense (heat_window_min, "
+                "useless_min). Avoid flipping and keep recommendations few and clear.",
+            ),
+            PromptBlock(
+                "levers",
+                "Levers: humid for long or mould_min > 0: lower rh_threshold or "
+                "min_ah_advantage, if the profile shows that airing helps; recommendations "
+                "that barely lower the humidity: raise min_rh_drop or min_ah_advantage; many "
+                "flips: raise rh_hysteresis; airing too often in the heating period without "
+                "need: raise rh_threshold towards the usual level or raise energy_rh_per_k; a room "
+                "humid for long while energy_hold_min is high: lower energy_rh_per_k; humidity "
+                "back at the threshold soon after airing (high rebound, rh_after_30 high): raise "
+                "airing_target_below or airing_time_factor, or lengthen airing_pause_min if it "
+                "settles by itself; humidity far below target after airing or heat_window_min "
+                "high: lower airing_time_factor or airing_max_minutes; residents regularly airing "
+                "shorter or longer than suggested_min: move airing_time_factor towards what "
+                "worked; mould_min > 0 or a room with cold walls: lower mould_rh; summer overheating: lower "
+                "min_cooling_advantage or cooling_min_temp.",
+            ),
+            PromptBlock(
+                "history",
+                "history lists earlier checks, oldest first, each with key stats of its period "
+                "and the changes made at its end; judge a change by the periods after it and "
+                "undo a change that made things worse.",
+            ),
+            PromptBlock(
+                "changes",
+                "At most two changes per area; prefer no change when data is thin (few days "
+                "in the profile, short stats). Values outside the limits are clamped.",
+            ),
+        ),
+        tail="Reasons: one short sentence each, no dashes.",
+    ),
 }
 
 
@@ -180,7 +286,7 @@ class PromptError(ValueError):
 
 
 def clean_prompts(value: Any) -> dict[str, Any]:
-    """Validated prompt configuration of both calls; raises PromptError.
+    """Validated prompt configuration of all calls; raises PromptError.
 
     Unchanged parts are left out: a wording equal to the standard text, empty own
     blocks and calls without any change.
@@ -238,7 +344,7 @@ def _text(value: Any) -> str:
 
 
 def prompt_defaults() -> dict[str, Any]:
-    """Fixed parts and standard blocks of both calls, for the panel."""
+    """Fixed parts and standard blocks of all calls, for the panel."""
     return {
         kind: {
             "head": spec.head,
@@ -264,19 +370,36 @@ def nightly_messages(
     payload: dict[str, Any], language: str, prompts: dict[str, Any] | None = None
 ) -> tuple[str, str]:
     """Return (system, user) for the nightly decision. ``prompts`` is the stored
-    prompt configuration of both calls."""
+    prompt configuration of all calls."""
     config = (prompts or {}).get(NIGHTLY)
     return build_system(NIGHTLY, config) + _lang_hint(language), dumps(payload)
+
+
+def _param_hints(specs: dict[str, ParamSpec]) -> str:
+    return dumps({k: f"{p.hint} [{p.unit}]" if p.unit else p.hint for k, p in specs.items()})
 
 
 def check_messages(
     payload: dict[str, Any], language: str, prompts: dict[str, Any] | None = None
 ) -> tuple[str, str]:
     """Return (system, user) for the periodic parameter check."""
-    params = {k: f"{p.hint} [{p.unit}]" if p.unit else p.hint for k, p in PARAMS.items()}
     config = (prompts or {}).get(CHECK)
     return (
-        build_system(CHECK, config) + _lang_hint(language) + " Parameters: " + dumps(params),
+        build_system(CHECK, config) + _lang_hint(language) + " Parameters: " + _param_hints(PARAMS),
+        dumps(payload),
+    )
+
+
+def vent_check_messages(
+    payload: dict[str, Any], language: str, prompts: dict[str, Any] | None = None
+) -> tuple[str, str]:
+    """Return (system, user) for the periodic check of the ventilation parameters."""
+    config = (prompts or {}).get(VENT)
+    return (
+        build_system(VENT, config)
+        + _lang_hint(language)
+        + " Parameters: "
+        + _param_hints(VENT_PARAMS),
         dumps(payload),
     )
 

@@ -128,3 +128,15 @@ def overheat_issue(over_kh: float, minutes: float) -> bool:
     if minutes <= 0:
         return False
     return over_kh >= OVERHEAT_KH_PER_DAY * minutes / 1440
+
+
+# Share of the observed time with high humidity above which a ventilation check counts
+# as not stable.
+HUMID_SHARE = 0.1
+
+
+def humid_issue(humid_min: float, mould_min: float, minutes: float) -> bool:
+    """True if a room was humid for long or reached the mould limit since the last check."""
+    if minutes <= 0:
+        return False
+    return mould_min >= 30 or humid_min >= HUMID_SHARE * minutes

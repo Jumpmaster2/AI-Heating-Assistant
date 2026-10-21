@@ -22,6 +22,7 @@ SERVICE_EXPORT = "export_parameters"
 SERVICE_IMPORT = "import_parameters"
 SERVICE_RESET = "reset_learned"
 SERVICE_AI_CHECK = "run_ai_check"
+SERVICE_VENT_CHECK = "run_ai_ventilation_check"
 SERVICE_DECIDE = "decide_heating_day"
 
 ATTR_DATA = "data"
@@ -123,6 +124,13 @@ def async_setup_services(hass: HomeAssistant) -> None:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="ai_disabled")
         await coordinator.async_run_ai_check("manual")
 
+    async def run_ai_ventilation_check(call: ServiceCall) -> None:
+        await _require_admin(hass, call)  # the check costs money
+        coordinator = _coordinator(hass)
+        if not coordinator.vent_ai_active:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="ai_disabled")
+        await coordinator.async_run_vent_check("manual")
+
     async def decide_heating_day(call: ServiceCall) -> None:
         await _require_admin(hass, call)  # changes the day and may ask the paid AI
         await _coordinator(hass).async_decide_heating_day("manual", call.data[ATTR_USE_AI])
@@ -135,4 +143,7 @@ def async_setup_services(hass: HomeAssistant) -> None:
     )
     hass.services.async_register(DOMAIN, SERVICE_RESET, reset_learned, RESET_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_AI_CHECK, run_ai_check, AI_CHECK_SCHEMA)
+    hass.services.async_register(
+        DOMAIN, SERVICE_VENT_CHECK, run_ai_ventilation_check, AI_CHECK_SCHEMA
+    )
     hass.services.async_register(DOMAIN, SERVICE_DECIDE, decide_heating_day, DECIDE_SCHEMA)

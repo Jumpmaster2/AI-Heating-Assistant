@@ -97,13 +97,23 @@ from .const import (
     CONF_TOO_COLD_MINUTES,
     CONF_VACATION_ENTITIES,
     CONF_VACATION_TEMP,
+    CONF_VENT_AI,
     CONF_VENT_BLOCK,
+    CONF_VENT_CHECK_INTERVAL,
+    CONF_VENT_CHECK_MAX_INTERVAL,
     CONF_VENT_COOL_MARGIN,
     CONF_VENT_COOL_MIN_TEMP,
+    CONF_VENT_ENERGY,
     CONF_VENT_MAX_EXCESS,
+    CONF_VENT_MAX_MINUTES,
     CONF_VENT_MIN_AH,
     CONF_VENT_MIN_COOLING,
+    CONF_VENT_MIN_MINUTES,
+    CONF_VENT_MOULD_RH,
+    CONF_VENT_PAUSE,
     CONF_VENT_RH,
+    CONF_VENT_TARGET_BELOW,
+    CONF_VENT_TIME_FACTOR,
     CONF_WEATHER,
     CONF_WINDOW_DELAY,
     CONF_WINDOWS,
@@ -123,6 +133,7 @@ from .logic.ai_policy import (
     Prices,
     cost_usd,
     estimate_cost,
+    humid_issue,
     next_interval_hours,
     overheat_issue,
     update_stable_count,
@@ -132,6 +143,8 @@ from .logic.ai_schema import (
     GLOBAL,
     NIGHTLY_SCHEMA,
     PARAMS,
+    VENT_CHECK_SCHEMA,
+    VENT_PARAMS,
     AnswerError,
     default_limits,
     validate_check,
@@ -151,6 +164,7 @@ from .logic.controller import (
 )
 from .logic.draft import draft_groups, has_draft
 from .logic.energy import HeatMeter, to_kwh
+from .logic.humidity_learning import HumidityProfile
 from .logic.learning import (
     DEAD_TIME_BOUNDS,
     P_START,
@@ -159,9 +173,15 @@ from .logic.learning import (
     Ewma,
     Sample,
 )
-from .logic.physics import clamp, in_season, parse_day_month
-from .logic.prompts import check_messages, nightly_messages, r
-from .logic.start_values import LEARNED_BOUNDS, apply_start_values, read_record
+from .logic.physics import absolute_humidity, clamp, in_season, parse_day_month
+from .logic.prompts import check_messages, nightly_messages, r, vent_check_messages
+from .logic.start_values import (
+    LEARNED_BOUNDS,
+    apply_start_values,
+    apply_vent_start_values,
+    read_record,
+    read_vent_record,
+)
 from .logic.sun import (
     FORECAST_TRUST,
     Point,
@@ -175,10 +195,12 @@ from .logic.sun import (
     solar_elevation,
     weather_points,
 )
+from .logic.vent_check import count_vent, new_vent_stats, stats_payload
 from .logic.ventilation import (
     VentilationInput,
     VentilationResult,
     VentilationSettings,
+    VentilationState,
     is_blocking,
     recommend,
 )
@@ -257,6 +279,16 @@ class Area:
     status: str = AreaStatus.IDLE
     learned_values: LearnedValues = field(default_factory=LearnedValues)
     start: dict[str, float] = field(default_factory=dict)  # start values last applied
+    vent_params: VentilationSettings = field(default_factory=VentilationSettings)
+    vent_check: dict[str, float] = field(default_factory=new_vent_stats)
+    vent_start: dict[str, float] = field(default_factory=dict)  # ventilation start values
+    humidity_profile: HumidityProfile = field(default_factory=HumidityProfile)
+    ref_temp: float | None = None  # reference air of the ventilation recommendation
+    ref_humidity: float | None = None
+
+    @property
+    def has_humidity(self) -> bool:
+        return bool(self.cfg.get(CONF_HUMIDITY_SENSOR))
 
     @property
     def has_circuit(self) -> bool:
@@ -354,6 +386,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._last_tick: float | None = None
         self._unsubs: list[Callable[[], None]] = []
         self._unsub_check: Callable[[], None] | None = None
+        self._unsub_vent: Callable[[], None] | None = None
+        self._vent_checking = False
         self._deciding = False
         self._opts: dict[str, Any] | None = None
         self._opts_src: Any = None
@@ -411,6 +445,23 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     @property
     def ai_enabled(self) -> bool:
         return self.ai_configured and bool(self.ai_state.get("enabled", True))
+
+    @property
+    def vent_state(self) -> dict[str, Any]:
+        """State of the AI ventilation check (schedule, stability, history)."""
+        state = self.ai_state.get("vent")
+        if not isinstance(state, dict):
+            state = self.ai_state["vent"] = {}
+        return state
+
+    @property
+    def vent_ai_active(self) -> bool:
+        """The AI ventilation check runs (all year) if enabled and a room has humidity."""
+        return (
+            self.ai_enabled
+            and bool(self.opt(CONF_VENT_AI))
+            and any(a.has_humidity for a in self.areas.values())
+        )
 
     @property
     def theta(self) -> float:
@@ -521,6 +572,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             )
         )
         self._restore_check_schedule()
+        self._restore_vent_schedule()
         self._save()  # applied start values are on record from now on
 
     def _build_area(
@@ -566,7 +618,48 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             check=stored.get("check") or _new_check_stats(),
         )
         self._apply_start_values(area, start, stored.get("start"))
+        vent_start = self._vent_start_values(cfg)
+        area.vent_params = VentilationSettings.from_dict(stored.get("vent_params"), **vent_start)
+        area.vent_check = stored.get("vent_check") or new_vent_stats()
+        area.humidity_profile = HumidityProfile.from_dict(stored.get("humidity"))
+        self._apply_vent_start_values(area, vent_start, stored.get("vent_start"))
         return area
+
+    def _vent_start_values(self, cfg: dict[str, Any]) -> dict[str, float]:
+        """Configured thresholds of the ventilation recommendation of an area."""
+        return {
+            "rh_threshold": float(cfg.get(CONF_VENT_RH, 60.0)),
+            "min_ah_advantage": float(self.opt(CONF_VENT_MIN_AH)),
+            "max_reference_excess": float(self.opt(CONF_VENT_MAX_EXCESS)),
+            "energy_rh_per_k": float(self.opt(CONF_VENT_ENERGY)),
+            "mould_rh": float(self.opt(CONF_VENT_MOULD_RH)),
+            "airing_target_below": float(self.opt(CONF_VENT_TARGET_BELOW)),
+            "airing_time_factor": float(self.opt(CONF_VENT_TIME_FACTOR)),
+            "airing_min_minutes": float(self.opt(CONF_VENT_MIN_MINUTES)),
+            "airing_max_minutes": float(self.opt(CONF_VENT_MAX_MINUTES)),
+            "airing_pause_min": float(self.opt(CONF_VENT_PAUSE)),
+            "min_cooling_advantage": float(self.opt(CONF_VENT_MIN_COOLING)),
+            "cooling_margin": float(self.opt(CONF_VENT_COOL_MARGIN)),
+            "cooling_min_temp": float(self.opt(CONF_VENT_COOL_MIN_TEMP)),
+        }
+
+    def _apply_vent_start_values(
+        self, area: Area, configured: dict[str, float], stored: Any
+    ) -> None:
+        """A threshold changed in the configuration replaces the value of the AI."""
+        applied = apply_vent_start_values(configured, read_vent_record(stored), area.vent_params)
+        if applied:
+            self._forget_vent_history(area)
+        for name, old, new in applied:
+            self._log(
+                "start_value",
+                area,
+                name=label_of(self.language, "parameter", name),
+                old=f"{old:g}",
+                new=f"{new:g}",
+                unit=VENT_PARAMS[name].unit,
+            )
+        area.vent_start = configured
 
     def _apply_start_values(self, area: Area, configured: dict[str, float], stored: Any) -> None:
         """A start value changed in the configuration replaces the stored one, and the
@@ -595,13 +688,16 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         """Bring the parameters into the AI limits, which may have been narrowed."""
         limits = self.limits
         for area in self.areas.values():
-            for key, spec in PARAMS.items():
+            for key, spec, target in (
+                *((k, p, area.params) for k, p in PARAMS.items()),
+                *((k, p, area.vent_params) for k, p in VENT_PARAMS.items()),
+            ):
                 if spec.scope != "area" or key not in limits:
                     continue
-                old = float(getattr(area.params, key))
+                old = float(getattr(target, key))
                 new = clamp(old, limits[key]["min"], limits[key]["max"])
                 if new != old:
-                    setattr(area.params, key, new)
+                    setattr(target, key, new)
                     self._log(
                         "limit_clamp",
                         area,
@@ -660,6 +756,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     def _forget_check_history(self, area: Area) -> None:
         """Earlier checks of an area say nothing about its values after a reset."""
         for entry in self.ai_state.get("check_history", []):
+            entry.get("areas", {}).pop(area.prompt_id, None)
+
+    def _forget_vent_history(self, area: Area) -> None:
+        for entry in self.vent_state.get("history", []):
             entry.get("areas", {}).pop(area.prompt_id, None)
 
     def _register_listeners(self) -> None:
@@ -742,6 +842,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if self._unsub_check:
             self._unsub_check()
             self._unsub_check = None
+        if self._unsub_vent:
+            self._unsub_vent()
+            self._unsub_vent = None
         if self.client:
             await self.client.close()
         await self.store.async_save(self._data_to_save())
@@ -980,6 +1083,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     "day": area.day.as_dict(),
                     "check": area.check,
                     "start": area.start,
+                    "vent_params": area.vent_params.as_dict(),
+                    "vent_check": area.vent_check,
+                    "vent_start": area.vent_start,
+                    "humidity": area.humidity_profile.as_dict(),
                 }
                 for area in self.areas.values()
             },
@@ -1268,7 +1375,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             area.status = AreaStatus.NO_CIRCUIT
             area.effective_target = None
 
-        self._ventilation(area, heating_day)
+        self._ventilation(area, heating_day, ts, minutes)
 
     def _draft(self, cfg: dict[str, Any]) -> bool:
         """Draft through windows of other rooms: every window of one combination open.
@@ -1477,7 +1584,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             airing=area.airing,
         )
 
-    def _ventilation(self, area: Area, heating_day: bool) -> None:
+    def _ventilation(self, area: Area, heating_day: bool, ts: float, minutes: float) -> None:
         cfg = area.cfg
         indoor_ref = bool(cfg.get(CONF_REF_TEMP))
         if indoor_ref:
@@ -1494,6 +1601,29 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         end = _night_time(self.opt(CONF_NIGHT_END), 8)
         is_night = (now >= start or now < end) if start > end else (start <= now < end)
         heating_active = self.heats_now and heating_day and (area.hvac_on or not area.has_circuit)
+        area.ref_temp, area.ref_humidity = ref_temp, ref_hum
+        ref_ah = (
+            absolute_humidity(ref_temp, ref_hum)
+            if ref_temp is not None and ref_hum is not None
+            else None
+        )
+        profile = area.humidity_profile
+        previous = area.ventilation
+        delta_t = area.temp - ref_temp if area.temp is not None and ref_temp is not None else None
+        if area.has_humidity and minutes > 0:  # extra ticks on state changes count once
+            profile.add_sample(
+                ts,
+                dt_util.now().date().isoformat(),
+                self._humidity_season,
+                is_night,
+                area.temp,
+                area.humidity,
+                ref_ah,
+                area.own_window_open,
+                delta_t=delta_t,
+                suggested=previous.airing_minutes if previous else None,
+            )
+        vp = area.vent_params
         area.ventilation = recommend(
             VentilationInput(
                 temp=area.temp,
@@ -1508,16 +1638,38 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 is_night=is_night,
                 target=area.effective_target or area.target,
                 season_active=self.season_active,
+                was_rh_high=previous is not None and previous.rh_high,
+                was_drying=previous is not None
+                and previous.state == VentilationState.VENTILATE_NOW,
+                achievable_rh=profile.achievable_rh(area.temp, area.humidity, ref_ah),
+                learned_airing_minutes=profile.airing_minutes(
+                    area.temp,
+                    area.humidity,
+                    ref_ah,
+                    delta_t,
+                    vp.rh_threshold - vp.airing_target_below,
+                ),
+                minutes_since_airing=(ts - profile.last_closed) / 60
+                if profile.last_closed is not None
+                else None,
             ),
-            VentilationSettings(
-                rh_threshold=float(cfg.get(CONF_VENT_RH, 60.0)),
-                min_ah_advantage=float(self.opt(CONF_VENT_MIN_AH)),
-                max_reference_excess=float(self.opt(CONF_VENT_MAX_EXCESS)),
-                min_cooling_advantage=float(self.opt(CONF_VENT_MIN_COOLING)),
-                cooling_margin=float(self.opt(CONF_VENT_COOL_MARGIN)),
-                cooling_min_temp=float(self.opt(CONF_VENT_COOL_MIN_TEMP)),
-            ),
+            area.vent_params,
         )
+        count_vent(
+            area.vent_check,
+            minutes,
+            area.humidity,
+            area.ventilation,
+            previous.state if previous else None,
+            area.own_window_open,
+            heating_active and area.has_circuit,
+            vp.mould_rh,
+        )
+
+    @property
+    def _humidity_season(self) -> str:
+        """Season of the learned humidity profile."""
+        return "heating" if self.season_active else "summer"
 
     # ------------------------------------------------------------------ user actions
 
@@ -1544,8 +1696,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self.ai_state["enabled"] = enabled
         if not enabled:
             self._schedule_check(None)
-        elif self.heating_day and self.season_active:
-            self._schedule_check(dt_util.utcnow() + timedelta(minutes=5))
+            self._schedule_vent_check(None)
+        else:
+            if self.heating_day and self.season_active:
+                self._schedule_check(dt_util.utcnow() + timedelta(minutes=5))
+            if self.vent_ai_active:
+                self._schedule_vent_check(dt_util.utcnow() + timedelta(minutes=5))
         self._save()
         self.async_update_listeners()
 
@@ -1573,7 +1729,20 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             current = dt_util.parse_datetime(str(self.ai_state.get("next_check") or ""))
             if current is None or current <= now or current > soon:
                 self._schedule_check(soon)
+        self._vent_soon()
         self._save()
+
+    def _vent_soon(self) -> None:
+        """A change of the ventilation values makes the AI look at them again soon."""
+        state = self.vent_state
+        state["stable"] = 0
+        if not self.vent_ai_active:
+            return
+        now = dt_util.utcnow()
+        soon = now + timedelta(hours=float(self.opt(CONF_VENT_CHECK_INTERVAL)))
+        current = dt_util.parse_datetime(str(state.get("next_check") or ""))
+        if current is None or current <= now or current > soon:
+            self._schedule_vent_check(soon)
 
     # ------------------------------------------------------------------ heating day
 
@@ -2186,6 +2355,173 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         history = [*self.ai_state.get("check_history", []), entry]
         self.ai_state["check_history"] = history[-CHECK_HISTORY:]
 
+    # ------------------------------------------------------------------ AI ventilation check
+
+    def _restore_vent_schedule(self) -> None:
+        """Plan the ventilation check: as stored, or after the base interval the first
+        time (the statistics need a while)."""
+        if not self.vent_ai_active:
+            self._schedule_vent_check(None)
+            return
+        now = dt_util.utcnow()
+        when = dt_util.parse_datetime(str(self.vent_state.get("next_check") or ""))
+        if when is None:
+            when = now + timedelta(hours=float(self.opt(CONF_VENT_CHECK_INTERVAL)))
+        self._schedule_vent_check(max(when, now + timedelta(minutes=5)))
+
+    def _schedule_vent_check(self, when: datetime | None) -> None:
+        if self._unsub_vent:
+            self._unsub_vent()
+            self._unsub_vent = None
+        self.vent_state["next_check"] = when.isoformat() if when else None
+        if when is not None:
+            self._unsub_vent = async_track_point_in_utc_time(self.hass, self._vent_due, when)
+
+    @callback
+    def _vent_due(self, now: datetime) -> None:
+        self._unsub_vent = None
+        self.config_entry.async_create_background_task(
+            self.hass, self.async_run_vent_check("scheduled"), f"{DOMAIN} ai ventilation check"
+        )
+
+    async def async_run_vent_check(self, trigger: str) -> None:
+        """Periodic AI review of the ventilation thresholds, all year."""
+        if self._vent_checking:
+            return
+        if not self.vent_ai_active:
+            self._schedule_vent_check(None)
+            return
+        self._vent_checking = True
+        try:
+            await self._run_vent_check()
+        finally:
+            self._vent_checking = False
+            self._save()
+            self.async_update_listeners()
+
+    def _vent_area_payload(self, area: Area) -> dict[str, Any]:
+        vent = area.ventilation
+        ref_ah = (
+            absolute_humidity(area.ref_temp, area.ref_humidity)
+            if area.ref_temp is not None and area.ref_humidity is not None
+            else None
+        )
+        return {
+            "id": area.prompt_id,
+            "name": area.name,
+            "ref": "indoor" if area.cfg.get(CONF_REF_TEMP) else "outdoor",
+            "heated": area.has_circuit,
+            "target": area.effective_target or area.target,
+            "temp": r(area.temp, 1),
+            "rh": r(area.humidity, 1),
+            "ah": vent.ah_inside if vent else None,
+            "ref_temp": r(area.ref_temp, 1),
+            "ref_rh": r(area.ref_humidity, 1),
+            "ref_ah": r(ref_ah),
+            "state": vent.state if vent else None,
+            "window_open": area.own_window_open,
+            "params": area.vent_params.as_dict(),
+            "profile": area.humidity_profile.summary(
+                self._humidity_season, area.temp, area.humidity, ref_ah
+            ),
+            "stats": stats_payload(area.vent_check),
+        }
+
+    async def _run_vent_check(self) -> None:
+        now = dt_util.utcnow()
+        state = self.vent_state
+        hourly = await self._forecast("hourly")
+        areas = [a for a in self.areas.values() if a.has_humidity]
+        current = {a.prompt_id: a.vent_params.as_dict() for a in areas}
+        areas_payload = [self._vent_area_payload(a) for a in areas]
+        limits = self.limits
+        payload = {
+            "time": dt_util.now().strftime("%Y-%m-%d %H:%M"),
+            "heating_period": self.season_active,
+            "heating_day": self.heating_day,
+            "outdoor": r(self.outdoor_temp, 1),
+            "forecast_12h": _hourly_compact(hourly, 12),
+            "areas": areas_payload,
+            "history": state.get("history", []),
+            "limits": {
+                k: [limits[k]["min"], limits[k]["max"], limits[k]["step"]] for k in VENT_PARAMS
+            },
+        }
+        system, user = vent_check_messages(payload, self.language, self.opt(CONF_PROMPTS))
+        data = await self._ai_call("ventilation", system, user, VENT_CHECK_SCHEMA)
+        state["last_check"] = now.isoformat()
+        issue = any(
+            humid_issue(
+                a.vent_check.get("humid_min", 0.0),
+                a.vent_check.get("mould_min", 0.0),
+                a.vent_check.get("minutes", 0.0),
+            )
+            for a in areas
+        )
+        result = None
+        if data is not None:
+            try:
+                result = validate_check(data, current, limits, VENT_PARAMS)
+            except AnswerError as err:
+                self._ai_failed("ventilation", str(err))
+        if result is None:
+            # failure or no answer: try again after the base interval
+            self._schedule_vent_check(
+                now + timedelta(hours=float(self.opt(CONF_VENT_CHECK_INTERVAL)))
+            )
+            return
+        by_prompt = {a.prompt_id: a for a in areas}
+        for adj in result.applied:
+            area = by_prompt.get(adj.area)
+            if area is None:
+                continue
+            setattr(area.vent_params, adj.parameter, adj.new)
+            self._log(
+                "ai_adjust",
+                area,
+                parameter=label_of(self.language, "parameter", adj.parameter),
+                old=adj.old,
+                new=adj.new,
+                clamped=text(self.language, "clamped") if adj.clamped else "",
+                reason=adj.reason,
+            )
+        state["last_summary"] = result.summary
+        state["last_confidence"] = result.confidence
+        state["last_rejected"] = result.rejected[:10]
+        stable = update_stable_count(int(state.get("stable", 0)), result.relevant_change, issue)
+        state["stable"] = stable
+        hours = next_interval_hours(
+            float(self.opt(CONF_VENT_CHECK_INTERVAL)),
+            float(self.opt(CONF_VENT_CHECK_MAX_INTERVAL)),
+            stable,
+        )
+        self._schedule_vent_check(now + timedelta(hours=hours))
+        self._log(
+            "ai_vent_check",
+            count=len(result.applied),
+            confidence=result.confidence,
+            summary=result.summary,
+            hours=round(hours, 1),
+        )
+        keys = (
+            "humid_min",
+            "mould_min",
+            "rh_mean",
+            "rec_min",
+            "useless_min",
+            "energy_hold_min",
+            "pause_hold_min",
+            "flips",
+        )
+        entry = {
+            "t": dt_util.now().strftime("%m-%d %H:%M"),
+            "areas": {a["id"]: {k: a["stats"].get(k) for k in keys} for a in areas_payload},
+            "changes": [f"{a.area} {a.parameter} {a.old:g}>{a.new:g}" for a in result.applied],
+        }
+        state["history"] = [*state.get("history", []), entry][-CHECK_HISTORY:]
+        for area in areas:
+            area.vent_check = new_vent_stats()
+
     # ------------------------------------------------------------------ services
 
     def export_parameters(self, area_ids: list[str] | None = None) -> dict[str, Any]:
@@ -2197,7 +2533,10 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 "id": area.area_id,
                 "target": area.target,
                 "params": area.params.as_dict(),
+                "vent_params": area.vent_params.as_dict(),
             }
+            if area.has_humidity:
+                entry["humidity"] = area.humidity_profile.as_dict()
             if area.learner is not None:
                 lr = area.learner
                 entry["learned"] = {
@@ -2251,6 +2590,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 if spec is not None and spec.scope == "area" and isinstance(value, int | float):
                     lim = limits[name]
                     setattr(area.params, name, clamp(float(value), lim["min"], lim["max"]))
+            for name, value in (values.get("vent_params") or {}).items():
+                if name in VENT_PARAMS and isinstance(value, int | float):
+                    lim = limits[name]
+                    setattr(area.vent_params, name, clamp(float(value), lim["min"], lim["max"]))
+            if isinstance(values.get("humidity"), dict):
+                area.humidity_profile = HumidityProfile.from_dict(values["humidity"])
             if isinstance(values.get("target"), int | float):
                 area.target = clamp(
                     float(values["target"]),
@@ -2278,7 +2623,12 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     window_delay_min=start["window_delay_min"], puffer=start["puffer"]
                 )
             area.start = start  # the configuration is in effect again
+            area.humidity_profile = HumidityProfile()
+            if include_parameters:
+                area.vent_start = self._vent_start_values(area.cfg)
+                area.vent_params = VentilationSettings(**area.vent_start)
             self._forget_check_history(area)
+            self._forget_vent_history(area)
             self._log("reset", area)
         if include_parameters:
             self._clamp_to_limits()  # start values may lie outside narrowed limits
@@ -2365,7 +2715,9 @@ def _valid_import(data: Any) -> bool:
         return False
     return all(
         not isinstance(values, dict)
-        or all(obj(values.get(k)) for k in ("params", "learned", "counts"))
+        or all(
+            obj(values.get(k)) for k in ("params", "learned", "counts", "vent_params", "humidity")
+        )
         for values in (data.get("areas") or {}).values()
     )
 

@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.1.1. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.2.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -73,7 +73,15 @@ Optional. With a heat meter the AI sees the heat actually used instead of only t
 ### Ventilation recommendation
 
 Per area (also without heating circuit) from the absolute humidity inside and outside (or of a reference room):
-*Ventilate now* (humidity above threshold and outside air drier), *Ventilation useful* (cools while not heating; within the heating period only if the room is clearly above its target; never below the optional minimum temperature and never if the outside air would raise the relative humidity of the room above its threshold), *Do not ventilate*, *Close window* (open but useless), *Ventilation blocked* (block entity active, e.g. air conditioner) and *All fine*.
+*Ventilate now* (humidity above threshold, outside air drier and airing lowers the humidity noticeably), *Ventilation useful* (cools while not heating; within the heating period only if the room is clearly above its target; never below the optional minimum temperature and never if the outside air would raise the relative humidity of the room above its threshold), *Do not ventilate*, *Close window* (open but useless), *Ventilation blocked* (block entity active, e.g. air conditioner) and *All fine*.
+
+**Learned humidity profile per room:** for every area with a humidity sensor the integration learns what is usual in the room (daily minimum, mean and maximum, by day and at night, separately for the heating period and the rest of the year), the lowest humidity of the last 14 days, how fast the humidity rises with the windows closed and what airing really achieves: which part of the difference to the outside air an airing removes and how much of it comes back from walls and furniture within 30 minutes. Once two airings are evaluated, the recommendation uses the humidity airing actually reaches: if it does not drop by at least the minimum humidity drop, the recommendation is *Do not ventilate* instead of *Ventilate now* (sometimes it simply does not get lower). A hysteresis prevents flipping around the threshold.
+
+**Energy saving airing:** within the heating period airing costs heat, the more the colder the outside air. A room only slightly humid therefore waits: the humidity must exceed the threshold by the *energy saving surcharge* per Kelvin of temperature difference (default 0.25 %/K, so 5 % more at 21 °C inside and 1 °C outside). The surcharge never reaches beyond 70 %; from there airing is always recommended against mould. Until then the recommendation is *Do not ventilate*, an open window gives *Close window*. Once airing has started it goes on down to the hysteresis below the needed humidity. The surcharge never reaches beyond the *mould limit* (default 70 %, adjustable per room, e.g. lower for cold exterior walls). After an airing the room gets a *pause* (default 30 minutes) in which moisture comes back from the walls before drying is recommended again.
+
+**Learned airing time:** every room learns from its airings how fast its windows exchange the air (scaled by the temperature difference, cold air draws faster). From this the attribute `airing_minutes` suggests the minutes needed to reach the *airing target* (default 5 % below the threshold), times the *airing time factor*, within the *shortest* and *longest airing time* (3 to 20 minutes). Until two airings are evaluated a table by outdoor temperature applies (5 minutes in frost, 10 up to 10 °C, 15 up to 15 °C, otherwise 20). The AI sees the suggested and actual time of every airing, the humidity before, at its lowest and 30 minutes later, and adjusts all these values per room.
+
+**AI ventilation check:** all year the AI reviews the ventilation thresholds of every area with a humidity sensor, built like the parameter check of the heating circuits: it gets the humidity profile, the statistics since the last check (minutes humid, at 70 % or more, recommended, window open, open without use, open while heating, changes of the recommendation) and the history of earlier checks, and may adjust per area the humidity threshold, hysteresis, minimum drying advantage, reference excess, minimum humidity drop, energy saving surcharge, mould limit, airing target, airing time factor, shortest and longest airing time, pause after airing, minimum cooling advantage, cooling margin and cooling start temperature within the AI limits. The configured values are start values; changing one replaces the value of the AI. The interval starts at the base interval (6 h) and doubles with every check without relevant change up to the maximum (72 h); if a room stays humid for long or something changes, it starts over. The check uses the shared monthly budget; its instructions can be adapted under *AI instructions* (ventilation check). The **Learned values** tab shows the learned values.
 
 ## Installation via HACS
 
@@ -133,7 +141,7 @@ Order of the options menu: general, vacation, emergency rule, ventilation, AI, h
 
 * **General:** sensors, heating period and frost protection, vacation as above.
 * **Emergency rule:** on, 1 K below target (expected after the lead time, at least the switch-on hysteresis), 45 min, windows unchanged for 30 min.
-* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20:00 to 08:00 (times, to the minute).
+* **Ventilation:** minimum drying advantage 0.8 g/m³, outside at most 4 K warmer, minimum cooling advantage 1 K, cooling within the heating period only from 1 K above target, optionally cooling only from a fixed room temperature (e.g. 23.5 °C, all year, off by default), night 20:00 to 08:00 (times, to the minute). All thresholds are start values for the AI ventilation check (on, base interval 6 h, maximum interval 72 h).
 * **AI:** model, effort (default low), nightly run, check interval 4 h, maximum interval 48 h, budget, prices in USD per million tokens (Anthropic bills in US dollars; nothing is converted) (input, output, cache write, cache read; prefilled with the model's list price), maximum output tokens.
 * **AI limits:** minimum, maximum and largest change per check for every parameter.
 * **Heating day decision:** learned `theta` (editable), evaluation thresholds, learning steps, conditions for phase changes.
@@ -184,7 +192,7 @@ All important decisions and every AI adjustment with its reason are written to t
 
 ## Services
 
-`import_parameters`, `reset_learned`, `decide_heating_day` and `run_ai_check` (the last two may cause AI costs) are for administrators; automations and scripts without a user may still call them.
+`import_parameters`, `reset_learned`, `decide_heating_day`, `run_ai_check` and `run_ai_ventilation_check` (the last three may cause AI costs) are for administrators; automations and scripts without a user may still call them.
 
 | Service | Purpose |
 |---|---|
@@ -192,6 +200,7 @@ All important decisions and every AI adjustment with its reason are written to t
 | `ai_heating_assistant.import_parameters` | set learned values and parameters from JSON (e.g. start values) |
 | `ai_heating_assistant.reset_learned` | reset learned values of areas to the start values, optionally the parameters too |
 | `ai_heating_assistant.run_ai_check` | run the AI check now |
+| `ai_heating_assistant.run_ai_ventilation_check` | run the AI ventilation check now |
 | `ai_heating_assistant.decide_heating_day` | run the heating day decision now, optionally without AI |
 
 Import example:
