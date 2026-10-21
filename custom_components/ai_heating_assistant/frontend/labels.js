@@ -242,14 +242,6 @@ export const LABELS = {
     "Fenstersensoren",
     "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
    ],
-   "draft_window_sensors": [
-    "Luftzug aus anderen Räumen",
-    "Fensterkontakte anderer Räume, deren Luftzug auch diesen Bereich abkühlt, z. B. zwei gegenüberliegende Räume, die gleichzeitig gelüftet werden. Solange Luftzug erkannt wird, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab."
-   ],
-   "draft_mode": [
-    "Luftzug, wenn",
-    "Alle offen: Nur Querlüftung zählt (alle gewählten Fenster offen). Eines offen: Ein offenes Fenster genügt."
-   ],
    "heater_switch": [
     "Heizkreis-Schalter",
     "Schalter des Stellantriebs (z. B. ein Relais). Leer lassen für einen Bereich nur mit Lüftungsempfehlung."
@@ -309,6 +301,22 @@ export const LABELS = {
    "ventilation_block_entity": [
     "Lüftungs-Sperr-Entität",
     "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
+   ],
+   "draft_group_1": [
+    "Kombination 1",
+    "z. B. Kinderzimmer + Bad; eine zweite Kombination z. B. Kinderzimmer + Schlafzimmer."
+   ],
+   "draft_group_2": [
+    "Kombination 2",
+    ""
+   ],
+   "draft_group_3": [
+    "Kombination 3",
+    ""
+   ],
+   "draft_group_4": [
+    "Kombination 4",
+    ""
    ]
   },
   "learned": {
@@ -345,6 +353,10 @@ export const LABELS = {
    "ventilation": [
     "Lüftung",
     ""
+   ],
+   "draft": [
+    "Luftzug aus anderen Räumen",
+    "Fenster anderer Räume, deren gemeinsames Öffnen auch diesen Bereich auskühlt (Querlüftung). Je Kombination die Fenster wählen, die zusammen offen sein müssen. Sobald alle Fenster einer Kombination offen sind, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab. Eine Kombination mit nur einem Fenster löst schon allein aus."
    ],
    "learned_values": [
     "Gelernte Werte",
@@ -430,10 +442,6 @@ export const LABELS = {
    "underfloor": "Fußbodenheizung",
    "radiator": "Heizkörper",
    "other": "Andere (z. B. Wandheizung)"
-  },
-  "draft_mode": {
-   "all": "Alle gewählten Fenster sind offen",
-   "any": "Eines der gewählten Fenster ist offen"
   }
  },
  "en": {
@@ -678,14 +686,6 @@ export const LABELS = {
     "Window sensors",
     "One or more window/door contacts ('on' = open)."
    ],
-   "draft_window_sensors": [
-    "Draft from other rooms",
-    "Window contacts of other rooms whose draft also cools this area, e.g. two opposite rooms aired at the same time. While draft is detected the area behaves as with an open own window: heating pauses after the window delay and waits the recovery time."
-   ],
-   "draft_mode": [
-    "Draft when",
-    "All open: only cross ventilation (every selected window open) counts. Any open: one open window is enough."
-   ],
    "heater_switch": [
     "Heating circuit switch",
     "Switch of the actuator (e.g. a relay). Leave empty for an area with ventilation recommendation only."
@@ -745,6 +745,22 @@ export const LABELS = {
    "ventilation_block_entity": [
     "Ventilation block entity",
     "Optional. While it blocks, no ventilation is recommended: a cover while closed (e.g. sun protection down), a climate entity or water heater while not off (e.g. air conditioner running), a switch, binary sensor, fan or similar while on."
+   ],
+   "draft_group_1": [
+    "Combination 1",
+    "e.g. kids' room + bathroom; a second combination e.g. kids' room + bedroom."
+   ],
+   "draft_group_2": [
+    "Combination 2",
+    ""
+   ],
+   "draft_group_3": [
+    "Combination 3",
+    ""
+   ],
+   "draft_group_4": [
+    "Combination 4",
+    ""
    ]
   },
   "learned": {
@@ -781,6 +797,10 @@ export const LABELS = {
    "ventilation": [
     "Ventilation",
     ""
+   ],
+   "draft": [
+    "Draft from other rooms",
+    "Windows of other rooms whose opening together also cools this area (cross ventilation). Per combination choose the windows that must be open together. As soon as every window of one combination is open, the area behaves as with its own window open: heating pauses after the window delay and waits the recovery time. A combination with a single window triggers on its own."
    ],
    "learned_values": [
     "Learned values",
@@ -866,10 +886,6 @@ export const LABELS = {
    "underfloor": "Underfloor heating",
    "radiator": "Radiators",
    "other": "Other (e.g. wall heating)"
-  },
-  "draft_mode": {
-   "all": "All selected windows are open",
-   "any": "Any selected window is open"
   }
  }
 };

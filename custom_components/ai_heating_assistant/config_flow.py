@@ -53,8 +53,7 @@ from .const import (
     CONF_CHECK_MAX_INTERVAL,
     CONF_DEAD_TIME,
     CONF_DEFAULT_TARGET,
-    CONF_DRAFT_MODE,
-    CONF_DRAFT_WINDOWS,
+    CONF_DRAFT_GROUPS,
     CONF_EMERGENCY_DELTA,
     CONF_EMERGENCY_DURATION,
     CONF_EMERGENCY_ENABLED,
@@ -119,13 +118,13 @@ from .const import (
     CONF_WINDOWS,
     DEFAULTS,
     DOMAIN,
-    DRAFT_MODES,
     EFFORT_OPTIONS,
     HEATING_TYPES,
     LEARNED_THETA,
     MODEL_OPTIONS,
     MODEL_PRICE_SUGGESTIONS,
     NAME,
+    SECTION_DRAFT,
     SECTION_HEATING,
     SECTION_LEARNED,
     SECTION_SENSORS,
@@ -135,6 +134,7 @@ from .const import (
     SUBENTRY_AREA,
 )
 from .logic.ai_schema import PARAMS, default_limits
+from .logic.draft import draft_groups
 from .logic.physics import parse_day_month
 from .logic.ventilation import BLOCK_DOMAINS
 
@@ -790,6 +790,9 @@ def area_schema(
     def req(key: str) -> vol.Required:
         return vol.Required(key, default=v.get(key, AREA_DEFAULTS.get(key)))
 
+    # stored combinations (or those of version 1.1.0), filled up to all fields
+    drafts = draft_groups(v)
+    drafts += [[] for _ in range(len(CONF_DRAFT_GROUPS) - len(drafts))]
     return vol.Schema(
         {
             vol.Required(CONF_AREA_NAME, default=v.get(CONF_AREA_NAME, "")): TextSelector(),
@@ -803,19 +806,6 @@ def area_schema(
                         vol.Optional(CONF_WINDOWS, default=v.get(CONF_WINDOWS, [])): _entity(
                             ["binary_sensor", "input_boolean"],
                             multiple=True,
-                        ),
-                        vol.Optional(
-                            CONF_DRAFT_WINDOWS, default=v.get(CONF_DRAFT_WINDOWS, [])
-                        ): _entity(["binary_sensor", "input_boolean"], multiple=True),
-                        vol.Required(
-                            CONF_DRAFT_MODE,
-                            default=v.get(CONF_DRAFT_MODE, AREA_DEFAULTS[CONF_DRAFT_MODE]),
-                        ): SelectSelector(
-                            SelectSelectorConfig(
-                                options=list(DRAFT_MODES),
-                                translation_key="draft_mode",
-                                mode=SelectSelectorMode.DROPDOWN,
-                            )
                         ),
                     }
                 ),
@@ -857,6 +847,17 @@ def area_schema(
                 ),
                 {"collapsed": True},
             ),
+            vol.Required(SECTION_DRAFT): section(
+                vol.Schema(
+                    {
+                        vol.Optional(key, default=group): _entity(
+                            ["binary_sensor", "input_boolean"], multiple=True
+                        )
+                        for key, group in zip(CONF_DRAFT_GROUPS, drafts, strict=True)
+                    }
+                ),
+                {"collapsed": not any(drafts)},
+            ),
         }
     )
 
@@ -894,7 +895,13 @@ def _learned_section(
 
 def _flatten(user_input: dict[str, Any]) -> dict[str, Any]:
     flat: dict[str, Any] = {CONF_AREA_NAME: str(user_input.get(CONF_AREA_NAME, "")).strip()}
-    for key in (SECTION_SENSORS, SECTION_HEATING, SECTION_START, SECTION_VENTILATION):
+    for key in (
+        SECTION_SENSORS,
+        SECTION_HEATING,
+        SECTION_START,
+        SECTION_VENTILATION,
+        SECTION_DRAFT,
+    ):
         flat.update(user_input.get(key) or {})
     return _clean(flat)
 

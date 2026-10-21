@@ -414,16 +414,12 @@
               "data": {
                 "temperature_sensor": "Temperatursensor",
                 "humidity_sensor": "Feuchtesensor",
-                "window_sensors": "Fenstersensoren",
-                "draft_window_sensors": "Luftzug aus anderen Räumen",
-                "draft_mode": "Luftzug, wenn"
+                "window_sensors": "Fenstersensoren"
               },
               "data_description": {
                 "temperature_sensor": "Raumtemperatur des Bereichs.",
                 "humidity_sensor": "Relative Luftfeuchte, nötig für die Lüftungsempfehlung.",
-                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen).",
-                "draft_window_sensors": "Fensterkontakte anderer Räume, deren Luftzug auch diesen Bereich abkühlt, z. B. zwei gegenüberliegende Räume, die gleichzeitig gelüftet werden. Solange Luftzug erkannt wird, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab.",
-                "draft_mode": "Alle offen: Nur Querlüftung zählt (alle gewählten Fenster offen). Eines offen: Ein offenes Fenster genügt."
+                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
               }
             },
             "heating": {
@@ -477,6 +473,19 @@
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
                 "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
               }
+            },
+            "draft": {
+              "name": "Luftzug aus anderen Räumen",
+              "description": "Fenster anderer Räume, deren gemeinsames Öffnen auch diesen Bereich auskühlt (Querlüftung). Je Kombination die Fenster wählen, die zusammen offen sein müssen. Sobald alle Fenster einer Kombination offen sind, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab. Eine Kombination mit nur einem Fenster löst schon allein aus.",
+              "data": {
+                "draft_group_1": "Kombination 1",
+                "draft_group_2": "Kombination 2",
+                "draft_group_3": "Kombination 3",
+                "draft_group_4": "Kombination 4"
+              },
+              "data_description": {
+                "draft_group_1": "z. B. Kinderzimmer + Bad; eine zweite Kombination z. B. Kinderzimmer + Schlafzimmer."
+              }
             }
           }
         },
@@ -495,16 +504,12 @@
               "data": {
                 "temperature_sensor": "Temperatursensor",
                 "humidity_sensor": "Feuchtesensor",
-                "window_sensors": "Fenstersensoren",
-                "draft_window_sensors": "Luftzug aus anderen Räumen",
-                "draft_mode": "Luftzug, wenn"
+                "window_sensors": "Fenstersensoren"
               },
               "data_description": {
                 "temperature_sensor": "Raumtemperatur des Bereichs.",
                 "humidity_sensor": "Relative Luftfeuchte, nötig für die Lüftungsempfehlung.",
-                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen).",
-                "draft_window_sensors": "Fensterkontakte anderer Räume, deren Luftzug auch diesen Bereich abkühlt, z. B. zwei gegenüberliegende Räume, die gleichzeitig gelüftet werden. Solange Luftzug erkannt wird, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab.",
-                "draft_mode": "Alle offen: Nur Querlüftung zählt (alle gewählten Fenster offen). Eines offen: Ein offenes Fenster genügt."
+                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
               }
             },
             "heating": {
@@ -558,6 +563,19 @@
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
                 "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
               }
+            },
+            "draft": {
+              "name": "Luftzug aus anderen Räumen",
+              "description": "Fenster anderer Räume, deren gemeinsames Öffnen auch diesen Bereich auskühlt (Querlüftung). Je Kombination die Fenster wählen, die zusammen offen sein müssen. Sobald alle Fenster einer Kombination offen sind, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab. Eine Kombination mit nur einem Fenster löst schon allein aus.",
+              "data": {
+                "draft_group_1": "Kombination 1",
+                "draft_group_2": "Kombination 2",
+                "draft_group_3": "Kombination 3",
+                "draft_group_4": "Kombination 4"
+              },
+              "data_description": {
+                "draft_group_1": "z. B. Kinderzimmer + Bad; eine zweite Kombination z. B. Kinderzimmer + Schlafzimmer."
+              }
             }
           }
         }
@@ -586,12 +604,6 @@
         "underfloor": "Fußbodenheizung",
         "radiator": "Heizkörper",
         "other": "Andere (z. B. Wandheizung)"
-      }
-    },
-    "draft_mode": {
-      "options": {
-        "all": "Alle gewählten Fenster sind offen",
-        "any": "Eines der gewählten Fenster ist offen"
       }
     },
     "month": {

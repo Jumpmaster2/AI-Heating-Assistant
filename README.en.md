@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.1.0. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.1.1. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -19,7 +19,7 @@ The overview, the learned values and all settings are in the **AI Heating Assist
 * **Sun ahead:** the cooling over the lead time uses the PV power expected in that time, not only the current value. If the sun is going to heat the room anyway, the circuit does not switch on in the morning; in the evening the control no longer counts on sun that is about to disappear. The source is an optional PV forecast sensor (e.g. Forecast.Solar) or, without it, the hourly weather forecast (cloud coverage) together with the sun position. For the latter the integration learns on nearly cloudless days how much PV power to expect under a clear sky. Only 70 % of the forecast is used (option "Trust in the sun forecast"), and 1 K below target the area heats regardless of any forecast (option "Always heat below target by", 0.3 to 3 K). Without a PV power sensor nothing changes. If the sensor has no value by day, the PV power counts as unknown: nothing is calibrated or fed into the model, and the expected power is used instead (PV forecast sensor, or sun position and cloud coverage once the scale is learned, otherwise 0); with the sun low or hardly any power expected it counts as 0. A value missing for more than an hour by day is logged as a warning.
 * **Predictive switch-off:** the circuit turns off when the current temperature plus the expected overshoot reaches target plus the switch-off hysteresis. The overshoot of the slow floor heating is learned (depending on the run time). After switching off, the heat still stored in the floor is taken into account before switching on again, until the temperature falls; otherwise the circuit would come back right after the minimum off time.
 * **Windows:** if a window is open longer than the window delay, the heating demand pauses. After closing, the learned recovery time is awaited, because screed and walls often reheat the room themselves. Recovery ends early once the temperature before airing is reached again.
-* **Draft from other rooms:** if e.g. the kids' room and the bedroom are open at the same time, the draft often cools the living area too. Select the window contacts of these rooms under *Draft from other rooms* in the living area and choose whether all of them must be open (cross ventilation, default) or one is enough. While draft is detected the area behaves as with its own window open: pause after the window delay, then the recovery time, no learning and no counting as too cold. The ventilation recommendation of the area still follows its own windows only. The `draft` attribute of the thermostat shows whether draft is detected.
+* **Draft from other rooms:** if opposite rooms are aired at the same time, the draft often cools a third area too. For this every area has up to four combinations of windows in other rooms under *Draft from other rooms*. As soon as every window of one combination is open, the area behaves as with its own window open: pause after the window delay, then the recovery time, no learning and no counting as too cold. Example living area: combination 1 = kids' room + bathroom, combination 2 = kids' room + bedroom. Then these two pairs trigger, but bedroom + bathroom does not. A combination with a single window triggers on its own. The ventilation recommendation of the area still follows its own windows only. The `draft` attribute of the thermostat shows whether draft is detected.
 * **Short airing:** while a window is open, a circuit that is off does not switch on, even before the window delay is over. A running circuit is not interrupted. If the window was open for at least 2 minutes but shorter than the window delay, a shortened recovery follows: the share of the window delay the window was open, applied to the learned recovery time (3 of 5 minutes gives 60 %). It also ends early once the temperature before airing is reached again.
 * **Minimum on and off times** are always respected.
 * **Frost protection** always applies, also outside the heating period and with the thermostat switched off.
@@ -148,7 +148,7 @@ In the dashboard under **Heating areas** (or under the integration with **Add he
 |---|---|
 | Name | |
 | Temperature, humidity and window sensors | e.g. `sensor.living_room_temperature`, `binary_sensor.living_room_window` |
-| Draft from other rooms, draft when | optional: window contacts of other rooms; all open (default) or any open |
+| Draft from other rooms | optional: up to 4 combinations of window contacts in other rooms that must be open together |
 | Heating circuit switch | e.g. `switch.heating_circuit_1`; empty = ventilation recommendation only |
 | Initial, minimum and maximum target | 21 / 16 / 24 °C |
 | Minimum on and off time | 10 / 10 min (fixed) |

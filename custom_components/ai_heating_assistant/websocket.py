@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from functools import cache
 from types import MappingProxyType
 from typing import Any
@@ -44,6 +44,7 @@ from .const import (
     CONF_AREA_NAME,
     CONF_CHECK_INTERVAL,
     CONF_CHECK_MAX_INTERVAL,
+    CONF_DRAFT_GROUPS,
     CONF_LIMITS,
     CONF_OUTDOOR_TEMP,
     CONF_PROMPTS,
@@ -58,6 +59,7 @@ from .const import (
     SUBENTRY_AREA,
 )
 from .logic.ai_schema import PARAMS, default_limits
+from .logic.draft import LEGACY_MODE, LEGACY_WINDOWS, draft_groups
 from .logic.physics import parse_day_month
 from .logic.prompts import PromptError, clean_prompts, prompt_defaults
 from .sensor import AREA_SENSORS
@@ -298,6 +300,15 @@ def _learned(coordinator: Any, values: Any) -> dict[str, float]:
     return result
 
 
+def _area_values(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Area data for the editor; combinations of version 1.1.0 as the new fields."""
+    values = {k: v for k, v in data.items() if k not in (LEGACY_WINDOWS, LEGACY_MODE)}
+    groups = draft_groups(dict(data))
+    for i, key in enumerate(CONF_DRAFT_GROUPS):
+        values[key] = groups[i] if i < len(groups) else []
+    return values
+
+
 def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
     registry = er.async_get(hass)
     coordinator = running_coordinator(entry)
@@ -318,7 +329,7 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
             {
                 "id": sub_id,
                 "title": sub.title,
-                "data": dict(sub.data),
+                "data": _area_values(sub.data),
                 "entities": area_entities,
                 # values in effect instead of the start values (empty while not running)
                 "learned": coordinator.learned_values(sub_id) if coordinator else {},

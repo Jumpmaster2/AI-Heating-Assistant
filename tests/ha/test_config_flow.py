@@ -135,6 +135,7 @@ async def test_subentry_flow_adds_area(hass: HomeAssistant, base_states) -> None
         },
         "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 30, "puffer": 0.7},
         "ventilation": {"ventilation_rh_threshold": 60},
+        "draft": {},
     }
     bad = {**user_input, "heating": {**user_input["heating"], "min_target": 25.0}}
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], bad)
@@ -265,8 +266,6 @@ async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, b
             "temperature_sensor": "sensor.storage_temperature",
             "humidity_sensor": "sensor.storage_humidity",
             "window_sensors": [],
-            "draft_window_sensors": ["binary_sensor.living_room_window"],
-            "draft_mode": "any",
         },
         "heating": {
             "default_target": 18.0,
@@ -277,14 +276,14 @@ async def test_reconfigure_target_of_area_without_circuit(hass: HomeAssistant, b
         },
         "learned_values": {"window_delay": 5, "puffer": 0.7},
         "ventilation": {"ventilation_rh_threshold": 65},
+        "draft": {"draft_group_1": ["binary_sensor.living_room_window", "binary_sensor.x"]},
     }
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
     await hass.async_block_till_done(wait_background_tasks=True)
     assert result["reason"] == "reconfigure_successful"
     assert entry.runtime_data.areas[sub.subentry_id].target == 18.0
     data = entry.subentries[sub.subentry_id].data
-    assert data["draft_window_sensors"] == ["binary_sensor.living_room_window"]
-    assert data["draft_mode"] == "any"
+    assert data["draft_group_1"] == ["binary_sensor.living_room_window", "binary_sensor.x"]
 
 
 async def test_existing_area_edits_learned_values(hass: HomeAssistant, base_states) -> None:
@@ -327,6 +326,7 @@ async def test_existing_area_edits_learned_values(hass: HomeAssistant, base_stat
         },
         "learned_values": {**defaults, "dead_time": 45, "puffer": 0.5},
         "ventilation": {"ventilation_rh_threshold": 60},
+        "draft": {},
     }
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
     await hass.async_block_till_done(wait_background_tasks=True)
@@ -401,6 +401,7 @@ async def test_switch_of_another_area_is_rejected(hass: HomeAssistant, base_stat
         },
         "start_values": {"window_delay": 5, "recovery_time": 30, "dead_time": 30, "puffer": 0.7},
         "ventilation": {"ventilation_rh_threshold": 60},
+        "draft": {},
     }
     result = await hass.config_entries.subentries.async_configure(result["flow_id"], user_input)
     assert result["errors"] == {"base": "switch_in_use"}
