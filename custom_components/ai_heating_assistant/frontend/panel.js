@@ -809,7 +809,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const next = this._state(ent.ai_next_check);
     const lastVent = this._state(ent.ai_last_vent_check);
     const nextVent = this._state(ent.ai_next_vent_check);
-    const ventRows = o.ventilation_ai_enabled && (this._ok(lastVent) || this._ok(nextVent))
+    // shown whenever the ventilation check is on, so a missing value is visible too
+    const ventRows = o.ventilation_ai_enabled && this._cfg.has_api_key
       ? `<div class="row"><ha-icon icon="mdi:window-open-variant"></ha-icon><span class="grow">${esc(ui.lastVentCheck)}</span><span class="muted">${esc(this._ok(lastVent) ? this._time(lastVent.state) : ui.none)}</span></div>
           ${lastVent?.attributes?.summary ? `<div class="row"><ha-icon icon="mdi:text-short"></ha-icon><span class="muted small">${esc(lastVent.attributes.summary)}</span></div>` : ""}
           <div class="row"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="grow">${esc(ui.nextVentCheck)}</span><span class="muted">${esc(this._ok(nextVent) ? this._time(nextVent.state) : ui.none)}</span></div>`
