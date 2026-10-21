@@ -49,6 +49,7 @@ async def test_ventilation_check_runs_all_year_and_backs_off(
             [
                 "cooling_margin",
                 "cooling_min_temp",
+                "energy_rh_per_k",
                 "max_reference_excess",
                 "min_ah_advantage",
                 "min_cooling_advantage",

@@ -87,6 +87,7 @@ VENT_START_NAMES = (
     "rh_threshold",
     "min_ah_advantage",
     "max_reference_excess",
+    "energy_rh_per_k",
     "min_cooling_advantage",
     "cooling_margin",
     "cooling_min_temp",

@@ -203,6 +203,7 @@
         "data": {
           "ventilation_min_ah_advantage": "Minimum drying advantage",
           "ventilation_max_reference_excess": "Maximum outside warmer by",
+          "ventilation_energy_rh_per_k": "Energy saving surcharge",
           "ventilation_min_cooling_advantage": "Minimum cooling advantage",
           "ventilation_cooling_margin": "Minimum distance above target for cooling",
           "ventilation_cooling_min_temp": "Cool only from room temperature",
@@ -222,7 +223,8 @@
           "night_end_hour": "End of the night (time, e.g. 08:00).",
           "ventilation_ai_enabled": "All year the AI reviews the ventilation thresholds of every area with a humidity sensor: it learns what is usual in each room, how low the humidity can get and what airing really achieves. Shares the monthly AI budget.",
           "ventilation_check_interval": "First interval; it doubles with every check that changed nothing relevant and starts over when a room stays humid or a value changes.",
-          "ventilation_check_max_interval": "The interval never grows beyond this."
+          "ventilation_check_max_interval": "The interval never grows beyond this.",
+          "ventilation_energy_rh_per_k": "Energy saving: within the heating period airing costs heat, the more the colder it is outside. The humidity must then exceed the threshold by this much per Kelvin outside is colder than the room (e.g. 0.25 %/K: at 21 °C inside and 1 °C outside 5 % more), at most up to 70 %, above which airing is always recommended against mould. 0 = off. Start value, the AI adjusts it per area."
         }
       },
       "ai": {
@@ -443,6 +445,14 @@
           },
           "cooling_min_temp": {
             "name": "Cool only from room temperature",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. change per check"
+            }
+          },
+          "energy_rh_per_k": {
+            "name": "Energy saving surcharge",
             "data": {
               "min": "Minimum",
               "max": "Maximum",

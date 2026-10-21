@@ -158,6 +158,17 @@ VENT_PARAMS: dict[str, ParamSpec] = {
             "airing must lower the humidity at least this far (learned effect)",
         ),
         ParamSpec(
+            "energy_rh_per_k",
+            "area",
+            0.25,
+            0.0,
+            1.0,
+            0.05,
+            "%/K",
+            "heating period: extra humidity above rh_threshold per K colder reference air "
+            "before drying is worth its heat (capped at 70 %)",
+        ),
+        ParamSpec(
             "min_cooling_advantage",
             "area",
             1.0,

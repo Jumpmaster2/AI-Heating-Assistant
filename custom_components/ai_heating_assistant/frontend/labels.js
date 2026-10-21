@@ -102,6 +102,10 @@ export const LABELS = {
     "Außen höchstens wärmer um",
     "Trocknen wird nicht empfohlen, wenn es außen um mehr als diesen Wert wärmer ist als innen."
    ],
+   "ventilation_energy_rh_per_k": [
+    "Energiespar-Zuschlag",
+    "Energiesparen: In der Heizperiode kostet Lüften Wärme, umso mehr, je kälter es draußen ist. Die Feuchte muss die Schwelle dann um so viel je Kelvin übersteigen, wie es draußen kälter ist als im Raum (z. B. 0,25 %/K: bei 21 °C innen und 1 °C außen 5 % mehr), höchstens bis 70 %; darüber wird gegen Schimmel immer gelüftet. 0 = aus. Startwert, die KI passt ihn je Bereich an."
+   ],
    "ventilation_min_cooling_advantage": [
     "Mindest-Kühlvorteil",
     "'Lüften sinnvoll', wenn es innen mindestens so viel wärmer ist als außen (nicht während Heizbetrieb)."
@@ -392,7 +396,8 @@ export const LABELS = {
    "min_rh_drop": "Mindest-Feuchteabfall durch Lüften",
    "min_cooling_advantage": "Mindest-Kühlvorteil",
    "cooling_margin": "Kühl-Abstand über Sollwert",
-   "cooling_min_temp": "Kühlen erst ab Raumtemperatur"
+   "cooling_min_temp": "Kühlen erst ab Raumtemperatur",
+   "energy_rh_per_k": "Energiespar-Zuschlag"
   },
   "limit_columns": {
    "min": "Minimum",
@@ -565,6 +570,10 @@ export const LABELS = {
    "ventilation_max_reference_excess": [
     "Maximum outside warmer by",
     "Drying is not recommended if outside is warmer than inside by more than this."
+   ],
+   "ventilation_energy_rh_per_k": [
+    "Energy saving surcharge",
+    "Energy saving: within the heating period airing costs heat, the more the colder it is outside. The humidity must then exceed the threshold by this much per Kelvin outside is colder than the room (e.g. 0.25 %/K: at 21 °C inside and 1 °C outside 5 % more), at most up to 70 %, above which airing is always recommended against mould. 0 = off. Start value, the AI adjusts it per area."
    ],
    "ventilation_min_cooling_advantage": [
     "Minimum cooling advantage",
@@ -856,7 +865,8 @@ export const LABELS = {
    "min_rh_drop": "Minimum humidity drop by airing",
    "min_cooling_advantage": "Minimum cooling advantage",
    "cooling_margin": "Cooling distance above target",
-   "cooling_min_temp": "Cool only from room temperature"
+   "cooling_min_temp": "Cool only from room temperature",
+   "energy_rh_per_k": "Energy saving surcharge"
   },
   "limit_columns": {
    "min": "Minimum",

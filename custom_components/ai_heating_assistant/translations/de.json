@@ -203,6 +203,7 @@
         "data": {
           "ventilation_min_ah_advantage": "Mindestvorteil absolute Feuchte",
           "ventilation_max_reference_excess": "Außen höchstens wärmer um",
+          "ventilation_energy_rh_per_k": "Energiespar-Zuschlag",
           "ventilation_min_cooling_advantage": "Mindest-Kühlvorteil",
           "ventilation_cooling_margin": "Mindestabstand über Sollwert für Kühlen",
           "ventilation_cooling_min_temp": "Kühlen erst ab Raumtemperatur",
@@ -222,7 +223,8 @@
           "night_end_hour": "Ende der Nacht (Uhrzeit, z. B. 08:00).",
           "ventilation_ai_enabled": "Ganzjährig prüft die KI die Lüftungsschwellen jedes Bereichs mit Feuchtesensor: Sie lernt, was in jedem Raum üblich ist, wie tief die Feuchte überhaupt sinken kann und was Lüften wirklich bringt. Nutzt das gemeinsame KI-Monatsbudget.",
           "ventilation_check_interval": "Erstes Intervall; es verdoppelt sich mit jeder Prüfung ohne relevante Änderung und beginnt von vorn, wenn ein Raum lange feucht bleibt oder sich ein Wert ändert.",
-          "ventilation_check_max_interval": "Länger wird das Intervall nie."
+          "ventilation_check_max_interval": "Länger wird das Intervall nie.",
+          "ventilation_energy_rh_per_k": "Energiesparen: In der Heizperiode kostet Lüften Wärme, umso mehr, je kälter es draußen ist. Die Feuchte muss die Schwelle dann um so viel je Kelvin übersteigen, wie es draußen kälter ist als im Raum (z. B. 0,25 %/K: bei 21 °C innen und 1 °C außen 5 % mehr), höchstens bis 70 %; darüber wird gegen Schimmel immer gelüftet. 0 = aus. Startwert, die KI passt ihn je Bereich an."
         }
       },
       "ai": {
@@ -443,6 +445,14 @@
           },
           "cooling_min_temp": {
             "name": "Kühlen erst ab Raumtemperatur",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "energy_rh_per_k": {
+            "name": "Energiespar-Zuschlag",
             "data": {
               "min": "Minimum",
               "max": "Maximum",

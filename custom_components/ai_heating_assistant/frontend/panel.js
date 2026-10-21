@@ -383,6 +383,7 @@ const SETTINGS = {
       fields: [
         "ventilation_min_ah_advantage",
         "ventilation_max_reference_excess",
+        "ventilation_energy_rh_per_k",
         "ventilation_min_cooling_advantage",
         "ventilation_cooling_margin",
         "ventilation_cooling_min_temp",

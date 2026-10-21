@@ -103,6 +103,7 @@ from .const import (
     CONF_VENT_CHECK_MAX_INTERVAL,
     CONF_VENT_COOL_MARGIN,
     CONF_VENT_COOL_MIN_TEMP,
+    CONF_VENT_ENERGY,
     CONF_VENT_MAX_EXCESS,
     CONF_VENT_MIN_AH,
     CONF_VENT_MIN_COOLING,
@@ -193,6 +194,7 @@ from .logic.ventilation import (
     VentilationInput,
     VentilationResult,
     VentilationSettings,
+    VentilationState,
     is_blocking,
     recommend,
 )
@@ -623,6 +625,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "rh_threshold": float(cfg.get(CONF_VENT_RH, 60.0)),
             "min_ah_advantage": float(self.opt(CONF_VENT_MIN_AH)),
             "max_reference_excess": float(self.opt(CONF_VENT_MAX_EXCESS)),
+            "energy_rh_per_k": float(self.opt(CONF_VENT_ENERGY)),
             "min_cooling_advantage": float(self.opt(CONF_VENT_MIN_COOLING)),
             "cooling_margin": float(self.opt(CONF_VENT_COOL_MARGIN)),
             "cooling_min_temp": float(self.opt(CONF_VENT_COOL_MIN_TEMP)),
@@ -1620,6 +1623,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 target=area.effective_target or area.target,
                 season_active=self.season_active,
                 was_rh_high=previous is not None and previous.rh_high,
+                was_drying=previous is not None
+                and previous.state == VentilationState.VENTILATE_NOW,
                 achievable_rh=profile.achievable_rh(area.temp, area.humidity, ref_ah),
             ),
             area.vent_params,
@@ -2471,7 +2476,15 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             summary=result.summary,
             hours=round(hours, 1),
         )
-        keys = ("humid_min", "mould_min", "rh_mean", "rec_min", "useless_min", "flips")
+        keys = (
+            "humid_min",
+            "mould_min",
+            "rh_mean",
+            "rec_min",
+            "useless_min",
+            "energy_hold_min",
+            "flips",
+        )
         entry = {
             "t": dt_util.now().strftime("%m-%d %H:%M"),
             "areas": {a["id"]: {k: a["stats"].get(k) for k in keys} for a in areas_payload},

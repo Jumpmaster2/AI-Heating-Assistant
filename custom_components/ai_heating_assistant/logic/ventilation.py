@@ -5,7 +5,10 @@ The decision order follows a proven template based solution:
 2. window open although ventilating brings nothing -> close window
 3. relative humidity high and outside air is drier -> ventilate now (only if airing
    can lower the humidity noticeably: with a learned humidity profile the humidity
-   reachable by airing must lie at least ``min_rh_drop`` below the current one)
+   reachable by airing must lie at least ``min_rh_drop`` below the current one).
+   Airing in the heating period costs heat, the more the colder the reference air:
+   there the humidity must exceed the threshold by ``energy_rh_per_k`` per Kelvin the
+   reference is colder than the room, but never more than up to the mould limit.
 4. room is warmer than the reference and nobody heats -> ventilating is useful
    (within the heating period only if the room is clearly above its target, never
    below the optional minimum room temperature and never if the outside air would
@@ -34,6 +37,11 @@ class VentilationState(StrEnum):
     BLOCKED = "blocked"
     OPTIMAL = "optimal"
 
+
+MOULD_RH = 70.0  # relative humidity from which mould grows if it lasts
+# Suggested airing time by reference temperature: cold air exchanges fast and costs heat.
+AIRING_MINUTES = ((0.0, 5), (10.0, 10), (15.0, 15))
+AIRING_MINUTES_WARM = 20
 
 RECOMMENDED_STATES = {VentilationState.VENTILATE_NOW, VentilationState.VENTILATION_USEFUL}
 
@@ -75,6 +83,8 @@ class VentilationSettings:
     cooling_margin: float = 1.0  # heating period: cool only this far above target
     cooling_min_temp: float = 0.0  # cool only from this room temperature on (0 = off)
     min_rh_drop: float = 3.0  # airing must lower the humidity at least this far
+    # heating period: extra humidity above the threshold needed per Kelvin colder air
+    energy_rh_per_k: float = 0.25
 
     def as_dict(self) -> dict[str, float]:
         return asdict(self)
@@ -109,6 +119,7 @@ class VentilationInput:
     target: float | None = None
     season_active: bool = False
     was_rh_high: bool = False  # humidity was high at the last evaluation (hysteresis)
+    was_drying: bool = False  # "ventilate now" at the last evaluation (hysteresis)
     # relative humidity a usual airing reaches according to the learned profile
     achievable_rh: float | None = None
 
@@ -127,6 +138,9 @@ class VentilationResult:
     cooling_useful: bool = False
     rh_after_exchange: float | None = None
     achievable_rh: float | None = None
+    energy_hold: bool = False  # drying would help but costs too much heat for now
+    required_rh: float | None = None  # humidity from which drying is worth its heat
+    airing_minutes: int | None = None  # suggested airing time while recommended
 
     @property
     def recommended(self) -> bool:
@@ -172,7 +186,22 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
         and (settings.cooling_min_temp <= 0 or data.temp >= settings.cooling_min_temp)
         and rh_after <= settings.rh_threshold
     )
-    benefit = drying_useful or cooling_useful
+    # Heat lost by airing grows with the temperature difference: in the heating period
+    # a room only slightly humid waits until it is clearly humid (or the air is milder).
+    required_rh = settings.rh_threshold
+    if data.season_active or data.heating_active:
+        extra = settings.energy_rh_per_k * max(0.0, delta_t)
+        required_rh = min(settings.rh_threshold + extra, max(MOULD_RH, settings.rh_threshold))
+    # once airing runs it goes on down to the hysteresis below the required humidity
+    start_rh = required_rh - settings.rh_hysteresis if data.was_drying else required_rh
+    energy_hold = (
+        required_rh > settings.rh_threshold
+        and drying_useful
+        and rh_high
+        and data.humidity < start_rh
+    )
+    worth_drying = drying_useful and not energy_hold
+    benefit = worth_drying or cooling_useful
 
     if data.blocked:
         if data.window_open:
@@ -183,7 +212,7 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
             state = VentilationState.OPTIMAL
     elif data.window_open and not benefit:
         state = VentilationState.CLOSE_WINDOW
-    elif rh_high and drying_useful:
+    elif rh_high and worth_drying:
         state = VentilationState.VENTILATE_NOW
     elif cooling_useful:
         state = VentilationState.VENTILATION_USEFUL
@@ -192,6 +221,11 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
     else:
         state = VentilationState.OPTIMAL
 
+    airing_minutes = None
+    if state in RECOMMENDED_STATES and not data.reference_is_indoor:
+        airing_minutes = next(
+            (m for limit, m in AIRING_MINUTES if data.ref_temp <= limit), AIRING_MINUTES_WARM
+        )
     return VentilationResult(
         state=state,
         ah_inside=round(ah_inside, 2),
@@ -203,4 +237,7 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
         cooling_useful=cooling_useful,
         rh_after_exchange=round(rh_after, 1),
         achievable_rh=None if data.achievable_rh is None else round(data.achievable_rh, 1),
+        energy_hold=energy_hold,
+        required_rh=round(required_rh, 1),
+        airing_minutes=airing_minutes,
     )

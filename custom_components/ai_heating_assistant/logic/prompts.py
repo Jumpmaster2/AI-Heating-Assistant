@@ -156,7 +156,10 @@ PROMPTS: dict[str, PromptSpec] = {
                 "rh_hysteresis. ventilate_now: humidity high, reference air at least "
                 "min_ah_advantage drier, at most max_reference_excess warmer, and the humidity "
                 "an airing reaches (achievable_now, from the learned profile) at least "
-                "min_rh_drop below the current one. ventilation_useful: cooling, the room is "
+                "min_rh_drop below the current one; in the heating period airing costs heat, so the "
+                "humidity must also exceed rh_threshold by energy_rh_per_k per K the reference "
+                "is colder than the room (capped at 70 %), otherwise energy_hold. "
+                "ventilation_useful: cooling, the room is "
                 "min_cooling_advantage warmer than the reference, nobody heats, in the heating "
                 "period only cooling_margin above target and from cooling_min_temp on, and "
                 "only if the humidity after the exchange stays below rh_threshold. "
@@ -191,15 +194,18 @@ PROMPTS: dict[str, PromptSpec] = {
                 "was open, window_rec_min = of that while recommended, useless_min = minutes "
                 "the window was open although airing brought nothing, heat_window_min = "
                 "minutes open while the area was heated, blocked_min = minutes a blocking "
-                "entity held back the recommendation, flips = changes of the recommendation "
+                "entity held back the recommendation, energy_hold_min = minutes drying would help "
+                "but was held back to save heat, flips = changes of the recommendation "
                 "(many flips annoy the residents).",
             ),
             PromptBlock(
                 "goal",
                 "Protection against mould is the hard limit: humidity of 70 % or more must not "
                 "last, and rooms must not stay humid for long. Within that, avoid "
-                "recommendations that bring little (useless_min, airing in the heating period "
-                "costs heat), avoid flipping and keep recommendations few and clear.",
+                "recommendations that bring little and save heating energy: in the heating period "
+                "a room only slightly above its threshold waits for milder air or clearly "
+                "higher humidity, and airing is short and intense (heat_window_min, "
+                "useless_min). Avoid flipping and keep recommendations few and clear.",
             ),
             PromptBlock(
                 "levers",
@@ -207,7 +213,8 @@ PROMPTS: dict[str, PromptSpec] = {
                 "min_ah_advantage, if the profile shows that airing helps; recommendations "
                 "that barely lower the humidity: raise min_rh_drop or min_ah_advantage; many "
                 "flips: raise rh_hysteresis; airing too often in the heating period without "
-                "need: raise rh_threshold towards the usual level; summer overheating: lower "
+                "need: raise rh_threshold towards the usual level or raise energy_rh_per_k; a room "
+                "humid for long while energy_hold_min is high: lower energy_rh_per_k; summer overheating: lower "
                 "min_cooling_advantage or cooling_min_temp.",
             ),
             PromptBlock(

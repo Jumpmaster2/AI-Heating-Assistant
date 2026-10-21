@@ -162,6 +162,9 @@ def _ventilation_attrs(area: Area) -> dict[str, Any]:
         "cooling_useful": vent.cooling_useful,
         "humidity_after_exchange": vent.rh_after_exchange,
         "humidity_after_airing": vent.achievable_rh,
+        "energy_saving_hold": vent.energy_hold,
+        "humidity_worth_airing": vent.required_rh,
+        "airing_minutes": vent.airing_minutes,
         "humidity_threshold": area.vent_params.rh_threshold,
         "typical_humidity": round(typical["rh_mean"].value, 1)
         if typical["rh_mean"].count

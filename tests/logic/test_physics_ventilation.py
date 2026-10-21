@@ -212,7 +212,7 @@ def _humid(humidity: float, **kwargs: object) -> VentilationInput:
 
 
 def test_humidity_hysteresis_keeps_the_recommendation() -> None:
-    settings = VentilationSettings(rh_threshold=60.0, rh_hysteresis=3.0)
+    settings = VentilationSettings(rh_threshold=60.0, rh_hysteresis=3.0, energy_rh_per_k=0.0)
     assert recommend(_humid(58.0), settings).state == VentilationState.OPTIMAL
     # still high until 3 % below the threshold once it was high
     assert recommend(_humid(58.0, was_rh_high=True), settings).state == (
@@ -222,7 +222,7 @@ def test_humidity_hysteresis_keeps_the_recommendation() -> None:
 
 
 def test_airing_that_cannot_lower_the_humidity_is_not_recommended() -> None:
-    settings = VentilationSettings(rh_threshold=60.0, min_rh_drop=3.0)
+    settings = VentilationSettings(rh_threshold=60.0, min_rh_drop=3.0, energy_rh_per_k=0.0)
     assert recommend(_humid(65.0, achievable_rh=55.0), settings).state == (
         VentilationState.VENTILATE_NOW
     )
@@ -239,3 +239,31 @@ def test_ventilation_settings_round_trip() -> None:
     assert settings.min_ah_advantage == 1.2
     assert settings.min_rh_drop == 3.0
     assert VentilationSettings.from_dict(settings.as_dict()) == settings
+
+
+def test_slightly_humid_room_waits_while_it_is_cold_outside() -> None:
+    """Heating period: 0.25 %/K above the threshold per Kelvin colder air."""
+    settings = VentilationSettings(rh_threshold=60.0, energy_rh_per_k=0.25)
+    # 21 °C inside, 5 °C outside: 16 K -> 4 % more, airing only from 64 %
+    held = recommend(_humid(62.0), settings)
+    assert held.state == VentilationState.DO_NOT_VENTILATE
+    assert held.energy_hold and held.required_rh == 64.0 and held.airing_minutes is None
+    now = recommend(_humid(65.0), settings)
+    assert now.state == VentilationState.VENTILATE_NOW and not now.energy_hold
+    assert now.airing_minutes == 10  # 5 °C outside: short airing
+    # an open window while it does not pay off: close it
+    assert recommend(_humid(62.0, window_open=True), settings).state == (
+        VentilationState.CLOSE_WINDOW
+    )
+    # airing already running goes on down to the hysteresis (3 %) below 64 %
+    assert recommend(_humid(62.0, was_rh_high=True, was_drying=True), settings).state == (
+        VentilationState.VENTILATE_NOW
+    )
+    assert recommend(_humid(60.5, was_rh_high=True, was_drying=True), settings).energy_hold
+    # very cold: the surcharge never goes beyond the mould limit
+    frosty = recommend(_humid(70.0, ref_temp=-25.0, ref_humidity=80.0), settings)
+    assert frosty.required_rh == 70.0 and frosty.state == VentilationState.VENTILATE_NOW
+    assert frosty.airing_minutes == 5
+    # outside the heating period no surcharge
+    summer = recommend(_humid(62.0, heating_active=False, ref_temp=15.0), settings)
+    assert summer.required_rh == 60.0 and not summer.energy_hold

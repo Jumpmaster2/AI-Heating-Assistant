@@ -153,6 +153,7 @@ _VALUES: dict[str, dict[str, dict[str, str]]] = {
             "en": "max. reference excess",
         },
         "min_rh_drop": {"de": "Mindest-Feuchteabfall", "en": "minimum humidity drop"},
+        "energy_rh_per_k": {"de": "Energiespar-Zuschlag", "en": "energy saving surcharge"},
         "min_cooling_advantage": {"de": "Mindest-Kühlvorteil", "en": "minimum cooling advantage"},
         "cooling_margin": {"de": "Kühl-Abstand zum Sollwert", "en": "cooling margin"},
         "cooling_min_temp": {
