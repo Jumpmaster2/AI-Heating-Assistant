@@ -414,12 +414,16 @@
               "data": {
                 "temperature_sensor": "Temperatursensor",
                 "humidity_sensor": "Feuchtesensor",
-                "window_sensors": "Fenstersensoren"
+                "window_sensors": "Fenstersensoren",
+                "draft_window_sensors": "Luftzug aus anderen Räumen",
+                "draft_mode": "Luftzug, wenn"
               },
               "data_description": {
                 "temperature_sensor": "Raumtemperatur des Bereichs.",
                 "humidity_sensor": "Relative Luftfeuchte, nötig für die Lüftungsempfehlung.",
-                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
+                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen).",
+                "draft_window_sensors": "Fensterkontakte anderer Räume, deren Luftzug auch diesen Bereich abkühlt, z. B. zwei gegenüberliegende Räume, die gleichzeitig gelüftet werden. Solange Luftzug erkannt wird, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab.",
+                "draft_mode": "Alle offen: Nur Querlüftung zählt (alle gewählten Fenster offen). Eines offen: Ein offenes Fenster genügt."
               }
             },
             "heating": {
@@ -491,12 +495,16 @@
               "data": {
                 "temperature_sensor": "Temperatursensor",
                 "humidity_sensor": "Feuchtesensor",
-                "window_sensors": "Fenstersensoren"
+                "window_sensors": "Fenstersensoren",
+                "draft_window_sensors": "Luftzug aus anderen Räumen",
+                "draft_mode": "Luftzug, wenn"
               },
               "data_description": {
                 "temperature_sensor": "Raumtemperatur des Bereichs.",
                 "humidity_sensor": "Relative Luftfeuchte, nötig für die Lüftungsempfehlung.",
-                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
+                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen).",
+                "draft_window_sensors": "Fensterkontakte anderer Räume, deren Luftzug auch diesen Bereich abkühlt, z. B. zwei gegenüberliegende Räume, die gleichzeitig gelüftet werden. Solange Luftzug erkannt wird, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab.",
+                "draft_mode": "Alle offen: Nur Querlüftung zählt (alle gewählten Fenster offen). Eines offen: Ein offenes Fenster genügt."
               }
             },
             "heating": {
@@ -578,6 +586,12 @@
         "underfloor": "Fußbodenheizung",
         "radiator": "Heizkörper",
         "other": "Andere (z. B. Wandheizung)"
+      }
+    },
+    "draft_mode": {
+      "options": {
+        "all": "Alle gewählten Fenster sind offen",
+        "any": "Eines der gewählten Fenster ist offen"
       }
     },
     "month": {

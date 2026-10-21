@@ -53,6 +53,8 @@ from .const import (
     CONF_CHECK_MAX_INTERVAL,
     CONF_DEAD_TIME,
     CONF_DEFAULT_TARGET,
+    CONF_DRAFT_MODE,
+    CONF_DRAFT_WINDOWS,
     CONF_EMERGENCY_DELTA,
     CONF_EMERGENCY_DURATION,
     CONF_EMERGENCY_ENABLED,
@@ -117,6 +119,7 @@ from .const import (
     CONF_WINDOWS,
     DEFAULTS,
     DOMAIN,
+    DRAFT_MODES,
     EFFORT_OPTIONS,
     HEATING_TYPES,
     LEARNED_THETA,
@@ -800,6 +803,19 @@ def area_schema(
                         vol.Optional(CONF_WINDOWS, default=v.get(CONF_WINDOWS, [])): _entity(
                             ["binary_sensor", "input_boolean"],
                             multiple=True,
+                        ),
+                        vol.Optional(
+                            CONF_DRAFT_WINDOWS, default=v.get(CONF_DRAFT_WINDOWS, [])
+                        ): _entity(["binary_sensor", "input_boolean"], multiple=True),
+                        vol.Required(
+                            CONF_DRAFT_MODE,
+                            default=v.get(CONF_DRAFT_MODE, AREA_DEFAULTS[CONF_DRAFT_MODE]),
+                        ): SelectSelector(
+                            SelectSelectorConfig(
+                                options=list(DRAFT_MODES),
+                                translation_key="draft_mode",
+                                mode=SelectSelectorMode.DROPDOWN,
+                            )
                         ),
                     }
                 ),

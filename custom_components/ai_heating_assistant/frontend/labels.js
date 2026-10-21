@@ -242,6 +242,14 @@ export const LABELS = {
     "Fenstersensoren",
     "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
    ],
+   "draft_window_sensors": [
+    "Luftzug aus anderen Räumen",
+    "Fensterkontakte anderer Räume, deren Luftzug auch diesen Bereich abkühlt, z. B. zwei gegenüberliegende Räume, die gleichzeitig gelüftet werden. Solange Luftzug erkannt wird, verhält sich der Bereich wie bei einem eigenen offenen Fenster: Die Heizung pausiert nach der Fensterverzögerung und wartet danach die Erholungszeit ab."
+   ],
+   "draft_mode": [
+    "Luftzug, wenn",
+    "Alle offen: Nur Querlüftung zählt (alle gewählten Fenster offen). Eines offen: Ein offenes Fenster genügt."
+   ],
    "heater_switch": [
     "Heizkreis-Schalter",
     "Schalter des Stellantriebs (z. B. ein Relais). Leer lassen für einen Bereich nur mit Lüftungsempfehlung."
@@ -422,6 +430,10 @@ export const LABELS = {
    "underfloor": "Fußbodenheizung",
    "radiator": "Heizkörper",
    "other": "Andere (z. B. Wandheizung)"
+  },
+  "draft_mode": {
+   "all": "Alle gewählten Fenster sind offen",
+   "any": "Eines der gewählten Fenster ist offen"
   }
  },
  "en": {
@@ -666,6 +678,14 @@ export const LABELS = {
     "Window sensors",
     "One or more window/door contacts ('on' = open)."
    ],
+   "draft_window_sensors": [
+    "Draft from other rooms",
+    "Window contacts of other rooms whose draft also cools this area, e.g. two opposite rooms aired at the same time. While draft is detected the area behaves as with an open own window: heating pauses after the window delay and waits the recovery time."
+   ],
+   "draft_mode": [
+    "Draft when",
+    "All open: only cross ventilation (every selected window open) counts. Any open: one open window is enough."
+   ],
    "heater_switch": [
     "Heating circuit switch",
     "Switch of the actuator (e.g. a relay). Leave empty for an area with ventilation recommendation only."
@@ -846,6 +866,10 @@ export const LABELS = {
    "underfloor": "Underfloor heating",
    "radiator": "Radiators",
    "other": "Other (e.g. wall heating)"
+  },
+  "draft_mode": {
+   "all": "All selected windows are open",
+   "any": "Any selected window is open"
   }
  }
 };

@@ -21,7 +21,17 @@ from logic.ai_schema import (
     validate_check,
     validate_nightly,
 )
-from logic.prompts import check_messages, nightly_messages
+from logic.prompts import (
+    MAX_BLOCK_CHARS,
+    MAX_CUSTOM_BLOCKS,
+    PROMPTS,
+    PromptError,
+    block_ids,
+    build_system,
+    check_messages,
+    clean_prompts,
+    nightly_messages,
+)
 
 PRICES = Prices(input=4.0, output=20.0, cache_write=5.0, cache_read=0.2)
 
@@ -175,3 +185,73 @@ def test_value_outside_narrowed_limits_ends_inside() -> None:
         "confidence": 1,
     }
     assert validate_check(raw, current, limits).applied[0].new == 0.25
+
+
+def test_prompt_blocks_without_changes_give_the_standard_prompt() -> None:
+    for kind, spec in PROMPTS.items():
+        expected = " ".join([spec.head, *(b.text for b in spec.blocks), spec.tail])
+        assert build_system(kind) == expected
+        assert build_system(kind, {}) == expected
+        assert all(b.text in expected for b in spec.blocks)
+    # one id per block and call
+    assert all(len(set(block_ids(k))) == len(PROMPTS[k].blocks) for k in PROMPTS)
+
+
+def test_prompt_blocks_disable_reword_and_add() -> None:
+    config = {
+        "disabled": ["learn"],
+        "overrides": {"goal": "  Comfort first, always.  "},
+        "custom": [
+            {"text": "Abends brennt meist der Kaminofen.", "enabled": True},
+            {"text": "Switched off block.", "enabled": False},
+            {"text": "   "},
+        ],
+    }
+    system = build_system("nightly", config)
+    spec = PROMPTS["nightly"]
+    assert "Learn from recent errors" not in system
+    assert "Comfort first, always. " in system and "cool_kph is the learned" not in system
+    assert "- Abends brennt meist der Kaminofen." in system
+    assert "Switched off block" not in system
+    # task first, answer format last; own blocks after the standard blocks
+    assert system.startswith(spec.head) and system.endswith(spec.tail)
+    assert system.index("Kaminofen") > system.index("Comfort first")
+    system, _ = nightly_messages({}, "de", {"nightly": config})
+    assert "Kaminofen" in system and system.endswith("in German.")
+    system, _ = check_messages({}, "en", {"nightly": config})
+    assert "Kaminofen" not in system
+
+
+def test_clean_prompts() -> None:
+    standard = PROMPTS["check"].blocks[0].text
+    clean = clean_prompts(
+        {
+            "check": {
+                "disabled": ["levers", "types"],
+                "overrides": {"types": standard, "stats": " Own text "},
+                "custom": [{"text": " a ", "enabled": False}, {"text": ""}],
+            },
+            "nightly": {"disabled": [], "overrides": {}, "custom": []},
+        }
+    )
+    # standard order, unchanged wording and empty blocks dropped, unchanged calls left out
+    assert clean == {
+        "check": {
+            "disabled": ["types", "levers"],
+            "overrides": {"stats": "Own text"},
+            "custom": [{"text": "a", "enabled": False}],
+        }
+    }
+    assert clean_prompts({}) == {}
+    for value, code in (
+        ([], "invalid_value"),
+        ({"other": {}}, "invalid_value"),
+        ({"check": {"disabled": ["unknown"]}}, "invalid_value"),
+        ({"check": {"overrides": {"unknown": "x"}}}, "invalid_value"),
+        ({"check": {"custom": ["text"]}}, "invalid_value"),
+        ({"check": {"custom": [{"text": 5}]}}, "invalid_value"),
+        ({"check": {"custom": [{"text": "x" * (MAX_BLOCK_CHARS + 1)}]}}, "text_too_long"),
+        ({"check": {"custom": [{"text": "x"}] * (MAX_CUSTOM_BLOCKS + 1)}}, "too_many_blocks"),
+    ):
+        with pytest.raises(PromptError, match=code):
+            clean_prompts(value)

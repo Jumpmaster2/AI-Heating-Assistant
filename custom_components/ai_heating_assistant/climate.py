@@ -114,6 +114,7 @@ class AreaClimate(AreaEntity, ClimateEntity):
         decision = area.decision
         return {
             "status": area.status,
+            "draft": area.draft,
             "effective_target": area.effective_target,
             "heating_day": self.coordinator.heating_day,
             "predicted_temperature": _tenth(decision.predicted_temp) if decision else None,
