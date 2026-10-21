@@ -53,6 +53,7 @@ from .const import (
     CONF_CHECK_MAX_INTERVAL,
     CONF_DEAD_TIME,
     CONF_DEFAULT_TARGET,
+    CONF_DOORS,
     CONF_DRAFT_GROUPS,
     CONF_EMERGENCY_DELTA,
     CONF_EMERGENCY_DURATION,
@@ -126,6 +127,8 @@ from .const import (
     CONF_WEATHER,
     CONF_WINDOW_DELAY,
     CONF_WINDOWS,
+    CONF_WINDOWS_LARGE,
+    CONF_WINDOWS_SMALL,
     DEFAULTS,
     DOMAIN,
     EFFORT_OPTIONS,
@@ -831,10 +834,18 @@ def area_schema(
                             "temperature", TEMP_UNITS
                         ),
                         _opt_entity(CONF_HUMIDITY_SENSOR, v): _sensor("humidity", HUMIDITY_UNITS),
-                        vol.Optional(CONF_WINDOWS, default=v.get(CONF_WINDOWS, [])): _entity(
-                            ["binary_sensor", "input_boolean"],
-                            multiple=True,
-                        ),
+                        **{
+                            vol.Optional(key, default=v.get(key, [])): _entity(
+                                ["binary_sensor", "input_boolean"],
+                                multiple=True,
+                            )
+                            for key in (
+                                CONF_WINDOWS_SMALL,
+                                CONF_WINDOWS,
+                                CONF_WINDOWS_LARGE,
+                                CONF_DOORS,
+                            )
+                        },
                     }
                 ),
                 {"collapsed": False},

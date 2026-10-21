@@ -302,3 +302,10 @@ def test_airing_time_from_learned_rate_factor_and_bounds() -> None:
     assert recommend(_humid(65.0, learned_airing_minutes=1.0), short).airing_minutes == 4
     # not learned yet: table by outdoor temperature (5 °C -> 10 minutes)
     assert recommend(_humid(65.0), settings).airing_minutes == 10
+
+
+def test_table_airing_time_follows_the_opening() -> None:
+    settings = VentilationSettings(rh_threshold=60.0, energy_rh_per_k=0.0)
+    # 5 °C outside: 10 minutes for a medium window, 4 for a balcony door
+    assert recommend(_humid(65.0, opening=2.5), settings).airing_minutes == 4
+    assert recommend(_humid(65.0, opening=0.5), settings).airing_minutes == 20

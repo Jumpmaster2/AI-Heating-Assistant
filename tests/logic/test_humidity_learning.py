@@ -157,3 +157,24 @@ def test_air_exchange_rate_gives_the_airing_time() -> None:
     restored = HumidityProfile.from_dict(profile.as_dict())
     assert restored.rate.value == profile.rate.value
     assert restored.last_closed == profile.last_closed
+
+
+def test_exchange_rate_is_kept_per_opening_area() -> None:
+    profile = HumidityProfile()
+    ah0 = absolute_humidity(21.0, 65.0)
+    ts = 0.0
+    for _ in range(2):  # two airings through a balcony door (2.5 x a medium window)
+        for i in range(11):
+            ah = REF_AH + (ah0 - REF_AH) * math.exp(-0.25 * i)
+            rh = 100.0 * ah / absolute_humidity(21.0, 100.0)
+            profile.add_sample(
+                ts + i * 60, "d", "heating", False, 21.0, rh, REF_AH, True, 16.0, None, 2.5
+            )
+        profile.add_sample(ts + 660, "d", "heating", False, 21.0, 50.0, REF_AH, False)
+        ts += 4000
+    assert profile.events[-1]["opening"] == 2.5
+    k = 0.25 * 10 / 11
+    assert profile.rate.value == pytest.approx(k / 4 / 2.5, rel=0.02)
+    door = profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0, 2.5)
+    window = profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0, 1.0)
+    assert window == pytest.approx(door * 2.5, rel=0.01)

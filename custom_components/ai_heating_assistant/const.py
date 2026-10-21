@@ -105,7 +105,10 @@ CONF_HEATING_TYPE = "heating_type"
 HEATING_TYPES: Final = ("underfloor", "radiator", "other")
 CONF_TEMP_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
-CONF_WINDOWS = "window_sensors"
+CONF_WINDOWS = "window_sensors"  # medium windows (the field of earlier versions)
+CONF_WINDOWS_SMALL = "window_sensors_small"
+CONF_WINDOWS_LARGE = "window_sensors_large"
+CONF_DOORS = "door_sensors"
 # combinations of windows in other rooms whose draft cools this area too
 CONF_DRAFT_GROUPS: Final = DRAFT_GROUP_KEYS
 CONF_DEFAULT_TARGET = "default_target"
@@ -205,7 +208,10 @@ DEFAULTS: Final[dict[str, object]] = {
 }
 
 AREA_DEFAULTS: Final[dict[str, object]] = {
+    CONF_WINDOWS_SMALL: [],
     CONF_WINDOWS: [],
+    CONF_WINDOWS_LARGE: [],
+    CONF_DOORS: [],
     **{key: [] for key in DRAFT_GROUP_KEYS},
     CONF_DEFAULT_TARGET: 21.0,
     CONF_MIN_TARGET: 16.0,

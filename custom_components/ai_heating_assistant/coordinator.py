@@ -116,7 +116,6 @@ from .const import (
     CONF_VENT_TIME_FACTOR,
     CONF_WEATHER,
     CONF_WINDOW_DELAY,
-    CONF_WINDOWS,
     DEFAULTS,
     DOMAIN,
     EVENT_LOGBOOK,
@@ -204,6 +203,7 @@ from .logic.ventilation import (
     is_blocking,
     recommend,
 )
+from .logic.windows import WINDOW_FIELDS, largest, open_area, own_windows
 from .messages import label_of, text
 
 SAVE_DELAY = 30
@@ -262,6 +262,8 @@ class Area:
     humidity: float | None = None
     window_open: bool = False  # own window or draft: the controller pauses either way
     own_window_open: bool = False
+    opening: float = 0.0  # relative opening area of the own windows open now
+    suggested_window: str | None = None  # window to open for the suggested airing
     draft: bool = False  # draft through windows open in other rooms
     switch_on: bool = False
     switch_available: bool = False
@@ -775,7 +777,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             for key in (CONF_TEMP_SENSOR, CONF_VENT_BLOCK):
                 if area.cfg.get(key):
                     watched.add(area.cfg[key])
-            watched.update(area.cfg.get(CONF_WINDOWS) or [])
+            watched.update(own_windows(area.cfg))
             for group in draft_groups(area.cfg):
                 watched.update(group)
             if area.has_circuit:
@@ -1352,7 +1354,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         cfg = area.cfg
         area.temp = self._temp(cfg.get(CONF_TEMP_SENSOR))
         area.humidity = self._humidity(cfg.get(CONF_HUMIDITY_SENSOR))
-        area.own_window_open = any(self._is_on(w) for w in cfg.get(CONF_WINDOWS) or [])
+        area.opening = open_area(own_windows(cfg), self._is_on)
+        area.own_window_open = area.opening > 0
         area.draft = self._draft(cfg)
         area.window_open = area.own_window_open or area.draft
 
@@ -1380,7 +1383,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
     def _draft(self, cfg: dict[str, Any]) -> bool:
         """Draft through windows of other rooms: every window of one combination open.
         A sensor that is also an own window counts only there."""
-        return has_draft(draft_groups(cfg, cfg.get(CONF_WINDOWS) or ()), self._is_on)
+        return has_draft(draft_groups(cfg, own_windows(cfg)), self._is_on)
 
     async def _control_area(
         self, area: Area, ts: float, minutes: float, heating_day: bool, return_ts: float | None
@@ -1622,7 +1625,13 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 area.own_window_open,
                 delta_t=delta_t,
                 suggested=previous.airing_minutes if previous else None,
+                opening=area.opening or 1.0,
             )
+        # The airing time is meant for the windows open now, otherwise for the largest
+        # window of the room (short, intense airing).
+        biggest = largest(own_windows(cfg))
+        area.suggested_window = None if area.own_window_open or biggest is None else biggest[0]
+        opening = area.opening or (biggest[1] if biggest else 1.0)
         vp = area.vent_params
         area.ventilation = recommend(
             VentilationInput(
@@ -1648,7 +1657,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     ref_ah,
                     delta_t,
                     vp.rh_threshold - vp.airing_target_below,
+                    opening,
                 ),
+                opening=opening,
                 minutes_since_airing=(ts - profile.last_closed) / 60
                 if profile.last_closed is not None
                 else None,
@@ -2420,6 +2431,11 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "ref_ah": r(ref_ah),
             "state": vent.state if vent else None,
             "window_open": area.own_window_open,
+            "windows": {
+                size: len(area.cfg.get(key) or ())
+                for key, size in WINDOW_FIELDS.items()
+                if area.cfg.get(key)
+            },
             "params": area.vent_params.as_dict(),
             "profile": area.humidity_profile.summary(
                 self._humidity_season, area.temp, area.humidity, ref_ah

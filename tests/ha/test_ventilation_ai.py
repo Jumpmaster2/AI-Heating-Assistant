@@ -15,7 +15,7 @@ from pytest_homeassistant_custom_component.common import async_capture_events
 from custom_components.ai_heating_assistant.const import DOMAIN, EVENT_LOGBOOK
 from custom_components.ai_heating_assistant.logic.ai_schema import VENT_PARAMS
 
-from .conftest import make_entry
+from .conftest import AREA_DATA, VENT_ONLY_DATA, make_entry
 from .test_control import STRUCTURED, USAGE, _advance, _setup
 
 SUMMER = "2026-07-15 10:00:00+02:00"
@@ -134,3 +134,32 @@ async def test_ventilation_parameters_reset_export_and_import(
     exported["areas"]["Storage room"]["vent_params"]["rh_threshold"] = 99
     coordinator.import_parameters(exported, [area.area_id])
     assert area.vent_params.rh_threshold == 95.0  # clamped to the limit
+
+
+async def test_window_sizes_and_suggested_window(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(SUMMER)
+    hass.states.async_set("binary_sensor.storage_door", "off")
+    hass.states.async_set("binary_sensor.storage_skylight", "off")
+    storage = {
+        **VENT_ONLY_DATA,
+        "window_sensors_small": ["binary_sensor.storage_skylight"],
+        "door_sensors": ["binary_sensor.storage_door"],
+    }
+    await _setup(hass, make_entry(api_key="test-key", areas=[AREA_DATA, storage]))
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    await _advance(hass, freezer, 2)
+    area = next(a for a in coordinator.areas.values() if a.prompt_id == "a2")
+    attrs = hass.states.get("sensor.storage_room_ventilation_recommendation").attributes
+    assert area.ventilation.state == "ventilate_now"  # 70 % >= 65 %, outside drier
+    assert attrs["airing_window"] == "binary_sensor.storage_door"
+    # summer at 5 °C outside: 10 minutes for a medium window, a door needs 4
+    assert attrs["airing_minutes"] == 4
+
+    hass.states.async_set("binary_sensor.storage_skylight", "on")
+    await _advance(hass, freezer, 1)
+    assert area.own_window_open and area.opening == 0.5
+    assert area.suggested_window is None  # already airing
+    payload = coordinator._vent_area_payload(area)
+    assert payload["windows"] == {"small": 1, "door": 1}

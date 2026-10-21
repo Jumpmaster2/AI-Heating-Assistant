@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 1.2.1. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 1.3.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -79,7 +79,7 @@ Je Bereich (auch ohne Heizkreis) aus absoluter Feuchte innen und außen (oder ei
 
 **Energiesparend lüften:** In der Heizperiode kostet Lüften Wärme, umso mehr, je kälter die Außenluft ist. Ein nur leicht zu feuchter Raum wartet deshalb: Die Feuchte muss die Schwelle um den *Energiespar-Zuschlag* je Kelvin Temperaturunterschied übersteigen (Standard 0,25 %/K, bei 21 °C innen und 1 °C außen also 5 % mehr). Der Zuschlag reicht nie über 70 %; ab dort wird gegen Schimmel immer gelüftet. Bis dahin lautet die Empfehlung *Nicht lüften*, ein offenes Fenster ergibt *Fenster schließen*. Hat das Lüften begonnen, läuft es bis zur Hysterese unter der nötigen Feuchte weiter. Der Zuschlag reicht nie über die *Schimmelgrenze* (Standard 70 %, je Raum einstellbar, z. B. niedriger bei kalten Außenwänden). Nach einer Lüftung bekommt der Raum eine *Pause* (Standard 30 Minuten), in der Feuchte aus Wänden zurückkommt, bevor erneut zum Trocknen geraten wird.
 
-**Gelernte Lüftdauer:** Jeder Raum lernt aus seinen Lüftungen, wie schnell seine Fenster die Luft austauschen (umgerechnet auf den Temperaturunterschied, denn kalte Luft zieht schneller). Daraus schlägt das Attribut `airing_minutes` die Minuten vor, die bis zum *Lüftziel* (Standard 5 % unter der Schwelle) nötig sind, mal *Lüftdauer-Faktor*, begrenzt auf *kürzeste* und *längste Lüftdauer* (3 bis 20 Minuten). Bis zwei Lüftungen ausgewertet sind, gilt eine Tabelle nach Außentemperatur (5 Minuten bei Frost, 10 bis 10 °C, 15 bis 15 °C, sonst 20). Die KI sieht bei jeder Lüftung vorgeschlagene und tatsächliche Dauer, Feuchte vorher, am tiefsten und 30 Minuten danach und passt alle diese Werte je Raum an.
+**Gelernte Lüftdauer:** Jeder Raum lernt aus seinen Lüftungen, wie schnell seine Fenster die Luft austauschen (umgerechnet auf den Temperaturunterschied, denn kalte Luft zieht schneller). Daraus schlägt das Attribut `airing_minutes` die Minuten vor, die bis zum *Lüftziel* (Standard 5 % unter der Schwelle) nötig sind, mal *Lüftdauer-Faktor*, begrenzt auf *kürzeste* und *längste Lüftdauer* (3 bis 20 Minuten). Bis zwei Lüftungen ausgewertet sind, gilt eine Tabelle nach Außentemperatur (5 Minuten bei Frost, 10 bis 10 °C, 15 bis 15 °C, sonst 20). Die Größe der Fenster zählt mit: Ein kleines Fenster hat die halbe Öffnung eines mittleren, ein großes das 1,6-fache, eine Tür das 2,5-fache. Gelernt wird der Luftaustausch je Öffnungsfläche, deshalb stimmt die Lüftdauer für jedes Fenster des Raums. Vorgeschlagen wird die größte Öffnung (Attribut `airing_window`) mit der Dauer dafür; ist schon ein Fenster offen, gilt die Dauer für die offenen Fenster. Die KI sieht bei jeder Lüftung vorgeschlagene und tatsächliche Dauer, Feuchte vorher, am tiefsten und 30 Minuten danach und passt alle diese Werte je Raum an.
 
 **KI-Lüftungsprüfung:** Ganzjährig prüft die KI die Lüftungsschwellen jedes Bereichs mit Feuchtesensor, aufgebaut wie die Parameterprüfung der Heizkreise: Sie bekommt das Feuchteprofil, die Statistik seit der letzten Prüfung (Minuten feucht, ab 70 %, empfohlen, Fenster offen, unnötig offen, offen beim Heizen, Wechsel der Empfehlung) und den Verlauf früherer Prüfungen und darf je Bereich Feuchte-Schwelle, Hysterese, Mindest-Trocknungsvorteil, Übertemperatur der Referenz, Mindest-Feuchteabfall, Energiespar-Zuschlag, Schimmelgrenze, Lüftziel, Lüftdauer-Faktor, kürzeste und längste Lüftdauer, Pause nach dem Lüften, Mindest-Kühlvorteil, Kühl-Abstand und Kühlen-ab-Temperatur innerhalb der KI-Grenzen anpassen. Die konfigurierten Werte sind Startwerte; ändert man sie, ersetzen sie den Wert der KI. Das Intervall beginnt beim Grundintervall (6 h) und verdoppelt sich mit jeder Prüfung ohne relevante Änderung bis zum Höchstintervall (72 h); bleibt ein Raum lange feucht oder ändert sich etwas, beginnt es von vorn. Die Prüfung nutzt das gemeinsame Monatsbudget; ihre Anweisungen lassen sich unter *KI-Anweisungen* (Lüftungsprüfung) anpassen. Die gelernten Werte zeigt der Reiter **Lernwerte**.
 
@@ -155,7 +155,8 @@ Im Dashboard unter **Heizbereiche** (oder unter der Integration **Heizbereich hi
 | Option | Standard |
 |---|---|
 | Name | |
-| Temperatursensor, Feuchtesensor, Fenstersensoren | z. B. `sensor.living_room_temperature`, `binary_sensor.living_room_window` |
+| Temperatursensor, Feuchtesensor | z. B. `sensor.living_room_temperature` |
+| Kleine, mittlere, große Fenster, Türen | Fensterkontakte nach Größe, z. B. `binary_sensor.living_room_window`; Türen nach draußen wie die Balkontür. Fenster früherer Versionen stehen bei „mittel“ |
 | Luftzug aus anderen Räumen | optional: bis zu 4 Kombinationen von Fensterkontakten anderer Räume, die zusammen offen sein müssen |
 | Heizkreis-Schalter | z. B. `switch.heating_circuit_1`; leer = nur Lüftungsempfehlung |
 | Start-Sollwert, kleinster und größter Sollwert | 21 / 16 / 24 °C |
