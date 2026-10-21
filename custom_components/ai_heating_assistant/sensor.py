@@ -141,22 +141,34 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
         options=[s.value for s in VentilationState],
         circuit_only=False,
         value_fn=lambda a: a.ventilation.state if a.ventilation else VentilationState.UNKNOWN,
-        attrs_fn=lambda a: (
-            {
-                "absolute_humidity_inside": a.ventilation.ah_inside,
-                "absolute_humidity_reference": a.ventilation.ah_reference,
-                "delta_absolute_humidity": a.ventilation.delta_ah,
-                "delta_temperature": a.ventilation.delta_t,
-                "humidity_high": a.ventilation.rh_high,
-                "drying_useful": a.ventilation.drying_useful,
-                "cooling_useful": a.ventilation.cooling_useful,
-                "humidity_after_exchange": a.ventilation.rh_after_exchange,
-            }
-            if a.ventilation
-            else {}
-        ),
+        attrs_fn=lambda a: _ventilation_attrs(a),
     ),
 )
+
+
+def _ventilation_attrs(area: Area) -> dict[str, Any]:
+    vent = area.ventilation
+    if vent is None:
+        return {}
+    profile = area.humidity_profile
+    typical = profile.typical.get(profile.day.season) or profile.typical["heating"]
+    return {
+        "absolute_humidity_inside": vent.ah_inside,
+        "absolute_humidity_reference": vent.ah_reference,
+        "delta_absolute_humidity": vent.delta_ah,
+        "delta_temperature": vent.delta_t,
+        "humidity_high": vent.rh_high,
+        "drying_useful": vent.drying_useful,
+        "cooling_useful": vent.cooling_useful,
+        "humidity_after_exchange": vent.rh_after_exchange,
+        "humidity_after_airing": vent.achievable_rh,
+        "humidity_threshold": area.vent_params.rh_threshold,
+        "typical_humidity": round(typical["rh_mean"].value, 1)
+        if typical["rh_mean"].count
+        else None,
+        "lowest_humidity_14d": profile.floor_rh,
+        "parameters": area.vent_params.as_dict(),
+    }
 
 
 async def async_setup_entry(
@@ -170,6 +182,8 @@ async def async_setup_entry(
             HeatingDayPhaseSensor(coordinator),
             AiTimestampSensor(coordinator, "ai_last_check", "last_check"),
             AiTimestampSensor(coordinator, "ai_next_check", "next_check"),
+            AiTimestampSensor(coordinator, "ai_last_vent_check", "last_check", vent=True),
+            AiTimestampSensor(coordinator, "ai_next_vent_check", "next_check", vent=True),
             AiCostSensor(coordinator),
         ]
     )
@@ -239,25 +253,38 @@ class HeatingDayPhaseSensor(GlobalEntity, SensorEntity):
 
 
 class AiTimestampSensor(GlobalEntity, SensorEntity):
-    """Last or next AI check."""
+    """Last or next AI check of the heating parameters or of the ventilation."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _unrecorded_attributes = frozenset({"summary", "rejected"})
 
-    def __init__(self, coordinator: HeatingCoordinator, key: str, state_key: str) -> None:
+    def __init__(
+        self, coordinator: HeatingCoordinator, key: str, state_key: str, vent: bool = False
+    ) -> None:
         super().__init__(coordinator, key)
         self._state_key = state_key
+        self._vent = vent
+
+    @property
+    def _ai(self) -> dict[str, Any]:
+        return self.coordinator.vent_state if self._vent else self.coordinator.ai_state
 
     @property
     def native_value(self) -> datetime | None:
-        return dt_util.parse_datetime(str(self.coordinator.ai_state.get(self._state_key) or ""))
+        return dt_util.parse_datetime(str(self._ai.get(self._state_key) or ""))
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
+        ai = self._ai
         if self._state_key != "last_check":
-            return {"stable_checks": self.coordinator.ai_state.get("stable", 0)}
-        ai = self.coordinator.ai_state
+            return {"stable_checks": ai.get("stable", 0)}
+        if self._vent:
+            return {
+                "summary": ai.get("last_summary"),
+                "confidence": ai.get("last_confidence"),
+                "rejected": ai.get("last_rejected"),
+            }
         return {
             "summary": ai.get("last_summary"),
             "confidence": ai.get("last_confidence"),

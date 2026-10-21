@@ -2,7 +2,14 @@
 
 from logic.controller import ControlParams
 from logic.learning import AreaLearner, Ewma
-from logic.start_values import apply_start_values, read_record
+from logic.start_values import (
+    VENT_START_NAMES,
+    apply_start_values,
+    apply_vent_start_values,
+    read_record,
+    read_vent_record,
+)
+from logic.ventilation import VentilationSettings
 
 CFG = {"dead_time": 1800.0, "recovery": 1800.0, "window_delay_min": 5.0, "puffer": 0.7}
 
@@ -79,3 +86,18 @@ def test_read_record_tolerates_garbage() -> None:
     assert read_record({"dead_time": "x", "bogus": 1, "puffer": 0.5, "recovery": True}) == {
         "puffer": 0.5
     }
+
+
+def test_ventilation_start_values() -> None:
+    configured = {name: 1.0 for name in VENT_START_NAMES}
+    settings = VentilationSettings(rh_threshold=66.0)
+    # without a record the stored value (maybe from the AI) stays
+    assert apply_vent_start_values({**configured, "rh_threshold": 60.0}, {}, settings) == []
+    assert settings.rh_threshold == 66.0
+    record = read_vent_record({**configured, "rh_threshold": 60.0, "x": 1, "cooling_margin": True})
+    assert "cooling_margin" not in record and "x" not in record
+    # unchanged configuration: the value of the AI stays
+    assert apply_vent_start_values({**configured, "rh_threshold": 60.0}, record, settings) == []
+    # changed configuration replaces it
+    applied = apply_vent_start_values({**configured, "rh_threshold": 65.0}, record, settings)
+    assert applied == [("rh_threshold", 66.0, 65.0)] and settings.rh_threshold == 65.0

@@ -197,3 +197,45 @@ def test_no_cooling_if_outside_air_makes_room_too_humid() -> None:
 )
 def test_block_entity_per_domain(domain: str, state: str, expected: bool) -> None:
     assert is_blocking(domain, state) is expected
+
+
+def _humid(humidity: float, **kwargs: object) -> VentilationInput:
+    values: dict = {
+        "temp": 21.0,
+        "humidity": humidity,
+        "ref_temp": 5.0,
+        "ref_humidity": 80.0,
+        "heating_active": True,  # no cooling advantage
+    }
+    values.update(kwargs)
+    return VentilationInput(**values)
+
+
+def test_humidity_hysteresis_keeps_the_recommendation() -> None:
+    settings = VentilationSettings(rh_threshold=60.0, rh_hysteresis=3.0)
+    assert recommend(_humid(58.0), settings).state == VentilationState.OPTIMAL
+    # still high until 3 % below the threshold once it was high
+    assert recommend(_humid(58.0, was_rh_high=True), settings).state == (
+        VentilationState.VENTILATE_NOW
+    )
+    assert recommend(_humid(57.0, was_rh_high=True), settings).state == VentilationState.OPTIMAL
+
+
+def test_airing_that_cannot_lower_the_humidity_is_not_recommended() -> None:
+    settings = VentilationSettings(rh_threshold=60.0, min_rh_drop=3.0)
+    assert recommend(_humid(65.0, achievable_rh=55.0), settings).state == (
+        VentilationState.VENTILATE_NOW
+    )
+    result = recommend(_humid(65.0, achievable_rh=63.0), settings)
+    assert result.state == VentilationState.DO_NOT_VENTILATE
+    assert result.achievable_rh == 63.0
+
+
+def test_ventilation_settings_round_trip() -> None:
+    settings = VentilationSettings.from_dict(
+        {"rh_threshold": 65, "min_rh_drop": "x"}, min_ah_advantage=1.2
+    )
+    assert settings.rh_threshold == 65.0
+    assert settings.min_ah_advantage == 1.2
+    assert settings.min_rh_drop == 3.0
+    assert VentilationSettings.from_dict(settings.as_dict()) == settings

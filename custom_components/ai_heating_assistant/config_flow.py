@@ -106,7 +106,10 @@ from .const import (
     CONF_TOO_COLD_MINUTES,
     CONF_VACATION_ENTITIES,
     CONF_VACATION_TEMP,
+    CONF_VENT_AI,
     CONF_VENT_BLOCK,
+    CONF_VENT_CHECK_INTERVAL,
+    CONF_VENT_CHECK_MAX_INTERVAL,
     CONF_VENT_COOL_MARGIN,
     CONF_VENT_COOL_MIN_TEMP,
     CONF_VENT_MAX_EXCESS,
@@ -133,7 +136,7 @@ from .const import (
     SOUTHERN_SEASON,
     SUBENTRY_AREA,
 )
-from .logic.ai_schema import PARAMS, default_limits
+from .logic.ai_schema import ALL_PARAMS, default_limits
 from .logic.draft import draft_groups
 from .logic.physics import parse_day_month
 from .logic.ventilation import BLOCK_DOMAINS
@@ -304,6 +307,9 @@ def ventilation_schema(v: dict[str, Any]) -> vol.Schema:
             _req(CONF_VENT_COOL_MIN_TEMP, v): _number(0, 35, 0.5, "°C"),
             _req(CONF_NIGHT_START, v): TimeSelector(),
             _req(CONF_NIGHT_END, v): TimeSelector(),
+            _req(CONF_VENT_AI, v): BooleanSelector(),
+            _req(CONF_VENT_CHECK_INTERVAL, v): _number(1, 72, 1, "h"),
+            _req(CONF_VENT_CHECK_MAX_INTERVAL, v): _number(1, 336, 1, "h"),
         }
     )
 
@@ -348,7 +354,7 @@ def _limits_schema(v: dict[str, Any]) -> vol.Schema:
         if key in limits:
             limits[key].update(value)
     fields: dict[Any, Any] = {}
-    for key, spec in PARAMS.items():
+    for key, spec in ALL_PARAMS.items():
         width = max(abs(spec.min), abs(spec.max)) * 2 + 10
         fields[vol.Required(key)] = section(
             vol.Schema(
@@ -447,7 +453,7 @@ def _validate_general(user_input: dict[str, Any]) -> dict[str, str]:
 def _validate_limits(user_input: dict[str, Any]) -> tuple[dict[str, Any], dict[str, str]]:
     limits: dict[str, Any] = {}
     errors: dict[str, str] = {}
-    for key in PARAMS:
+    for key in ALL_PARAMS:
         value = user_input.get(key) or {}
         low, high, step = (
             float(value.get("min", 0)),
@@ -726,10 +732,18 @@ class AiHeatingOptionsFlow(OptionsFlow):
     async def async_step_ventilation(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self._save(user_input)
+            if float(user_input[CONF_VENT_CHECK_MAX_INTERVAL]) < float(
+                user_input[CONF_VENT_CHECK_INTERVAL]
+            ):
+                errors[CONF_VENT_CHECK_MAX_INTERVAL] = "max_below_base"
+            else:
+                return self._save(user_input)
         return self.async_show_form(
-            step_id="ventilation", data_schema=ventilation_schema(self._values)
+            step_id="ventilation",
+            data_schema=ventilation_schema(user_input or self._values),
+            errors=errors,
         )
 
     async def async_step_ai(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:

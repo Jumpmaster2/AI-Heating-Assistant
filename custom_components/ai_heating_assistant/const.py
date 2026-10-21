@@ -54,6 +54,11 @@ CONF_VENT_MAX_EXCESS = "ventilation_max_reference_excess"
 CONF_VENT_MIN_COOLING = "ventilation_min_cooling_advantage"
 CONF_VENT_COOL_MARGIN = "ventilation_cooling_margin"
 CONF_VENT_COOL_MIN_TEMP = "ventilation_cooling_min_temp"
+# The thresholds above and the humidity threshold of an area are start values: the
+# ventilation check of the AI adjusts them per area.
+CONF_VENT_AI = "ventilation_ai_enabled"
+CONF_VENT_CHECK_INTERVAL = "ventilation_check_interval"
+CONF_VENT_CHECK_MAX_INTERVAL = "ventilation_check_max_interval"
 CONF_NIGHT_START = "night_start_hour"
 CONF_NIGHT_END = "night_end_hour"
 
@@ -153,6 +158,9 @@ DEFAULTS: Final[dict[str, object]] = {
     CONF_VENT_MIN_COOLING: 1.0,
     CONF_VENT_COOL_MARGIN: 1.0,
     CONF_VENT_COOL_MIN_TEMP: 0.0,
+    CONF_VENT_AI: True,
+    CONF_VENT_CHECK_INTERVAL: 6.0,
+    CONF_VENT_CHECK_MAX_INTERVAL: 72.0,
     CONF_NIGHT_START: "20:00:00",
     CONF_NIGHT_END: "08:00:00",
     CONF_AI_MODEL: DEFAULT_MODEL,

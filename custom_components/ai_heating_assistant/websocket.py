@@ -51,6 +51,8 @@ from .const import (
     CONF_SEASON_END,
     CONF_SEASON_START,
     CONF_TEMP_SENSOR,
+    CONF_VENT_CHECK_INTERVAL,
+    CONF_VENT_CHECK_MAX_INTERVAL,
     CONF_WEATHER,
     DEFAULTS,
     DOMAIN,
@@ -58,7 +60,7 @@ from .const import (
     MODEL_PRICE_SUGGESTIONS,
     SUBENTRY_AREA,
 )
-from .logic.ai_schema import PARAMS, default_limits
+from .logic.ai_schema import ALL_PARAMS, VENT_PARAMS, default_limits
 from .logic.draft import LEGACY_MODE, LEGACY_WINDOWS, draft_groups
 from .logic.physics import parse_day_month
 from .logic.prompts import PromptError, clean_prompts, prompt_defaults
@@ -72,6 +74,8 @@ ENTITY_KEYS = {
     "decision_phase": "sensor",
     "ai_last_check": "sensor",
     "ai_next_check": "sensor",
+    "ai_last_vent_check": "sensor",
+    "ai_next_vent_check": "sensor",
     "ai_cost_month": "sensor",
     "heat_today": "sensor",
     "ai_enabled": "switch",
@@ -193,7 +197,7 @@ def _limits(value: Any, current: Any) -> dict[str, dict[str, float]]:
     if not isinstance(value, dict):
         raise PanelError("invalid_value", CONF_LIMITS)
     for key, item in value.items():
-        if key not in PARAMS or not isinstance(item, dict):
+        if key not in ALL_PARAMS or not isinstance(item, dict):
             raise PanelError("invalid_value", CONF_LIMITS)
         try:
             new = {k: float(item.get(k, limits[key][k])) for k in ("min", "max", "step")}
@@ -249,6 +253,8 @@ def apply_options(current: dict[str, Any], changes: dict[str, Any]) -> dict[str,
             raise PanelError("invalid_day_month", key) from err
     if float(merged[CONF_CHECK_MAX_INTERVAL]) < float(merged[CONF_CHECK_INTERVAL]):
         raise PanelError("max_below_base", CONF_CHECK_MAX_INTERVAL)
+    if float(merged[CONF_VENT_CHECK_MAX_INTERVAL]) < float(merged[CONF_VENT_CHECK_INTERVAL]):
+        raise PanelError("max_below_base", CONF_VENT_CHECK_MAX_INTERVAL)
     return options
 
 
@@ -356,7 +362,14 @@ def config_payload(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         "area_defaults": dict(AREA_DEFAULTS),
         "theta": round(coordinator.theta, 2) if coordinator else None,
         "learned_specs": learned_specs,
-        "limit_params": [{"key": p.key, "unit": p.unit} for p in PARAMS.values()],
+        "limit_params": [
+            {
+                "key": p.key,
+                "unit": p.unit,
+                "group": "ventilation" if k in VENT_PARAMS else "heating",
+            }
+            for k, p in ALL_PARAMS.items()
+        ],
         "model_prices": {k: list(v) for k, v in MODEL_PRICE_SUGGESTIONS.items()},
         "prompt_defaults": prompt_defaults(),
     }

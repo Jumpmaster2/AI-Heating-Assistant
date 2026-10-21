@@ -39,6 +39,8 @@ reset_learned:
 
 run_ai_check:
 
+run_ai_ventilation_check:
+
 decide_heating_day:
   fields:
     use_ai:

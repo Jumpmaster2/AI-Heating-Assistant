@@ -199,7 +199,7 @@
       },
       "ventilation": {
         "title": "Lüftung",
-        "description": "Globale Schwellen der Lüftungsempfehlung. Die Feuchte-Schwelle wird je Bereich eingestellt.",
+        "description": "Schwellen der Lüftungsempfehlung. Sie sind Startwerte: Die KI-Lüftungsprüfung passt sie je Bereich anhand des gelernten Feuchteprofils jedes Raums an (Feuchte-Schwelle je Bereich).",
         "data": {
           "ventilation_min_ah_advantage": "Mindestvorteil absolute Feuchte",
           "ventilation_max_reference_excess": "Außen höchstens wärmer um",
@@ -207,7 +207,10 @@
           "ventilation_cooling_margin": "Mindestabstand über Sollwert für Kühlen",
           "ventilation_cooling_min_temp": "Kühlen erst ab Raumtemperatur",
           "night_start_hour": "Nacht beginnt um",
-          "night_end_hour": "Nacht endet um"
+          "night_end_hour": "Nacht endet um",
+          "ventilation_ai_enabled": "KI passt Lüftung je Bereich an",
+          "ventilation_check_interval": "Grundintervall Lüftungsprüfung",
+          "ventilation_check_max_interval": "Höchstintervall Lüftungsprüfung"
         },
         "data_description": {
           "ventilation_min_ah_advantage": "Absolute Feuchte ist der Wassergehalt der Luft in g/m³, unabhängig von der Temperatur. Die Außenluft muss mindestens so viel weniger Wasser enthalten für 'Jetzt lüften' (z. B. 0,8 g/m³).",
@@ -216,7 +219,10 @@
           "ventilation_cooling_margin": "In der Heizperiode wird 'Lüften sinnvoll' (Kühlen) nur empfohlen, wenn der Raum mindestens so viel wärmer ist als sein Sollwert. Außerhalb der Heizperiode gilt das nicht. Bereiche ohne Heizkreis nutzen ihren Start-Sollwert.",
           "ventilation_cooling_min_temp": "'Lüften sinnvoll' (Kühlen) erst ab dieser Raumtemperatur, ganzjährig. 0 = aus. Zusätzlich wird Kühlen nie empfohlen, wenn die Außenluft die relative Feuchte des Raums über seine Feuchte-Schwelle bringen würde.",
           "night_start_hour": "Bei einem anderen Raum als Referenz zählt der Kühlvorteil nur nachts.",
-          "night_end_hour": "Ende der Nacht (Uhrzeit, z. B. 08:00)."
+          "night_end_hour": "Ende der Nacht (Uhrzeit, z. B. 08:00).",
+          "ventilation_ai_enabled": "Ganzjährig prüft die KI die Lüftungsschwellen jedes Bereichs mit Feuchtesensor: Sie lernt, was in jedem Raum üblich ist, wie tief die Feuchte überhaupt sinken kann und was Lüften wirklich bringt. Nutzt das gemeinsame KI-Monatsbudget.",
+          "ventilation_check_interval": "Erstes Intervall; es verdoppelt sich mit jeder Prüfung ohne relevante Änderung und beginnt von vorn, wenn ein Raum lange feucht bleibt oder sich ein Wert ändert.",
+          "ventilation_check_max_interval": "Länger wird das Intervall nie."
         }
       },
       "ai": {
@@ -305,7 +311,7 @@
       },
       "ai_limits": {
         "title": "KI-Grenzen",
-        "description": "Minimum, Maximum und größte Änderung je Prüfung für jeden Parameter, den die KI anpassen darf.",
+        "description": "Minimum, Maximum und größte Änderung je Prüfung für jeden Parameter, den die KI anpassen darf (Heizen und Lüften).",
         "sections": {
           "hysteresis_on": {
             "name": "Einschalt-Hysterese",
@@ -373,6 +379,70 @@
           },
           "theta": {
             "name": "Heizgrenze (theta)",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "rh_threshold": {
+            "name": "Feuchte-Schwelle",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "rh_hysteresis": {
+            "name": "Feuchte-Hysterese",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "min_ah_advantage": {
+            "name": "Mindest-Trocknungsvorteil",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "max_reference_excess": {
+            "name": "Draußen höchstens wärmer um",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "min_rh_drop": {
+            "name": "Mindest-Feuchteabfall durch Lüften",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "min_cooling_advantage": {
+            "name": "Mindest-Kühlvorteil",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "cooling_margin": {
+            "name": "Kühl-Abstand über Sollwert",
+            "data": {
+              "min": "Minimum",
+              "max": "Maximum",
+              "step": "Max. Änderung je Prüfung"
+            }
+          },
+          "cooling_min_temp": {
+            "name": "Kühlen erst ab Raumtemperatur",
             "data": {
               "min": "Minimum",
               "max": "Maximum",
@@ -468,7 +538,7 @@
                 "ventilation_block_entity": "Lüftungs-Sperr-Entität"
               },
               "data_description": {
-                "ventilation_rh_threshold": "Relative Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder).",
+                "ventilation_rh_threshold": "Startwert der relativen Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder); die KI-Lüftungsprüfung passt ihn an den Raum an.",
                 "reference_temperature": "Optional, für Räume, die über einen anderen Raum gelüftet werden.",
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
                 "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
@@ -558,7 +628,7 @@
                 "ventilation_block_entity": "Lüftungs-Sperr-Entität"
               },
               "data_description": {
-                "ventilation_rh_threshold": "Relative Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder).",
+                "ventilation_rh_threshold": "Startwert der relativen Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder); die KI-Lüftungsprüfung passt ihn an den Raum an.",
                 "reference_temperature": "Optional, für Räume, die über einen anderen Raum gelüftet werden.",
                 "reference_humidity": "Zusammen mit der Referenz-Temperatur nötig.",
                 "ventilation_block_entity": "Optional. Solange sie sperrt, wird kein Lüften empfohlen: eine Abdeckung (cover), solange sie geschlossen ist (z. B. Beschattung unten), eine Klima-Entität oder ein Warmwasserbereiter, solange nicht aus (z. B. Klimaanlage läuft), ein Schalter, Binärsensor, Ventilator o. Ä., solange an."
@@ -713,6 +783,12 @@
             "name": "Letzter Zählerwert"
           }
         }
+      },
+      "ai_last_vent_check": {
+        "name": "Letzte KI-Lüftungsprüfung"
+      },
+      "ai_next_vent_check": {
+        "name": "Nächste KI-Lüftungsprüfung"
       }
     },
     "binary_sensor": {
@@ -781,6 +857,11 @@
     "run_ai_check": {
       "name": "KI-Prüfung starten",
       "description": "Startet die periodische KI-Prüfung jetzt (Budget gilt).",
+      "fields": {}
+    },
+    "run_ai_ventilation_check": {
+      "name": "KI-Lüftungsprüfung starten",
+      "description": "Startet die KI-Prüfung der Lüftungsschwellen jetzt (Budget gilt).",
       "fields": {}
     },
     "decide_heating_day": {

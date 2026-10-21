@@ -56,6 +56,10 @@ _TEXTS: dict[str, dict[str, str]] = {
         "de": "KI-Prüfung: {count} Anpassung(en), Konfidenz {confidence}. {summary} Nächste Prüfung in {hours} h.",
         "en": "AI check: {count} adjustment(s), confidence {confidence}. {summary} Next check in {hours} h.",
     },
+    "ai_vent_check": {
+        "de": "KI-Lüftungsprüfung: {count} Anpassung(en), Konfidenz {confidence}. {summary} Nächste Prüfung in {hours} h.",
+        "en": "AI ventilation check: {count} adjustment(s), confidence {confidence}. {summary} Next check in {hours} h.",
+    },
     "ai_error": {
         "de": "KI-Fehler ({kind}): {error}. Regelung läuft mit den letzten Werten weiter.",
         "en": "AI error ({kind}): {error}. Control continues with the last values.",
@@ -141,6 +145,20 @@ _VALUES: dict[str, dict[str, dict[str, str]]] = {
         "recovery_bias_min": {"de": "Erholungszeit-Zuschlag", "en": "recovery time offset"},
         "puffer": {"de": "Reserve über Sollwert", "en": "margin above target"},
         "theta": {"de": "Heizgrenze", "en": "heating threshold"},
+        "rh_threshold": {"de": "Feuchte-Schwelle", "en": "humidity threshold"},
+        "rh_hysteresis": {"de": "Feuchte-Hysterese", "en": "humidity hysteresis"},
+        "min_ah_advantage": {"de": "Mindest-Feuchtevorteil", "en": "minimum humidity advantage"},
+        "max_reference_excess": {
+            "de": "max. Übertemperatur der Referenz",
+            "en": "max. reference excess",
+        },
+        "min_rh_drop": {"de": "Mindest-Feuchteabfall", "en": "minimum humidity drop"},
+        "min_cooling_advantage": {"de": "Mindest-Kühlvorteil", "en": "minimum cooling advantage"},
+        "cooling_margin": {"de": "Kühl-Abstand zum Sollwert", "en": "cooling margin"},
+        "cooling_min_temp": {
+            "de": "Kühlen ab Raumtemperatur",
+            "en": "cooling from room temperature",
+        },
     },
 }
 

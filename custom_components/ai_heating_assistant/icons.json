@@ -18,6 +18,8 @@
       "decision_phase": { "default": "mdi:account-switch-outline" },
       "ai_last_check": { "default": "mdi:robot-outline" },
       "ai_next_check": { "default": "mdi:clock-outline" },
+      "ai_last_vent_check": { "default": "mdi:window-open-variant" },
+      "ai_next_vent_check": { "default": "mdi:clock-outline" },
       "ai_cost_month": { "default": "mdi:cash" },
       "heat_today": { "default": "mdi:heat-wave" }
     },
@@ -33,6 +35,7 @@
     "import_parameters": { "service": "mdi:import" },
     "reset_learned": { "service": "mdi:restore" },
     "run_ai_check": { "service": "mdi:robot-outline" },
+    "run_ai_ventilation_check": { "service": "mdi:window-open-variant" },
     "decide_heating_day": { "service": "mdi:calendar-question" }
   }
 }

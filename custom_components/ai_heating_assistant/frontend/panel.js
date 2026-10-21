@@ -77,10 +77,21 @@ const UI = {
     },
     learningProgress: "Lernstand",
     aiParams: "Regelparameter (von der KI anpassbar)",
+    ventLearned: "Lüftung",
+    ventParams: "Lüftungsparameter (von der KI anpassbar)",
+    ventNames: {
+      typical_humidity: "Übliche Feuchte",
+      lowest_humidity_14d: "Tiefste Feuchte (14 Tage)",
+      humidity_after_airing: "Erreichbar durch Lüften",
+      humidity_threshold: "Feuchte-Schwelle",
+    },
+    lastVentCheck: "Letzte Lüftungsprüfung",
+    nextVentCheck: "Nächste Lüftungsprüfung",
+    limitGroups: { heating: "Heizen", ventilation: "Lüften" },
     dayRule: "Heiztag-Regel",
     theta: "Schwelle theta",
     evaluatedDays: "Bewertete Tage",
-    noLearning: "Ohne Heizkreis wird nichts gelernt:",
+    noLearning: "Ohne Heizkreis werden keine Heizwerte gelernt:",
     noLearnedAreas: "Noch kein Bereich mit Heizkreis.",
     notRunning: "Die Integration läuft gerade nicht, gelernte Werte sind nicht verfügbar.",
     editLearned: "Gelernte Werte bearbeiten",
@@ -131,7 +142,7 @@ const UI = {
       text_too_long: "Ein Baustein darf höchstens 2000 Zeichen lang sein.",
     },
     prompts: {
-      kinds: { nightly: "Nachtentscheidung (Heiztag ja/nein)", check: "Parameterprüfung" },
+      kinds: { nightly: "Nachtentscheidung (Heiztag ja/nein)", check: "Parameterprüfung", ventilation: "Lüftungsprüfung" },
       blocks: {
         nightly: {
           rules: "Regeln an Heiztagen und Tagen ohne Heizbetrieb",
@@ -145,6 +156,16 @@ const UI = {
           controller: "Arbeitsweise der Regelung",
           stats: "Erklärung der Statistik",
           comfort: "Komfort vor Einsparung",
+          levers: "Stellhebel",
+          history: "Verlauf beurteilen",
+          changes: "Umfang der Änderungen",
+        },
+        ventilation: {
+          rules: "Arbeitsweise der Empfehlung",
+          profile: "Erklärung des Feuchteprofils",
+          ranges: "Bereiche je Raum wählen",
+          stats: "Erklärung der Statistik",
+          goal: "Schimmelschutz vor allem anderen",
           levers: "Stellhebel",
           history: "Verlauf beurteilen",
           changes: "Umfang der Änderungen",
@@ -229,10 +250,21 @@ const UI = {
     },
     learningProgress: "Learning progress",
     aiParams: "Control parameters (adjustable by the AI)",
+    ventLearned: "Ventilation",
+    ventParams: "Ventilation parameters (adjustable by the AI)",
+    ventNames: {
+      typical_humidity: "Usual humidity",
+      lowest_humidity_14d: "Lowest humidity (14 days)",
+      humidity_after_airing: "Reachable by airing",
+      humidity_threshold: "Humidity threshold",
+    },
+    lastVentCheck: "Last ventilation check",
+    nextVentCheck: "Next ventilation check",
+    limitGroups: { heating: "Heating", ventilation: "Ventilation" },
     dayRule: "Heating day rule",
     theta: "Threshold theta",
     evaluatedDays: "Evaluated days",
-    noLearning: "Nothing is learned without a heating circuit:",
+    noLearning: "No heating values are learned without a heating circuit:",
     noLearnedAreas: "No area with a heating circuit yet.",
     notRunning: "The integration is not running, learned values are not available.",
     editLearned: "Edit learned values",
@@ -283,7 +315,7 @@ const UI = {
       text_too_long: "A block may have at most 2000 characters.",
     },
     prompts: {
-      kinds: { nightly: "Nightly decision (heating day yes/no)", check: "Parameter check" },
+      kinds: { nightly: "Nightly decision (heating day yes/no)", check: "Parameter check", ventilation: "Ventilation check" },
       blocks: {
         nightly: {
           rules: "Rules on heating and no-heating days",
@@ -297,6 +329,16 @@ const UI = {
           controller: "How the controller works",
           stats: "Explanation of the statistics",
           comfort: "Comfort before savings",
+          levers: "Levers",
+          history: "Judging the history",
+          changes: "Extent of changes",
+        },
+        ventilation: {
+          rules: "How the recommendation works",
+          profile: "Explanation of the humidity profile",
+          ranges: "Choosing the range per room",
+          stats: "Explanation of the statistics",
+          goal: "Mould protection first",
           levers: "Levers",
           history: "Judging the history",
           changes: "Extent of changes",
@@ -346,6 +388,9 @@ const SETTINGS = {
         "ventilation_cooling_min_temp",
         "night_start_hour",
         "night_end_hour",
+        "ventilation_ai_enabled",
+        "ventilation_check_interval",
+        "ventilation_check_max_interval",
       ],
     },
   ],
@@ -755,6 +800,13 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const aiOn = aiSwitch?.state === "on";
     const last = this._state(ent.ai_last_check);
     const next = this._state(ent.ai_next_check);
+    const lastVent = this._state(ent.ai_last_vent_check);
+    const nextVent = this._state(ent.ai_next_vent_check);
+    const ventRows = o.ventilation_ai_enabled && (this._ok(lastVent) || this._ok(nextVent))
+      ? `<div class="row"><ha-icon icon="mdi:window-open-variant"></ha-icon><span class="grow">${esc(ui.lastVentCheck)}</span><span class="muted">${esc(this._ok(lastVent) ? this._time(lastVent.state) : ui.none)}</span></div>
+          ${lastVent?.attributes?.summary ? `<div class="row"><ha-icon icon="mdi:text-short"></ha-icon><span class="muted small">${esc(lastVent.attributes.summary)}</span></div>` : ""}
+          <div class="row"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="grow">${esc(ui.nextVentCheck)}</span><span class="muted">${esc(this._ok(nextVent) ? this._time(nextVent.state) : ui.none)}</span></div>`
+      : "";
     const cost = this._state(ent.ai_cost_month);
     const budget = cost?.attributes?.budget ?? o.monthly_budget;
     const source = attrs.source ? ui.sources[attrs.source] || attrs.source : "";
@@ -770,6 +822,7 @@ class AiHeatingAssistantPanel extends HTMLElement {
           <div class="row"><ha-icon icon="mdi:history"></ha-icon><span class="grow">${esc(ui.lastCheck)}</span><span class="muted">${esc(this._ok(last) ? this._time(last.state) : ui.none)}</span></div>
           ${last?.attributes?.summary ? `<div class="row"><ha-icon icon="mdi:text-short"></ha-icon><span class="muted small">${esc(last.attributes.summary)}</span></div>` : ""}
           <div class="row"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="grow">${esc(ui.nextCheck)}</span><span class="muted">${esc(this._ok(next) ? this._time(next.state) : ui.none)}</span></div>
+          ${ventRows}
           <div class="row"><ha-icon icon="mdi:weather-night"></ha-icon><span class="grow">${esc(ui.nextNightly)}</span><span class="muted">${esc(this._time(attrs.next_decision))}</span></div>
           <div class="row"><ha-icon icon="mdi:calendar-check-outline"></ha-icon><span class="grow">${esc(ui.lastDecision)}</span><span class="muted">${esc(decision)}</span></div>
           <div class="row"><ha-icon icon="mdi:currency-usd"></ha-icon><span class="grow">${esc(ui.costMonth)}</span><span class="muted">${esc(`${this._num(this._ok(cost) ? cost.state : 0, 2)} USD / ${this._num(budget, 2)} USD`)}</span></div>
@@ -966,9 +1019,31 @@ class AiHeatingAssistantPanel extends HTMLElement {
         </div>`;
       })
       .join("");
+    const ventCards = this._cfg.areas
+      .filter((a) => a.entities.ventilation && a.data.humidity_sensor)
+      .map((area) => {
+        const attrs = this._state(area.entities.ventilation)?.attributes || {};
+        const pct = (value) => (value === null || value === undefined ? ui.none : `${this._num(value, 1)} %`);
+        const cells = Object.entries(ui.ventNames)
+          .map(([key, name]) => `<div class="learn-cell"><span class="lbl small">${esc(name)}</span><span>${esc(pct(attrs[key]))}</span></div>`)
+          .join("");
+        const params = Object.entries(attrs.parameters || {})
+          .map(([key, value]) => {
+            const unit = units[key] ? ` ${units[key]}` : "";
+            return `<div class="learn-cell"><span class="lbl small">${esc(this.labels.limits[key] || key)}</span><span>${esc(`${this._num(value, 2)}${unit}`)}</span></div>`;
+          })
+          .join("");
+        const open = this._openDetails?.has(`vent-${area.id}`);
+        return `<div class="card learn">
+          <div class="learn-head"><h2><ha-icon icon="mdi:water-percent"></ha-icon>${esc(`${ui.ventLearned}: ${area.title}`)}</h2></div>
+          <div class="learn-grid">${cells}</div>
+          ${params ? `<details data-keep="vent-${esc(area.id)}" ${open ? "open" : ""}><summary>${esc(ui.ventParams)}</summary><div class="learn-grid">${params}</div></details>` : ""}
+        </div>`;
+      })
+      .join("");
     const note = others.length ? `<p class="desc">${esc(ui.noLearning)} ${esc(others.map((a) => a.title).join(", "))}</p>` : "";
-    const empty = heating.length ? "" : `<div class="card"><div class="muted">${esc(ui.noLearnedAreas)}</div></div>`;
-    return `<div class="learn-cards">${dayRule}${cards}</div>${empty}${note}`;
+    const empty = heating.length || ventCards ? "" : `<div class="card"><div class="muted">${esc(ui.noLearnedAreas)}</div></div>`;
+    return `<div class="learn-cards">${dayRule}${cards}${ventCards}</div>${empty}${note}`;
   }
 
   _editor() {
@@ -1068,12 +1143,15 @@ class AiHeatingAssistantPanel extends HTMLElement {
   _limitsCard(card) {
     const cols = this.labels.limit_columns;
     const limits = this._drafts.limits?.limits || this._cfg.options.limits;
+    let group = null;
     const rows = this._cfg.limit_params
-      .map(({ key, unit }) => {
+      .map(({ key, unit, group: g }) => {
+        const head = g && g !== group ? `<tr><th class="c-name" colspan="4">${esc(this.ui.limitGroups[g] || g)}</th></tr>` : "";
+        group = g;
         const values = limits[key] || {};
         const input = (part) =>
           `<td><input type="number" step="0.01" data-limit="${esc(key)}" data-part="${part}" value="${esc(values[part] ?? "")}"></td>`;
-        return `<tr><td class="c-name">${esc(this.labels.limits[key] || key)}${unit ? ` <span class="muted small">(${esc(unit)})</span>` : ""}</td>${input("min")}${input("max")}${input("step")}</tr>`;
+        return `${head}<tr><td class="c-name">${esc(this.labels.limits[key] || key)}${unit ? ` <span class="muted small">(${esc(unit)})</span>` : ""}</td>${input("min")}${input("max")}${input("step")}</tr>`;
       })
       .join("");
     return `<div class="card" data-card="limits">${this._head(card)}

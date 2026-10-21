@@ -122,6 +122,18 @@ export const LABELS = {
     "Nacht endet um",
     "Ende der Nacht (Uhrzeit, z. B. 08:00)."
    ],
+   "ventilation_ai_enabled": [
+    "KI passt Lüftung je Bereich an",
+    "Ganzjährig prüft die KI die Lüftungsschwellen jedes Bereichs mit Feuchtesensor: Sie lernt, was in jedem Raum üblich ist, wie tief die Feuchte überhaupt sinken kann und was Lüften wirklich bringt. Nutzt das gemeinsame KI-Monatsbudget."
+   ],
+   "ventilation_check_interval": [
+    "Grundintervall Lüftungsprüfung",
+    "Erstes Intervall; es verdoppelt sich mit jeder Prüfung ohne relevante Änderung und beginnt von vorn, wenn ein Raum lange feucht bleibt oder sich ein Wert ändert."
+   ],
+   "ventilation_check_max_interval": [
+    "Höchstintervall Lüftungsprüfung",
+    "Länger wird das Intervall nie."
+   ],
    "model": [
     "Claude-Modell",
     "Modell für alle KI-Abfragen. Die Preise sind Vorschläge für das gewählte Modell und änderbar."
@@ -288,7 +300,7 @@ export const LABELS = {
    ],
    "ventilation_rh_threshold": [
     "Feuchte-Schwelle",
-    "Relative Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder)."
+    "Startwert der relativen Feuchte, ab der Lüften empfohlen wird (z. B. 65 % für Bäder); die KI-Lüftungsprüfung passt ihn an den Raum an."
    ],
    "reference_temperature": [
     "Referenz-Temperatur statt außen",
@@ -372,7 +384,15 @@ export const LABELS = {
    "window_delay_min": "Fensterverzögerung",
    "recovery_bias_min": "Korrektur Erholungszeit",
    "puffer": "Reserve über Sollwert (puffer)",
-   "theta": "Heizgrenze (theta)"
+   "theta": "Heizgrenze (theta)",
+   "rh_threshold": "Feuchte-Schwelle",
+   "rh_hysteresis": "Feuchte-Hysterese",
+   "min_ah_advantage": "Mindest-Trocknungsvorteil",
+   "max_reference_excess": "Draußen höchstens wärmer um",
+   "min_rh_drop": "Mindest-Feuchteabfall durch Lüften",
+   "min_cooling_advantage": "Mindest-Kühlvorteil",
+   "cooling_margin": "Kühl-Abstand über Sollwert",
+   "cooling_min_temp": "Kühlen erst ab Raumtemperatur"
   },
   "limit_columns": {
    "min": "Minimum",
@@ -566,6 +586,18 @@ export const LABELS = {
     "Night ends at",
     "End of the night (time, e.g. 08:00)."
    ],
+   "ventilation_ai_enabled": [
+    "AI adjusts ventilation per area",
+    "All year the AI reviews the ventilation thresholds of every area with a humidity sensor: it learns what is usual in each room, how low the humidity can get and what airing really achieves. Shares the monthly AI budget."
+   ],
+   "ventilation_check_interval": [
+    "Ventilation check base interval",
+    "First interval; it doubles with every check that changed nothing relevant and starts over when a room stays humid or a value changes."
+   ],
+   "ventilation_check_max_interval": [
+    "Ventilation check maximum interval",
+    "The interval never grows beyond this."
+   ],
    "model": [
     "Claude model",
     "Model for all AI calls. Prices below are suggestions for the selected model and can be changed."
@@ -732,7 +764,7 @@ export const LABELS = {
    ],
    "ventilation_rh_threshold": [
     "Humidity threshold",
-    "Relative humidity from which ventilating is recommended (e.g. 65 % for bathrooms)."
+    "Start value of the relative humidity from which ventilating is recommended (e.g. 65 % for bathrooms); the AI ventilation check adjusts it to the room."
    ],
    "reference_temperature": [
     "Reference temperature instead of outdoor",
@@ -816,7 +848,15 @@ export const LABELS = {
    "window_delay_min": "Window delay",
    "recovery_bias_min": "Recovery time correction",
    "puffer": "Margin above target (puffer)",
-   "theta": "Heating threshold (theta)"
+   "theta": "Heating threshold (theta)",
+   "rh_threshold": "Humidity threshold",
+   "rh_hysteresis": "Humidity hysteresis",
+   "min_ah_advantage": "Minimum drying advantage",
+   "max_reference_excess": "Maximum outside warmer by",
+   "min_rh_drop": "Minimum humidity drop by airing",
+   "min_cooling_advantage": "Minimum cooling advantage",
+   "cooling_margin": "Cooling distance above target",
+   "cooling_min_temp": "Cool only from room temperature"
   },
   "limit_columns": {
    "min": "Minimum",

@@ -110,9 +110,91 @@ PARAMS: dict[str, ParamSpec] = {
 }
 
 
+# Thresholds of the ventilation recommendation, per area (see logic.ventilation).
+VENT_PARAMS: dict[str, ParamSpec] = {
+    p.key: p
+    for p in (
+        ParamSpec(
+            "rh_threshold", "area", 60.0, 30.0, 95.0, 3.0, "%", "relative humidity counting as high"
+        ),
+        ParamSpec(
+            "rh_hysteresis",
+            "area",
+            3.0,
+            0.0,
+            10.0,
+            1.0,
+            "%",
+            "humidity stays high until this far below rh_threshold",
+        ),
+        ParamSpec(
+            "min_ah_advantage",
+            "area",
+            0.8,
+            0.1,
+            5.0,
+            0.2,
+            "g/m3",
+            "reference air must be at least this much drier (absolute) to dry",
+        ),
+        ParamSpec(
+            "max_reference_excess",
+            "area",
+            4.0,
+            0.0,
+            15.0,
+            1.0,
+            "K",
+            "drying only while the reference is at most this much warmer",
+        ),
+        ParamSpec(
+            "min_rh_drop",
+            "area",
+            3.0,
+            0.0,
+            15.0,
+            1.0,
+            "%",
+            "airing must lower the humidity at least this far (learned effect)",
+        ),
+        ParamSpec(
+            "min_cooling_advantage",
+            "area",
+            1.0,
+            0.0,
+            10.0,
+            0.5,
+            "K",
+            "room must be this much warmer than the reference to cool",
+        ),
+        ParamSpec(
+            "cooling_margin",
+            "area",
+            1.0,
+            0.0,
+            5.0,
+            0.3,
+            "K",
+            "heating period: cool only this far above target",
+        ),
+        ParamSpec(
+            "cooling_min_temp",
+            "area",
+            0.0,
+            0.0,
+            35.0,
+            1.0,
+            "C",
+            "cool only from this room temperature on (0 = off)",
+        ),
+    )
+}
+ALL_PARAMS: dict[str, ParamSpec] = {**PARAMS, **VENT_PARAMS}
+
+
 def default_limits() -> dict[str, dict[str, float]]:
-    """Limits as stored in the options."""
-    return {k: {"min": p.min, "max": p.max, "step": p.step} for k, p in PARAMS.items()}
+    """Limits as stored in the options (heating and ventilation parameters)."""
+    return {k: {"min": p.min, "max": p.max, "step": p.step} for k, p in ALL_PARAMS.items()}
 
 
 NIGHTLY_SCHEMA: dict[str, Any] = {
@@ -127,29 +209,35 @@ NIGHTLY_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-CHECK_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "adjustments": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "area": {"type": "string"},
-                    "parameter": {"type": "string", "enum": sorted(PARAMS)},
-                    "value": {"type": "number"},
-                    "reason": {"type": "string"},
+
+def _check_schema(specs: dict[str, ParamSpec]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "adjustments": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "area": {"type": "string"},
+                        "parameter": {"type": "string", "enum": sorted(specs)},
+                        "value": {"type": "number"},
+                        "reason": {"type": "string"},
+                    },
+                    "required": ["area", "parameter", "value", "reason"],
+                    "additionalProperties": False,
                 },
-                "required": ["area", "parameter", "value", "reason"],
-                "additionalProperties": False,
             },
+            "summary": {"type": "string"},
+            "confidence": {"type": "integer"},
         },
-        "summary": {"type": "string"},
-        "confidence": {"type": "integer"},
-    },
-    "required": ["adjustments", "summary", "confidence"],
-    "additionalProperties": False,
-}
+        "required": ["adjustments", "summary", "confidence"],
+        "additionalProperties": False,
+    }
+
+
+CHECK_SCHEMA: dict[str, Any] = _check_schema(PARAMS)
+VENT_CHECK_SCHEMA: dict[str, Any] = _check_schema(VENT_PARAMS)
 
 
 class AnswerError(ValueError):
@@ -210,10 +298,12 @@ def validate_check(
     data: Any,
     current: dict[str, dict[str, float]],
     limits: dict[str, dict[str, float]],
+    specs: dict[str, ParamSpec] = PARAMS,
 ) -> CheckResult:
     """Validate a periodic check and clamp every proposed value.
 
-    ``current`` maps area ids (and ``GLOBAL``) to their current parameter values.
+    ``current`` maps area ids (and ``GLOBAL``) to their current parameter values,
+    ``specs`` are the parameters this check may adjust.
     """
     if not isinstance(data, dict) or not isinstance(data.get("adjustments"), list):
         raise AnswerError("adjustments missing")
@@ -225,7 +315,7 @@ def validate_check(
             rejected.append("item is not an object")
             continue
         key = item.get("parameter")
-        spec = PARAMS.get(key) if isinstance(key, str) else None
+        spec = specs.get(key) if isinstance(key, str) else None
         if spec is None:
             rejected.append(f"unknown parameter {key!r}")
             continue

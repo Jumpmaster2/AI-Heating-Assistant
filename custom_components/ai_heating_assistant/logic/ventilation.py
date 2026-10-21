@@ -3,7 +3,9 @@
 The decision order follows a proven template based solution:
 1. a blocking entity (air conditioner running, sun protection closed, ...)
 2. window open although ventilating brings nothing -> close window
-3. relative humidity high and outside air is drier -> ventilate now
+3. relative humidity high and outside air is drier -> ventilate now (only if airing
+   can lower the humidity noticeably: with a learned humidity profile the humidity
+   reachable by airing must lie at least ``min_rh_drop`` below the current one)
 4. room is warmer than the reference and nobody heats -> ventilating is useful
    (within the heating period only if the room is clearly above its target, never
    below the optional minimum room temperature and never if the outside air would
@@ -14,8 +16,9 @@ The decision order follows a proven template based solution:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from enum import StrEnum
+from typing import Any
 
 from .physics import absolute_humidity
 
@@ -61,14 +64,32 @@ def is_blocking(domain: str, state: str) -> bool:
 
 @dataclass(slots=True)
 class VentilationSettings:
-    """Thresholds, all configurable."""
+    """Thresholds of one area. The configuration gives the start values, the AI may
+    adjust them within limits."""
 
     rh_threshold: float = 60.0
+    rh_hysteresis: float = 3.0  # humidity stays "high" until this far below the threshold
     min_ah_advantage: float = 0.8
     max_reference_excess: float = 4.0
     min_cooling_advantage: float = 1.0
     cooling_margin: float = 1.0  # heating period: cool only this far above target
     cooling_min_temp: float = 0.0  # cool only from this room temperature on (0 = off)
+    min_rh_drop: float = 3.0  # airing must lower the humidity at least this far
+
+    def as_dict(self) -> dict[str, float]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None, **defaults: float) -> VentilationSettings:
+        settings = cls(**defaults)
+        if data:
+            for f in fields(cls):
+                if f.name in data:
+                    try:
+                        setattr(settings, f.name, float(data[f.name]))
+                    except (TypeError, ValueError):
+                        continue
+        return settings
 
 
 @dataclass(slots=True)
@@ -87,6 +108,9 @@ class VentilationInput:
     is_night: bool = False
     target: float | None = None
     season_active: bool = False
+    was_rh_high: bool = False  # humidity was high at the last evaluation (hysteresis)
+    # relative humidity a usual airing reaches according to the learned profile
+    achievable_rh: float | None = None
 
 
 @dataclass(slots=True)
@@ -102,6 +126,7 @@ class VentilationResult:
     drying_useful: bool = False
     cooling_useful: bool = False
     rh_after_exchange: float | None = None
+    achievable_rh: float | None = None
 
     @property
     def recommended(self) -> bool:
@@ -122,12 +147,18 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
     delta_t = data.temp - data.ref_temp
     reference_excess = data.ref_temp - data.temp
 
-    rh_high = data.humidity >= settings.rh_threshold
+    rh_high = data.humidity >= settings.rh_threshold or (
+        data.was_rh_high and data.humidity > settings.rh_threshold - settings.rh_hysteresis
+    )
     # Relative humidity of the room if its air were replaced by reference air
     # (walls and floor keep the room temperature).
     rh_after = 100.0 * ah_ref / absolute_humidity(data.temp, 100.0)
     drying_useful = (
-        delta_ah >= settings.min_ah_advantage and reference_excess <= settings.max_reference_excess
+        delta_ah >= settings.min_ah_advantage
+        and reference_excess <= settings.max_reference_excess
+        and (
+            data.achievable_rh is None or data.humidity - data.achievable_rh >= settings.min_rh_drop
+        )
     )
     cooling_useful = (
         delta_t >= settings.min_cooling_advantage
@@ -171,4 +202,5 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
         drying_useful=drying_useful,
         cooling_useful=cooling_useful,
         rh_after_exchange=round(rh_after, 1),
+        achievable_rh=None if data.achievable_rh is None else round(data.achievable_rh, 1),
     )
