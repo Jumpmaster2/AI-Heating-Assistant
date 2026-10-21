@@ -30,7 +30,7 @@ from .coordinator import (
     async_turn_off_switches,
 )
 from .entity import global_device_info
-from .panel import async_register_panel, async_unregister_panel
+from .panel import async_register_panel, async_set_card_resource, async_unregister_panel
 from .sensor import AREA_SENSORS
 from .services import async_setup_services
 from .websocket import async_register_websocket
@@ -145,6 +145,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: AiHeatingConfigEntry) -
     await _async_switch_off_circuits(hass, entry, "removed", pending)
     async_delete_issues(hass)
     async_unregister_panel(hass)
+    await async_set_card_resource(hass, None)
     await store.async_remove()
 
 
