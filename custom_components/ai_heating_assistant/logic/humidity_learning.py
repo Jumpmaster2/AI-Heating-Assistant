@@ -14,8 +14,9 @@ The profile learns from the measured values
   furniture release moisture again),
 * the air exchange rate of the room's windows: the room approaches the reference air
   exponentially, ``gap(t) = gap(0) * exp(-k t)``, and ``k`` grows with the square root
-  of the temperature difference (thermal draft). ``k / sqrt(dT)`` is learned, so the
-  minutes needed to reach a target humidity follow for any weather.
+  of the temperature difference (thermal draft) and with the opening area of the open
+  windows. ``k / sqrt(dT) / opening`` is learned, so the minutes needed to reach a
+  target humidity follow for any weather and any window (see ``logic.windows``).
 
 The local recommendation uses the humidity an airing is expected to reach; the AI
 gets the whole profile to choose thresholds that fit the room.
@@ -156,11 +157,13 @@ class HumidityProfile:
         window_open: bool,
         delta_t: float | None = None,
         suggested: int | None = None,
+        opening: float = 1.0,
     ) -> None:
         """One measurement (every minute). ``date`` is the local date, ``season`` one
         of ``SEASONS``, ``ah_ref`` the absolute humidity of the reference air,
         ``delta_t`` the room minus the reference temperature and ``suggested`` the
-        airing time recommended when a window opens."""
+        airing time recommended when a window opens and ``opening`` the relative
+        opening area of the windows open now."""
         if date != self.day.date:
             self._close_day()
             self.day = DayStats(date=date, season=season)
@@ -182,10 +185,13 @@ class HumidityProfile:
                     "min_rh": rh,
                     "dt": delta_t,
                     "suggested": suggested,
+                    "opening": opening,
                 }
             else:
                 self.airing["min_ah"] = min(self.airing["min_ah"], ah)
                 self.airing["min_rh"] = min(self.airing["min_rh"], rh)
+                # another window opened during the airing: the larger area counts
+                self.airing["opening"] = max(_num(self.airing.get("opening")) or 1.0, opening)
             return
         if self.airing is not None:
             self._close_airing(ts)
@@ -227,6 +233,8 @@ class HumidityProfile:
         }
         if airing.get("suggested") is not None:
             event["suggested_min"] = airing["suggested"]
+        opening_area = max(0.1, _num(airing.get("opening")) or 1.0)
+        event["opening"] = round(opening_area, 1)
         self.last_closed = ts
         ah_ref = airing["ah_ref"]
         if ah_ref is not None and airing["ah"] - ah_ref >= MIN_GAP:
@@ -236,7 +244,7 @@ class HumidityProfile:
             delta_t = _num(airing.get("dt"))
             if drop > 0 and remaining >= MIN_REMAINING and delta_t is not None:
                 k = -math.log(remaining / (airing["ah"] - ah_ref)) / (seconds / 60)
-                normalized = k / math.sqrt(max(1.0, abs(delta_t)))
+                normalized = k / math.sqrt(max(1.0, abs(delta_t))) / opening_area
                 _learn(self.rate, clamp(normalized, *RATE_BOUNDS))
             event["share"] = round(clamp(drop / (airing["ah"] - ah_ref), 0.0, 1.0), 2)
         self.events = [*self.events, event][-EVENT_COUNT:]
@@ -283,10 +291,12 @@ class HumidityProfile:
         ah_ref: float | None,
         delta_t: float | None,
         target_rh: float,
+        opening: float = 1.0,
     ) -> float | None:
-        """Minutes of airing the room needs to reach ``target_rh`` with the learned
-        exchange rate, or None while the rate is not known. A target the reference air
-        cannot reach is aimed at 90 % of the way."""
+        """Minutes of airing the room needs to reach ``target_rh`` through windows of
+        the relative opening area ``opening`` with the learned exchange rate, or None
+        while the rate is not known. A target the reference air cannot reach is aimed
+        at 90 % of the way."""
         if self.rate.count < MIN_AIRINGS or None in (temp, rh, ah_ref, delta_t):
             return None
         assert temp is not None and rh is not None and ah_ref is not None
@@ -297,7 +307,7 @@ class HumidityProfile:
             return None
         target = absolute_humidity(temp, target_rh) - ah_ref
         remaining = clamp(target / gap, 0.1, 1.0)
-        k = self.rate.value * math.sqrt(max(1.0, abs(delta_t)))
+        k = self.rate.value * math.sqrt(max(1.0, abs(delta_t))) * max(0.1, opening)
         return -math.log(remaining) / k
 
     def summary(
@@ -319,7 +329,7 @@ class HumidityProfile:
                 "share": round(self.exchange.value, 2),
                 "rebound": round(self.rebound.value, 2),
                 "drop_per_min": round(self.drop_rate.value, 3),
-                "rate_per_sqrt_k": round(self.rate.value, 4) if self.rate.count else None,
+                "rate_per_sqrt_k_opening": round(self.rate.value, 4) if self.rate.count else None,
             }
             if self.known_effect
             else None,

@@ -278,9 +278,21 @@ export const LABELS = {
     "Feuchtesensor",
     "Relative Luftfeuchte, nötig für die Lüftungsempfehlung."
    ],
+   "window_sensors_small": [
+    "Kleine Fenster",
+    "Fensterkontakte kleiner Fenster ('an' = offen), z. B. Dachfenster oder kleines Badfenster."
+   ],
    "window_sensors": [
-    "Fenstersensoren",
-    "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
+    "Mittlere Fenster",
+    "Fensterkontakte normal großer Fenster ('an' = offen). Hier stehen die Fenster früherer Versionen."
+   ],
+   "window_sensors_large": [
+    "Große Fenster",
+    "Fensterkontakte großer Fenster, z. B. zweiflügelige Fenster."
+   ],
+   "door_sensors": [
+    "Türen (z. B. Balkontür)",
+    "Kontakte von Türen nach draußen, z. B. Balkon- oder Terrassentür. Die Größe bestimmt, wie schnell Lüften die Luft austauscht: Die vorgeschlagene Lüftdauer richtet sich danach, und zum Lüften wird die größte Öffnung vorgeschlagen."
    ],
    "heater_switch": [
     "Heizkreis-Schalter",
@@ -777,9 +789,21 @@ export const LABELS = {
     "Humidity sensor",
     "Relative humidity, needed for the ventilation recommendation."
    ],
+   "window_sensors_small": [
+    "Small windows",
+    "Window contacts of small windows ('on' = open), e.g. a skylight or a small bathroom window."
+   ],
    "window_sensors": [
-    "Window sensors",
-    "One or more window/door contacts ('on' = open)."
+    "Medium windows",
+    "Window contacts of normal sized windows ('on' = open). Windows of earlier versions are here."
+   ],
+   "window_sensors_large": [
+    "Large windows",
+    "Window contacts of large windows, e.g. double casements."
+   ],
+   "door_sensors": [
+    "Doors (e.g. balcony door)",
+    "Contacts of doors to the outside, e.g. a balcony or patio door. The size decides how fast airing exchanges the air: the suggested airing time follows it, and the largest opening is suggested for airing."
    ],
    "heater_switch": [
     "Heating circuit switch",

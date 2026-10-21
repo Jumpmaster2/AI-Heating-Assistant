@@ -182,7 +182,10 @@ PROMPTS: dict[str, PromptSpec] = {
                 "an airing removes, rebound = part of that coming back within 30 minutes, "
                 "rate_per_sqrt_k = learned air exchange per minute and square root of the "
                 "temperature difference; "
-                "last_airings = recent airings (min = actual minutes, suggested_min = airing time "
+                "windows = number of own windows per size; the exchange rate is per opening "
+                "area (small 0.5, medium 1, large 1.6, door 2.5 relative to a medium window); "
+                "last_airings = recent airings (min = actual minutes, opening = area open, "
+                "suggested_min = airing time "
                 "suggested when the window opened, humidity at start, lowest, 30 minutes after "
                 "closing). Compare actual and suggested times with the result: residents who "
                 "close earlier or air longer show what fits the room.",

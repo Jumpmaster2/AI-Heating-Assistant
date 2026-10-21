@@ -133,6 +133,8 @@ class VentilationInput:
     achievable_rh: float | None = None
     # minutes the room needs to reach the airing target (learned exchange rate)
     learned_airing_minutes: float | None = None
+    # relative opening area the airing time is meant for (see logic.windows)
+    opening: float = 1.0
     minutes_since_airing: float | None = None  # since the own window was last closed
 
 
@@ -251,9 +253,10 @@ def recommend(data: VentilationInput, settings: VentilationSettings) -> Ventilat
         if state == VentilationState.VENTILATE_NOW:
             base = data.learned_airing_minutes
         if base is None:
+            # the table holds for a medium window: a larger opening needs less time
             base = next(
                 (m for limit, m in AIRING_MINUTES if data.ref_temp <= limit), AIRING_MINUTES_WARM
-            )
+            ) / max(0.1, data.opening)
         airing_minutes = round(
             max(
                 settings.airing_min_minutes,

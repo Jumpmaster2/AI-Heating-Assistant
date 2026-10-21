@@ -554,12 +554,18 @@
               "data": {
                 "temperature_sensor": "Temperature sensor",
                 "humidity_sensor": "Humidity sensor",
-                "window_sensors": "Window sensors"
+                "window_sensors_small": "Small windows",
+                "window_sensors": "Medium windows",
+                "window_sensors_large": "Large windows",
+                "door_sensors": "Doors (e.g. balcony door)"
               },
               "data_description": {
                 "temperature_sensor": "Room temperature of the area.",
                 "humidity_sensor": "Relative humidity, needed for the ventilation recommendation.",
-                "window_sensors": "One or more window/door contacts ('on' = open)."
+                "window_sensors_small": "Window contacts of small windows ('on' = open), e.g. a skylight or a small bathroom window.",
+                "window_sensors": "Window contacts of normal sized windows ('on' = open). Windows of earlier versions are here.",
+                "window_sensors_large": "Window contacts of large windows, e.g. double casements.",
+                "door_sensors": "Contacts of doors to the outside, e.g. a balcony or patio door. The size decides how fast airing exchanges the air: the suggested airing time follows it, and the largest opening is suggested for airing."
               }
             },
             "heating": {
@@ -644,12 +650,18 @@
               "data": {
                 "temperature_sensor": "Temperature sensor",
                 "humidity_sensor": "Humidity sensor",
-                "window_sensors": "Window sensors"
+                "window_sensors_small": "Small windows",
+                "window_sensors": "Medium windows",
+                "window_sensors_large": "Large windows",
+                "door_sensors": "Doors (e.g. balcony door)"
               },
               "data_description": {
                 "temperature_sensor": "Room temperature of the area.",
                 "humidity_sensor": "Relative humidity, needed for the ventilation recommendation.",
-                "window_sensors": "One or more window/door contacts ('on' = open)."
+                "window_sensors_small": "Window contacts of small windows ('on' = open), e.g. a skylight or a small bathroom window.",
+                "window_sensors": "Window contacts of normal sized windows ('on' = open). Windows of earlier versions are here.",
+                "window_sensors_large": "Window contacts of large windows, e.g. double casements.",
+                "door_sensors": "Contacts of doors to the outside, e.g. a balcony or patio door. The size decides how fast airing exchanges the air: the suggested airing time follows it, and the largest opening is suggested for airing."
               }
             },
             "heating": {

@@ -554,12 +554,18 @@
               "data": {
                 "temperature_sensor": "Temperatursensor",
                 "humidity_sensor": "Feuchtesensor",
-                "window_sensors": "Fenstersensoren"
+                "window_sensors_small": "Kleine Fenster",
+                "window_sensors": "Mittlere Fenster",
+                "window_sensors_large": "Große Fenster",
+                "door_sensors": "Türen (z. B. Balkontür)"
               },
               "data_description": {
                 "temperature_sensor": "Raumtemperatur des Bereichs.",
                 "humidity_sensor": "Relative Luftfeuchte, nötig für die Lüftungsempfehlung.",
-                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
+                "window_sensors_small": "Fensterkontakte kleiner Fenster ('an' = offen), z. B. Dachfenster oder kleines Badfenster.",
+                "window_sensors": "Fensterkontakte normal großer Fenster ('an' = offen). Hier stehen die Fenster früherer Versionen.",
+                "window_sensors_large": "Fensterkontakte großer Fenster, z. B. zweiflügelige Fenster.",
+                "door_sensors": "Kontakte von Türen nach draußen, z. B. Balkon- oder Terrassentür. Die Größe bestimmt, wie schnell Lüften die Luft austauscht: Die vorgeschlagene Lüftdauer richtet sich danach, und zum Lüften wird die größte Öffnung vorgeschlagen."
               }
             },
             "heating": {
@@ -644,12 +650,18 @@
               "data": {
                 "temperature_sensor": "Temperatursensor",
                 "humidity_sensor": "Feuchtesensor",
-                "window_sensors": "Fenstersensoren"
+                "window_sensors_small": "Kleine Fenster",
+                "window_sensors": "Mittlere Fenster",
+                "window_sensors_large": "Große Fenster",
+                "door_sensors": "Türen (z. B. Balkontür)"
               },
               "data_description": {
                 "temperature_sensor": "Raumtemperatur des Bereichs.",
                 "humidity_sensor": "Relative Luftfeuchte, nötig für die Lüftungsempfehlung.",
-                "window_sensors": "Ein oder mehrere Fenster-/Türkontakte ('an' = offen)."
+                "window_sensors_small": "Fensterkontakte kleiner Fenster ('an' = offen), z. B. Dachfenster oder kleines Badfenster.",
+                "window_sensors": "Fensterkontakte normal großer Fenster ('an' = offen). Hier stehen die Fenster früherer Versionen.",
+                "window_sensors_large": "Fensterkontakte großer Fenster, z. B. zweiflügelige Fenster.",
+                "door_sensors": "Kontakte von Türen nach draußen, z. B. Balkon- oder Terrassentür. Die Größe bestimmt, wie schnell Lüften die Luft austauscht: Die vorgeschlagene Lüftdauer richtet sich danach, und zum Lüften wird die größte Öffnung vorgeschlagen."
               }
             },
             "heating": {

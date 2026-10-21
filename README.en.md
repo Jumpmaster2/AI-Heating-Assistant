@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.2.0. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.3.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -79,7 +79,7 @@ Per area (also without heating circuit) from the absolute humidity inside and ou
 
 **Energy saving airing:** within the heating period airing costs heat, the more the colder the outside air. A room only slightly humid therefore waits: the humidity must exceed the threshold by the *energy saving surcharge* per Kelvin of temperature difference (default 0.25 %/K, so 5 % more at 21 °C inside and 1 °C outside). The surcharge never reaches beyond 70 %; from there airing is always recommended against mould. Until then the recommendation is *Do not ventilate*, an open window gives *Close window*. Once airing has started it goes on down to the hysteresis below the needed humidity. The surcharge never reaches beyond the *mould limit* (default 70 %, adjustable per room, e.g. lower for cold exterior walls). After an airing the room gets a *pause* (default 30 minutes) in which moisture comes back from the walls before drying is recommended again.
 
-**Learned airing time:** every room learns from its airings how fast its windows exchange the air (scaled by the temperature difference, cold air draws faster). From this the attribute `airing_minutes` suggests the minutes needed to reach the *airing target* (default 5 % below the threshold), times the *airing time factor*, within the *shortest* and *longest airing time* (3 to 20 minutes). Until two airings are evaluated a table by outdoor temperature applies (5 minutes in frost, 10 up to 10 °C, 15 up to 15 °C, otherwise 20). The AI sees the suggested and actual time of every airing, the humidity before, at its lowest and 30 minutes later, and adjusts all these values per room.
+**Learned airing time:** every room learns from its airings how fast its windows exchange the air (scaled by the temperature difference, cold air draws faster). From this the attribute `airing_minutes` suggests the minutes needed to reach the *airing target* (default 5 % below the threshold), times the *airing time factor*, within the *shortest* and *longest airing time* (3 to 20 minutes). Until two airings are evaluated a table by outdoor temperature applies (5 minutes in frost, 10 up to 10 °C, 15 up to 15 °C, otherwise 20). Window sizes count: a small window has half the opening of a medium one, a large one 1.6 times, a door 2.5 times. The air exchange is learned per opening area, so the airing time fits every window of the room. The largest opening is suggested (attribute `airing_window`) with the time it needs; if a window is already open, the time applies to the open windows. The AI sees the suggested and actual time of every airing, the humidity before, at its lowest and 30 minutes later, and adjusts all these values per room.
 
 **AI ventilation check:** all year the AI reviews the ventilation thresholds of every area with a humidity sensor, built like the parameter check of the heating circuits: it gets the humidity profile, the statistics since the last check (minutes humid, at 70 % or more, recommended, window open, open without use, open while heating, changes of the recommendation) and the history of earlier checks, and may adjust per area the humidity threshold, hysteresis, minimum drying advantage, reference excess, minimum humidity drop, energy saving surcharge, mould limit, airing target, airing time factor, shortest and longest airing time, pause after airing, minimum cooling advantage, cooling margin and cooling start temperature within the AI limits. The configured values are start values; changing one replaces the value of the AI. The interval starts at the base interval (6 h) and doubles with every check without relevant change up to the maximum (72 h); if a room stays humid for long or something changes, it starts over. The check uses the shared monthly budget; its instructions can be adapted under *AI instructions* (ventilation check). The **Learned values** tab shows the learned values.
 
@@ -155,7 +155,8 @@ In the dashboard under **Heating areas** (or under the integration with **Add he
 | Option | Default |
 |---|---|
 | Name | |
-| Temperature, humidity and window sensors | e.g. `sensor.living_room_temperature`, `binary_sensor.living_room_window` |
+| Temperature and humidity sensor | e.g. `sensor.living_room_temperature` |
+| Small, medium, large windows, doors | window contacts by size, e.g. `binary_sensor.living_room_window`; doors to the outside such as the balcony door. Windows of earlier versions are under "medium" |
 | Draft from other rooms | optional: up to 4 combinations of window contacts in other rooms that must be open together |
 | Heating circuit switch | e.g. `switch.heating_circuit_1`; empty = ventilation recommendation only |
 | Initial, minimum and maximum target | 21 / 16 / 24 °C |

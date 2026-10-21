@@ -432,7 +432,7 @@ const SETTINGS = {
 // Groups of the heating area editor as in the dialog: [section, fields, collapsed].
 // The start values only when an area is created; an existing one shows its learned values.
 const AREA_GROUPS = [
-  ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors"], false],
+  ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors_small", "window_sensors", "window_sensors_large", "door_sensors"], false],
   ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time", "heating_type"], false],
   ["start_values", ["window_delay", "recovery_time", "dead_time", "puffer"], true],
   ["learned_values", ["window_delay", "recovery_time", "dead_time", "puffer"], false],
@@ -809,7 +809,8 @@ class AiHeatingAssistantPanel extends HTMLElement {
     const next = this._state(ent.ai_next_check);
     const lastVent = this._state(ent.ai_last_vent_check);
     const nextVent = this._state(ent.ai_next_vent_check);
-    const ventRows = o.ventilation_ai_enabled && (this._ok(lastVent) || this._ok(nextVent))
+    // shown whenever the ventilation check is on, so a missing value is visible too
+    const ventRows = o.ventilation_ai_enabled && this._cfg.has_api_key
       ? `<div class="row"><ha-icon icon="mdi:window-open-variant"></ha-icon><span class="grow">${esc(ui.lastVentCheck)}</span><span class="muted">${esc(this._ok(lastVent) ? this._time(lastVent.state) : ui.none)}</span></div>
           ${lastVent?.attributes?.summary ? `<div class="row"><ha-icon icon="mdi:text-short"></ha-icon><span class="muted small">${esc(lastVent.attributes.summary)}</span></div>` : ""}
           <div class="row"><ha-icon icon="mdi:clock-outline"></ha-icon><span class="grow">${esc(ui.nextVentCheck)}</span><span class="muted">${esc(this._ok(nextVent) ? this._time(nextVent.state) : ui.none)}</span></div>`
