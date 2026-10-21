@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 1.4.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 1.4.1. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -114,7 +114,7 @@ Die Einrichtung selbst läuft weiterhin als Dialog.
 
 ### Thermostat-Karte
 
-Die Integration bringt eine eigene Dashboard-Karte mit, die wie die Thermostat-Karte von Home Assistant aussieht und zusätzlich die **Luftfeuchte** des Bereichs zeigt, in derselben Zeile wie die zweite Temperatur (die Karte wird dadurch nicht größer). Sie wird automatisch geladen und steht beim Hinzufügen einer Karte als **AI Heating Assistant Thermostat** zur Auswahl. Den Sollwert stellst du durch Ziehen am Ring oder mit den Pfeiltasten ein, die drei Punkte öffnen das Thermostat.
+Die Integration bringt eine eigene Dashboard-Karte mit, die wie die Thermostat-Karte von Home Assistant aussieht und zusätzlich die **Luftfeuchte** des Bereichs zeigt, in derselben Zeile wie die zweite Temperatur (die Karte wird dadurch nicht größer). Sie wird automatisch geladen und steht beim Hinzufügen einer Karte als **AI Heating Assistant Thermostat** zur Auswahl. Den Sollwert stellst du durch Ziehen am Ring oder mit den Pfeiltasten ein, die drei Punkte öffnen das Thermostat. Mit fester Höhe (`grid_options` mit `rows` als Zahl) wird der Ring so verkleinert, dass er in die Kachel passt.
 
 ```yaml
 type: custom:ai-heating-thermostat-card

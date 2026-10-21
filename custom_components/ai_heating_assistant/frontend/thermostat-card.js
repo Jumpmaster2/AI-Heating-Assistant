@@ -96,8 +96,30 @@ class AiHeatingThermostatCard extends HTMLElement {
     return { columns: 6, rows: "auto", min_columns: 4 };
   }
 
+  connectedCallback() {
+    this._observe();
+  }
+
   disconnectedCallback() {
     clearTimeout(this._sendTimer);
+    this._resize?.disconnect();
+  }
+
+  // A fixed height (grid_options rows as a number): the ring shrinks to fit, as in the
+  // thermostat card of Home Assistant. Otherwise the card takes the height of the ring.
+  get _fixed() {
+    return typeof this._config?.grid_options?.rows === "number";
+  }
+
+  _observe() {
+    this._resize?.disconnect();
+    if (!this._built || !this.isConnected || !this._fixed) return;
+    const dial = this.shadowRoot.querySelector(".dial");
+    this._resize = new ResizeObserver(() => {
+      const size = Math.max(Math.min(dial.clientWidth - 32, dial.clientHeight), 0);
+      dial.style.setProperty("--size", `${size}px`);
+    });
+    this._resize.observe(dial);
   }
 
   get _t() {
@@ -118,8 +140,13 @@ class AiHeatingThermostatCard extends HTMLElement {
         .title { font-size: 1.5em; line-height: 1.3; color: var(--primary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
         .more { position: absolute; top: 6px; right: 4px; width: 40px; height: 40px; border: none; border-radius: 50%; background: none; color: var(--secondary-text-color); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
         .more:hover { background: rgba(127, 127, 127, 0.15); }
-        .dial { position: relative; width: 100%; max-width: 320px; margin: 0 auto; flex: 1; display: flex; align-items: center; container-type: inline-size; padding: 0 16px; box-sizing: border-box; }
-        .ring { position: relative; width: 100%; aspect-ratio: 1; }
+        .dial { position: relative; width: 100%; max-width: 320px; margin: 0 auto; flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 16px; box-sizing: border-box; }
+        .ring { position: relative; width: 100%; aspect-ratio: 1; container-type: inline-size; }
+        .fixed .dial { flex: 1 1 0; min-height: 0; max-width: none; }
+        .fixed .ring { width: var(--size, 100%); height: var(--size, auto); }
+        .fixed .header { min-height: 36px; padding-top: 4px; }
+        .fixed .title { font-size: 1.25em; }
+        .fixed .more { top: 0; }
         svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
         .grab { stroke: transparent; stroke-width: 56; fill: none; pointer-events: stroke; touch-action: none; cursor: pointer; }
         .track { stroke: var(--primary-text-color); stroke-opacity: 0.1; stroke-width: 24; fill: none; stroke-linecap: round; pointer-events: none; }
@@ -136,7 +163,7 @@ class AiHeatingThermostatCard extends HTMLElement {
         .big .side { display: flex; flex-direction: column; align-items: flex-start; font-size: clamp(14px, 8cqw, 24px); line-height: 1.15; margin-left: 2px; padding-top: 0.15em; }
         .big .side .dec { margin-top: 0.15em; }
         .big.none .int { font-size: clamp(28px, 16cqw, 48px); }
-        .secondary { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; gap: 0 0.8em; font-size: clamp(11px, 5.5cqw, 16px); font-weight: 500; line-height: 1.4; white-space: nowrap; max-width: 100%; }
+        .secondary { display: flex; align-items: center; justify-content: center; flex-wrap: nowrap; gap: 0 0.6em; font-size: clamp(10px, 6cqw, 16px); font-weight: 500; line-height: 1.4; white-space: nowrap; max-width: 100%; }
         .secondary span { display: inline-flex; align-items: center; gap: 0.2em; }
         .secondary ha-icon { --mdc-icon-size: 1.2em; }
         .warning { padding: 16px; color: var(--error-color); }
@@ -190,6 +217,7 @@ class AiHeatingThermostatCard extends HTMLElement {
     this._el.svg.addEventListener("pointercancel", (ev) => this._dragEnd(ev));
     this._el.handle.addEventListener("keydown", (ev) => this._key(ev));
     this._built = true;
+    this._observe();
   }
 
   // --- values ---
@@ -253,7 +281,7 @@ class AiHeatingThermostatCard extends HTMLElement {
     const unavailable = st.state === "unavailable" || st.state === "unknown";
     const off = st.state === "off";
     const heating = st.attributes.hvac_action === "heating";
-    el.card.className = [unavailable && "unavailable", off && "off", heating && "heating"].filter(Boolean).join(" ");
+    el.card.className = [this._fixed && "fixed", unavailable && "unavailable", off && "off", heating && "heating"].filter(Boolean).join(" ");
     el.card.style.setProperty(
       "--color",
       off || unavailable
