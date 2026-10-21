@@ -14,6 +14,7 @@ STATIC_URL = "/ai_heating_assistant_static"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 DATA_STATIC = f"{DOMAIN}_static_registered"
 DATA_CARD = f"{DOMAIN}_card_url"
+CARD_PATH = f"{STATIC_URL}/thermostat-card.js"
 
 
 async def async_register_panel(hass: HomeAssistant, entry_id: str) -> None:
@@ -31,8 +32,9 @@ async def async_register_panel(hass: HomeAssistant, entry_id: str) -> None:
     version = await hass.async_add_executor_job(_version)
     if not hass.data.get(DATA_CARD):
         # Thermostat card for every dashboard (custom:ai-heating-thermostat-card).
-        hass.data[DATA_CARD] = f"{STATIC_URL}/thermostat-card.js?v={version}"
+        hass.data[DATA_CARD] = f"{CARD_PATH}?v={version}"
         frontend.add_extra_js_url(hass, hass.data[DATA_CARD])
+        await async_set_card_resource(hass, hass.data[DATA_CARD])
     if frontend.async_panel_exists(hass, PANEL_URL_PATH):
         return
     # config_panel_domain: "Configure" on the integration page opens this panel.
@@ -67,3 +69,32 @@ def _version() -> str:
         LOGGER.debug("Frontend files not found")
         stamp = 0
     return str(stamp)
+
+
+async def async_set_card_resource(hass: HomeAssistant, url: str | None) -> None:
+    """Keep the card as a dashboard resource (None removes it). The companion app does
+    not always load the extra modules of the start page, its resources it loads with
+    every dashboard. Only for resources managed in the UI (storage mode)."""
+    try:
+        from homeassistant.components.lovelace.const import LOVELACE_DATA
+    except ImportError:
+        return
+    data = hass.data.get(LOVELACE_DATA)
+    if data is None or getattr(data, "resource_mode", None) != "storage":
+        return
+    resources = data.resources
+    try:
+        if not resources.loaded:
+            await resources.async_load()
+            resources.loaded = True
+        ours = [i for i in resources.async_items() if i.get("url", "").split("?")[0] == CARD_PATH]
+        for item in ours[1:] if url else ours:
+            await resources.async_delete_item(item["id"])
+        if not url:
+            return
+        if not ours:
+            await resources.async_create_item({"res_type": "module", "url": url})
+        elif ours[0].get("url") != url:
+            await resources.async_update_item(ours[0]["id"], {"res_type": "module", "url": url})
+    except Exception:  # the card is optional, the control must not fail
+        LOGGER.warning("Could not register the thermostat card as a dashboard resource")

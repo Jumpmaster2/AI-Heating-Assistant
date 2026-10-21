@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.4.1. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.4.2. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -114,7 +114,7 @@ The setup itself is still a dialog.
 
 ### Thermostat card
 
-The integration brings its own dashboard card that looks like the Home Assistant thermostat card and also shows the **humidity** of the area, in the same line as the second temperature (so the card does not get any larger). It is loaded automatically and is offered as **AI Heating Assistant thermostat** when adding a card. Drag the ring or use the arrow keys to set the target; the three dots open the thermostat. With a fixed height (`grid_options` with `rows` as a number) the ring shrinks to fit the tile.
+The integration brings its own dashboard card that looks like the Home Assistant thermostat card and also shows the **humidity** of the area, in the same line as the second temperature (so the card does not get any larger). It is loaded automatically (with resources managed in the UI it is also added as a dashboard resource, so the companion app loads it reliably) and is offered as **AI Heating Assistant thermostat** when adding a card. Drag the ring or use the arrow keys to set the target; the three dots open the thermostat. With a fixed height (`grid_options` with `rows` as a number) the ring shrinks to fit the tile.
 
 ```yaml
 type: custom:ai-heating-thermostat-card
