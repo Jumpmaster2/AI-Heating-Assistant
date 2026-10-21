@@ -7,6 +7,8 @@ from typing import Final
 
 from homeassistant.const import Platform
 
+from .logic.draft import DRAFT_GROUP_KEYS
+
 DOMAIN: Final = "ai_heating_assistant"
 NAME: Final = "AI Heating Assistant"
 LOGGER = logging.getLogger(__package__)
@@ -92,10 +94,8 @@ HEATING_TYPES: Final = ("underfloor", "radiator", "other")
 CONF_TEMP_SENSOR = "temperature_sensor"
 CONF_HUMIDITY_SENSOR = "humidity_sensor"
 CONF_WINDOWS = "window_sensors"
-# windows of other rooms whose draft cools this area too (cross ventilation)
-CONF_DRAFT_WINDOWS = "draft_window_sensors"
-CONF_DRAFT_MODE = "draft_mode"
-DRAFT_MODES: Final = ("all", "any")
+# combinations of windows in other rooms whose draft cools this area too
+CONF_DRAFT_GROUPS: Final = DRAFT_GROUP_KEYS
 CONF_DEFAULT_TARGET = "default_target"
 CONF_MIN_TARGET = "min_target"
 CONF_MAX_TARGET = "max_target"
@@ -113,6 +113,7 @@ CONF_VENT_BLOCK = "ventilation_block_entity"
 SECTION_HEATING = "heating"
 SECTION_SENSORS = "sensors"
 SECTION_VENTILATION = "ventilation"
+SECTION_DRAFT = "draft"
 SECTION_START = "start_values"
 SECTION_LEARNED = "learned_values"
 LEARNED_THETA = "theta"
@@ -183,8 +184,7 @@ DEFAULTS: Final[dict[str, object]] = {
 
 AREA_DEFAULTS: Final[dict[str, object]] = {
     CONF_WINDOWS: [],
-    CONF_DRAFT_WINDOWS: [],
-    CONF_DRAFT_MODE: "all",
+    **{key: [] for key in DRAFT_GROUP_KEYS},
     CONF_DEFAULT_TARGET: 21.0,
     CONF_MIN_TARGET: 16.0,
     CONF_MAX_TARGET: 24.0,

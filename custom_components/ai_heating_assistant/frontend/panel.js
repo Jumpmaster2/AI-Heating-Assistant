@@ -4,7 +4,8 @@
 // come from the translation files (labels.js), types and ranges from the
 // selectors of the options dialog (sent by the integration).
 
-import { LABELS } from "./labels.js";
+// labels.js with the version of this file, so a browser never keeps old texts
+const { LABELS } = await import(`./labels.js${new URL(import.meta.url).search}`);
 
 const DOMAIN = "ai_heating_assistant";
 
@@ -379,11 +380,12 @@ const SETTINGS = {
 // Groups of the heating area editor as in the dialog: [section, fields, collapsed].
 // The start values only when an area is created; an existing one shows its learned values.
 const AREA_GROUPS = [
-  ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors", "draft_window_sensors", "draft_mode"], false],
+  ["sensors", ["temperature_sensor", "humidity_sensor", "window_sensors"], false],
   ["heating", ["heater_switch", "default_target", "min_target", "max_target", "min_on_time", "min_off_time", "heating_type"], false],
   ["start_values", ["window_delay", "recovery_time", "dead_time", "puffer"], true],
   ["learned_values", ["window_delay", "recovery_time", "dead_time", "puffer"], false],
   ["ventilation", ["ventilation_rh_threshold", "reference_temperature", "reference_humidity", "ventilation_block_entity"], true],
+  ["draft", ["draft_group_1", "draft_group_2", "draft_group_3", "draft_group_4"], true],
 ];
 
 // Learned values per area: [entity key, icon, digits if the frontend cannot format]

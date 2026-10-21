@@ -46,8 +46,6 @@ from .const import (
     CONF_CHECK_MAX_INTERVAL,
     CONF_DEAD_TIME,
     CONF_DEFAULT_TARGET,
-    CONF_DRAFT_MODE,
-    CONF_DRAFT_WINDOWS,
     CONF_EMERGENCY_DELTA,
     CONF_EMERGENCY_DURATION,
     CONF_EMERGENCY_ENABLED,
@@ -151,6 +149,7 @@ from .logic.controller import (
     preheat_start,
     step,
 )
+from .logic.draft import draft_groups, has_draft
 from .logic.energy import HeatMeter, to_kwh
 from .logic.learning import (
     DEAD_TIME_BOUNDS,
@@ -677,7 +676,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 if area.cfg.get(key):
                     watched.add(area.cfg[key])
             watched.update(area.cfg.get(CONF_WINDOWS) or [])
-            watched.update(area.cfg.get(CONF_DRAFT_WINDOWS) or [])
+            for group in draft_groups(area.cfg):
+                watched.update(group)
             if area.has_circuit:
                 switches[area.cfg[CONF_SWITCH]] = area.area_id
         self._switch_map = switches
@@ -1271,14 +1271,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         self._ventilation(area, heating_day)
 
     def _draft(self, cfg: dict[str, Any]) -> bool:
-        """Draft through windows of other rooms: all of them open (cross ventilation) or
-        any one, as configured. A sensor that is also an own window counts only there."""
-        own = set(cfg.get(CONF_WINDOWS) or [])
-        sensors = [w for w in cfg.get(CONF_DRAFT_WINDOWS) or [] if w not in own]
-        if not sensors:
-            return False
-        states = [self._is_on(w) for w in sensors]
-        return any(states) if cfg.get(CONF_DRAFT_MODE) == "any" else all(states)
+        """Draft through windows of other rooms: every window of one combination open.
+        A sensor that is also an own window counts only there."""
+        return has_draft(draft_groups(cfg, cfg.get(CONF_WINDOWS) or ()), self._is_on)
 
     async def _control_area(
         self, area: Area, ts: float, minutes: float, heating_day: bool, return_ts: float | None

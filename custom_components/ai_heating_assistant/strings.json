@@ -414,16 +414,12 @@
               "data": {
                 "temperature_sensor": "Temperature sensor",
                 "humidity_sensor": "Humidity sensor",
-                "window_sensors": "Window sensors",
-                "draft_window_sensors": "Draft from other rooms",
-                "draft_mode": "Draft when"
+                "window_sensors": "Window sensors"
               },
               "data_description": {
                 "temperature_sensor": "Room temperature of the area.",
                 "humidity_sensor": "Relative humidity, needed for the ventilation recommendation.",
-                "window_sensors": "One or more window/door contacts ('on' = open).",
-                "draft_window_sensors": "Window contacts of other rooms whose draft also cools this area, e.g. two opposite rooms aired at the same time. While draft is detected the area behaves as with an open own window: heating pauses after the window delay and waits the recovery time.",
-                "draft_mode": "All open: only cross ventilation (every selected window open) counts. Any open: one open window is enough."
+                "window_sensors": "One or more window/door contacts ('on' = open)."
               }
             },
             "heating": {
@@ -477,6 +473,19 @@
                 "reference_humidity": "Required together with the reference temperature.",
                 "ventilation_block_entity": "Optional. While it blocks, no ventilation is recommended: a cover while closed (e.g. sun protection down), a climate entity or water heater while not off (e.g. air conditioner running), a switch, binary sensor, fan or similar while on."
               }
+            },
+            "draft": {
+              "name": "Draft from other rooms",
+              "description": "Windows of other rooms whose opening together also cools this area (cross ventilation). Per combination choose the windows that must be open together. As soon as every window of one combination is open, the area behaves as with its own window open: heating pauses after the window delay and waits the recovery time. A combination with a single window triggers on its own.",
+              "data": {
+                "draft_group_1": "Combination 1",
+                "draft_group_2": "Combination 2",
+                "draft_group_3": "Combination 3",
+                "draft_group_4": "Combination 4"
+              },
+              "data_description": {
+                "draft_group_1": "e.g. kids' room + bathroom; a second combination e.g. kids' room + bedroom."
+              }
             }
           }
         },
@@ -495,16 +504,12 @@
               "data": {
                 "temperature_sensor": "Temperature sensor",
                 "humidity_sensor": "Humidity sensor",
-                "window_sensors": "Window sensors",
-                "draft_window_sensors": "Draft from other rooms",
-                "draft_mode": "Draft when"
+                "window_sensors": "Window sensors"
               },
               "data_description": {
                 "temperature_sensor": "Room temperature of the area.",
                 "humidity_sensor": "Relative humidity, needed for the ventilation recommendation.",
-                "window_sensors": "One or more window/door contacts ('on' = open).",
-                "draft_window_sensors": "Window contacts of other rooms whose draft also cools this area, e.g. two opposite rooms aired at the same time. While draft is detected the area behaves as with an open own window: heating pauses after the window delay and waits the recovery time.",
-                "draft_mode": "All open: only cross ventilation (every selected window open) counts. Any open: one open window is enough."
+                "window_sensors": "One or more window/door contacts ('on' = open)."
               }
             },
             "heating": {
@@ -558,6 +563,19 @@
                 "reference_humidity": "Required together with the reference temperature.",
                 "ventilation_block_entity": "Optional. While it blocks, no ventilation is recommended: a cover while closed (e.g. sun protection down), a climate entity or water heater while not off (e.g. air conditioner running), a switch, binary sensor, fan or similar while on."
               }
+            },
+            "draft": {
+              "name": "Draft from other rooms",
+              "description": "Windows of other rooms whose opening together also cools this area (cross ventilation). Per combination choose the windows that must be open together. As soon as every window of one combination is open, the area behaves as with its own window open: heating pauses after the window delay and waits the recovery time. A combination with a single window triggers on its own.",
+              "data": {
+                "draft_group_1": "Combination 1",
+                "draft_group_2": "Combination 2",
+                "draft_group_3": "Combination 3",
+                "draft_group_4": "Combination 4"
+              },
+              "data_description": {
+                "draft_group_1": "e.g. kids' room + bathroom; a second combination e.g. kids' room + bedroom."
+              }
             }
           }
         }
@@ -586,12 +604,6 @@
         "underfloor": "Underfloor heating",
         "radiator": "Radiators",
         "other": "Other (e.g. wall heating)"
-      }
-    },
-    "draft_mode": {
-      "options": {
-        "all": "All selected windows are open",
-        "any": "Any selected window is open"
       }
     },
     "month": {

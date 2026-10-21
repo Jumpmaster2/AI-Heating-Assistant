@@ -191,24 +191,32 @@ async def test_areas(hass: HomeAssistant, base_states, hass_ws_client) -> None:
     assert msg["success"], msg
     assert entry.subentries[sub_id].title == "Bathroom"
     assert entry.subentries[sub_id].data["default_target"] == 22.5
-    # draft from the windows of other rooms; the mode defaults to cross ventilation
-    assert entry.subentries[sub_id].data["draft_mode"] == "all"
+    # combinations of windows in other rooms; those of version 1.1.0 are taken over
+    data = dict(entry.subentries[sub_id].data)
+    assert data["draft_group_1"] == []
+    for key in ("draft_group_1", "draft_group_2", "draft_group_3", "draft_group_4"):
+        data.pop(key)
+    hass.config_entries.async_update_subentry(
+        entry,
+        entry.subentries[sub_id],
+        data={**data, "draft_window_sensors": ["binary_sensor.a", "binary_sensor.b"]},
+    )
+    msg = await _send(client, type=f"{DOMAIN}/config")
+    shown = next(a for a in msg["result"]["areas"] if a["id"] == sub_id)["data"]
+    assert shown["draft_group_1"] == ["binary_sensor.a", "binary_sensor.b"]
+    assert "draft_window_sensors" not in shown
     msg = await _send(
         client,
         type=f"{DOMAIN}/save_area",
         subentry_id=sub_id,
         title="Bathroom",
-        data={
-            **entry.subentries[sub_id].data,
-            "draft_window_sensors": ["binary_sensor.living_room_window"],
-            "draft_mode": "any",
-        },
+        data={**shown, "draft_group_2": ["binary_sensor.living_room_window"]},
     )
     assert msg["success"], msg
-    assert entry.subentries[sub_id].data["draft_window_sensors"] == [
-        "binary_sensor.living_room_window"
-    ]
-    assert entry.subentries[sub_id].data["draft_mode"] == "any"
+    saved = entry.subentries[sub_id].data
+    assert saved["draft_group_1"] == ["binary_sensor.a", "binary_sensor.b"]
+    assert saved["draft_group_2"] == ["binary_sensor.living_room_window"]
+    assert "draft_window_sensors" not in saved
 
     for title, data, error in (
         ("", {"temperature_sensor": "sensor.x"}, "name_required"),
