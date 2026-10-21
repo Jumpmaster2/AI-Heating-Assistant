@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 1.3.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 1.4.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -111,6 +111,20 @@ Nach der Einrichtung gibt es in der Seitenleiste die Seite **AI Heating Assistan
 * **Allgemein, Notfall & Lüftung, KI, Heiztag-Entscheidung:** alle Einstellungen nach Themen in Karten, jede Karte wird für sich gespeichert. Unter **KI** auch der API-Key (wird vor dem Speichern geprüft, der gespeicherte Key wird nie angezeigt) und die KI-Grenzen.
 
 Die Einrichtung selbst läuft weiterhin als Dialog.
+
+### Thermostat-Karte
+
+Die Integration bringt eine eigene Dashboard-Karte mit, die wie die Thermostat-Karte von Home Assistant aussieht und zusätzlich die **Luftfeuchte** des Bereichs zeigt, in derselben Zeile wie die zweite Temperatur (die Karte wird dadurch nicht größer). Sie wird automatisch geladen und steht beim Hinzufügen einer Karte als **AI Heating Assistant Thermostat** zur Auswahl. Den Sollwert stellst du durch Ziehen am Ring oder mit den Pfeiltasten ein, die drei Punkte öffnen das Thermostat.
+
+```yaml
+type: custom:ai-heating-thermostat-card
+entity: climate.wohnbereich
+show_current_as_primary: true   # Ist-Temperatur groß, Sollwert klein (Standard: false)
+show_humidity: true             # Standard: true
+name: Wohnbereich               # optional
+```
+
+Die Luftfeuchte kommt vom Feuchtesensor des Bereichs (Attribut `current_humidity` des Thermostats); ohne Feuchtesensor bleibt sie weg. Nach einem Update ggf. den Browser-Cache leeren bzw. die App neu laden.
 
 ### Einrichtung (global)
 
