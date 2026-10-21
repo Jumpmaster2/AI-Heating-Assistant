@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.3.0. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.4.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -111,6 +111,20 @@ After the setup the sidebar has the page **AI Heating Assistant** (administrator
 * **General, Emergency & ventilation, AI, Heating day decision:** all settings by topic in cards, each card is saved on its own. **AI** also holds the API key (checked before saving, the stored key is never shown) and the AI limits.
 
 The setup itself is still a dialog.
+
+### Thermostat card
+
+The integration brings its own dashboard card that looks like the Home Assistant thermostat card and also shows the **humidity** of the area, in the same line as the second temperature (so the card does not get any larger). It is loaded automatically and is offered as **AI Heating Assistant thermostat** when adding a card. Drag the ring or use the arrow keys to set the target; the three dots open the thermostat.
+
+```yaml
+type: custom:ai-heating-thermostat-card
+entity: climate.living_area
+show_current_as_primary: true   # current temperature large, target small (default: false)
+show_humidity: true             # default: true
+name: Living area               # optional
+```
+
+The humidity comes from the humidity sensor of the area (attribute `current_humidity` of the thermostat); without a humidity sensor it is left out. After an update clear the browser cache or reload the app if needed.
 
 ### Setup (global)
 

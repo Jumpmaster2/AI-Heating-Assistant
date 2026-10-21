@@ -13,6 +13,7 @@ PANEL_COMPONENT = "ai-heating-assistant-panel"
 STATIC_URL = "/ai_heating_assistant_static"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
 DATA_STATIC = f"{DOMAIN}_static_registered"
+DATA_CARD = f"{DOMAIN}_card_url"
 
 
 async def async_register_panel(hass: HomeAssistant, entry_id: str) -> None:
@@ -27,9 +28,13 @@ async def async_register_panel(hass: HomeAssistant, entry_id: str) -> None:
             [StaticPathConfig(STATIC_URL, str(FRONTEND_DIR), cache_headers=False)]
         )
         hass.data[DATA_STATIC] = True
+    version = await hass.async_add_executor_job(_version)
+    if not hass.data.get(DATA_CARD):
+        # Thermostat card for every dashboard (custom:ai-heating-thermostat-card).
+        hass.data[DATA_CARD] = f"{STATIC_URL}/thermostat-card.js?v={version}"
+        frontend.add_extra_js_url(hass, hass.data[DATA_CARD])
     if frontend.async_panel_exists(hass, PANEL_URL_PATH):
         return
-    version = await hass.async_add_executor_job(_version)
     # config_panel_domain: "Configure" on the integration page opens this panel.
     await panel_custom.async_register_panel(
         hass,
@@ -49,6 +54,8 @@ def async_unregister_panel(hass: HomeAssistant) -> None:
         return
     from homeassistant.components import frontend
 
+    if url := hass.data.pop(DATA_CARD, None):
+        frontend.remove_extra_js_url(hass, url)
     if frontend.async_panel_exists(hass, PANEL_URL_PATH):
         frontend.async_remove_panel(hass, PANEL_URL_PATH, warn_if_unknown=False)
 
