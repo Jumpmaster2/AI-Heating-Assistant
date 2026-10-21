@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 1.4.2. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 1.5.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -125,6 +125,18 @@ name: Wohnbereich               # optional
 ```
 
 Die Luftfeuchte kommt vom Feuchtesensor des Bereichs (Attribut `current_humidity` des Thermostats); ohne Feuchtesensor bleibt sie weg. Nach einem Update ggf. den Browser-Cache leeren bzw. die App neu laden.
+
+### Raumklima-Kachel
+
+Eine kompakte Kachel (Standard 6 × 1 wie die Kachel-Karte): oben der Name, darunter Temperatur und Luftfeuchte nebeneinander. Beim Hinzufügen einer Karte heißt sie **AI Heating Assistant Raumklima**. Die Werte kommen vom Thermostat des Bereichs oder von beliebigen Sensoren (auch für Bereiche ohne Heizkreis); ein angegebener Sensor hat Vorrang. Ein Tipp auf einen Wert öffnet die zugehörige Entität.
+
+```yaml
+type: custom:ai-heating-climate-tile-card
+entity: climate.wohnbereich            # oder/und:
+temperature_entity: sensor.temperatur_schlafzimmer
+humidity_entity: sensor.luftfeuchtigkeit_schlafzimmer
+name: Schlafzimmer                     # optional
+```
 
 ### Einrichtung (global)
 
