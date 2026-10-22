@@ -4,8 +4,11 @@
 // come from the translation files (labels.js), types and ranges from the
 // selectors of the options dialog (sent by the integration).
 
-// labels.js with the version of this file, so a browser never keeps old texts
-const { LABELS } = await import(`./labels.js${new URL(import.meta.url).search}`);
+// The panel is served below a path with the version, so labels.js is new after an
+// update as well. No top-level await here: the script's load event would fire before
+// the element is defined, and Home Assistant would hand its properties to a plain
+// element (blank page on the first open).
+import { LABELS } from "./labels.js";
 
 const DOMAIN = "ai_heating_assistant";
 
@@ -507,6 +510,13 @@ class AiHeatingAssistantPanel extends HTMLElement {
     this.shadowRoot.addEventListener("change", (ev) => this._onInput(ev, true));
     this.shadowRoot.addEventListener("keydown", (ev) => this._onKey(ev));
     this.shadowRoot.addEventListener("value-changed", (ev) => this._onSelector(ev));
+    // properties set before the element was defined hide the setters: hand them over
+    for (const prop of ["panel", "narrow", "hass"]) {
+      if (!Object.prototype.hasOwnProperty.call(this, prop)) continue;
+      const value = this[prop];
+      delete this[prop];
+      this[prop] = value;
+    }
   }
 
   set hass(hass) {
