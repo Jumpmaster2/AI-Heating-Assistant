@@ -4,10 +4,13 @@
 //   with the room humidity next to the second temperature (same size).
 // custom:ai-heating-climate-tile-card: a tile with the name and temperature and
 //   humidity side by side.
+// custom:ai-heating-thermostat-compact-card: the thermostat without the dial, half as
+//   high; a colour bar shows the state, a tap opens the thermostat.
 
 const DOMAIN = "ai_heating_assistant";
 const CARD = "ai-heating-thermostat-card";
 const TILE = "ai-heating-climate-tile-card";
+const COMPACT = "ai-heating-thermostat-compact-card";
 
 const UI = {
   de: {
@@ -24,6 +27,8 @@ const UI = {
     tileDescription: "Name mit Temperatur und Luftfeuchte nebeneinander.",
     temperatureEntity: "Temperatursensor (statt Thermostat)",
     humidityEntity: "Feuchtesensor (statt Thermostat)",
+    compactName: "AI Heating Assistant Thermostat kompakt",
+    compactDescription: "Thermostat ohne Bogen: Temperatur, Luftfeuchte, Sollwert und Status.",
   },
   en: {
     name: "AI Heating Assistant thermostat",
@@ -39,6 +44,8 @@ const UI = {
     tileDescription: "Name with temperature and humidity side by side.",
     temperatureEntity: "Temperature sensor (instead of the thermostat)",
     humidityEntity: "Humidity sensor (instead of the thermostat)",
+    compactName: "AI Heating Assistant thermostat compact",
+    compactDescription: "Thermostat without the dial: temperature, humidity, target and state.",
   },
 };
 
@@ -580,6 +587,132 @@ class AiHeatingClimateTileCard extends HTMLElement {
       </style>
       <ha-card>${html}</ha-card>`;
   }
+}
+
+// Thermostat without the dial (half as high): name, current temperature and humidity
+// large, target and state small. A bar on the left shows the state (orange while
+// heating). A tap opens the thermostat, the target is not changed on the dashboard.
+class AiHeatingThermostatCompactCard extends HTMLElement {
+  static getStubConfig(hass) {
+    return AiHeatingThermostatCard.getStubConfig(hass);
+  }
+
+  static getConfigForm() {
+    const t = ui(docLang());
+    return {
+      schema: [
+        { name: "entity", required: true, selector: { entity: { filter: { domain: "climate", integration: DOMAIN } } } },
+        { name: "name", selector: { text: {} } },
+        { name: "show_humidity", default: true, selector: { boolean: {} } },
+      ],
+      computeLabel: (s) => ({ entity: t.entity, name: t.title, show_humidity: t.humidity })[s.name],
+    };
+  }
+
+  setConfig(config) {
+    if (!config?.entity) throw new Error("entity required");
+    this._config = { show_humidity: true, ...config };
+    this._html = null;
+    if (this._hass) this._render();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  getCardSize() {
+    return 2;
+  }
+
+  getGridOptions() {
+    return { columns: 6, rows: 2, min_columns: 4, min_rows: 2 };
+  }
+
+  _number(value, digits) {
+    const lang = this._hass.locale?.language || this._hass.language;
+    return Number(value).toLocaleString(lang, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+
+  _render() {
+    if (!this._config || !this._hass) return;
+    if (!this.shadowRoot) {
+      this.attachShadow({ mode: "open" });
+      this.shadowRoot.addEventListener("click", () =>
+        this.dispatchEvent(
+          new CustomEvent("hass-more-info", { detail: { entityId: this._config.entity }, bubbles: true, composed: true })
+        )
+      );
+    }
+    const st = this._hass.states[this._config.entity];
+    const t = ui(this._hass.locale?.language || this._hass.language);
+    const unit = this._hass.config?.unit_system?.temperature || "°C";
+    let html;
+    if (!st) {
+      html = `<div class="name">${esc(this._config.name || this._config.entity)}</div><div class="line warning">${esc(t.notFound)}</div>`;
+    } else {
+      const a = st.attributes;
+      const unavailable = st.state === "unavailable" || st.state === "unknown";
+      const heating = a.hvac_action === "heating";
+      const mode = unavailable ? "unavailable" : st.state === "off" ? "off" : heating ? "heating" : "idle";
+      const status = unavailable ? t.unavailable : AiHeatingThermostatCard.prototype._actionText.call(this, st);
+      const temp = a.current_temperature;
+      const hum = this._config.show_humidity !== false ? a.current_humidity : null;
+      const target = st.state === "off" || unavailable ? null : a.temperature;
+      const vals = [
+        `<span class="temp">${temp == null || unavailable ? "–" : `${esc(this._number(temp, 1))}°`}</span>`,
+      ];
+      if (hum != null && !unavailable) {
+        vals.push(
+          `<span class="sep"></span><span class="hum"><ha-icon icon="mdi:water-percent"></ha-icon>${esc(this._number(hum, 0))} %</span>`
+        );
+      }
+      const line = [
+        target != null ? `<span class="target"><ha-icon icon="mdi:thermostat"></ha-icon>${esc(this._number(target, 1))} ${esc(unit)}</span>` : "",
+        `<span class="status">${esc(status)}</span>`,
+      ]
+        .filter(Boolean)
+        .join('<span class="dot">·</span>');
+      html = `<ha-card class="${mode}"><div class="name">${esc(this._config.name || a.friendly_name || this._config.entity)}</div>
+        <div class="vals">${vals.join("")}</div><div class="line">${line}</div></ha-card>`;
+    }
+    if (html === this._html) return;
+    this._html = html;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; height: 100%; }
+        ha-card { position: relative; height: 100%; min-height: 104px; box-sizing: border-box; padding: 10px 12px 10px 18px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; cursor: pointer; container-type: inline-size; --bar: var(--state-climate-off-color, var(--disabled-color, #6f6f6f)); }
+        ha-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--bar); }
+        ha-card.heating { --bar: var(--state-climate-heat-color, #ff8100); }
+        ha-card.unavailable::before { opacity: 0.4; }
+        .name { font-size: var(--ha-font-size-m, 14px); font-weight: var(--ha-font-weight-medium, 500); line-height: 20px; color: var(--primary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .vals { display: flex; align-items: center; white-space: nowrap; color: var(--primary-text-color); min-width: 0; }
+        .temp { font-size: clamp(22px, 14cqw, 32px); line-height: 1.1; font-variant-numeric: tabular-nums; }
+        .sep { width: 1px; align-self: stretch; margin: 4px clamp(8px, 5cqw, 12px); background: var(--divider-color, rgba(127, 127, 127, 0.3)); }
+        .hum { display: inline-flex; align-items: center; gap: 4px; font-size: clamp(16px, 10cqw, 22px); font-variant-numeric: tabular-nums; }
+        .hum ha-icon { --mdc-icon-size: 1em; color: var(--state-icon-color, #44739e); }
+        .line { display: flex; align-items: center; gap: 0 4px; font-size: var(--ha-font-size-s, 12px); line-height: 18px; color: var(--secondary-text-color); white-space: nowrap; overflow: hidden; }
+        .target { display: inline-flex; align-items: center; gap: 3px; }
+        .target ha-icon { --mdc-icon-size: 14px; }
+        .heating .status { color: var(--state-climate-heat-color, #ff8100); }
+        .status { overflow: hidden; text-overflow: ellipsis; }
+        .warning { color: var(--error-color); }
+      </style>
+      ${st ? html : `<ha-card>${html}</ha-card>`}`;
+  }
+}
+
+if (!customElements.get(COMPACT)) {
+  customElements.define(COMPACT, AiHeatingThermostatCompactCard);
+  const t = ui(docLang());
+  window.customCards = window.customCards || [];
+  window.customCards.push({
+    type: COMPACT,
+    name: t.compactName,
+    description: t.compactDescription,
+    preview: true,
+    documentationURL: "https://github.com/Jumpmaster2/AI-Heating-Assistant",
+  });
 }
 
 if (!customElements.get(TILE)) {

@@ -8,7 +8,7 @@ It typically replaces: thermostat helpers (Generic Thermostat), Better Thermosta
 
 The overview, the learned values and all settings are in the **AI Heating Assistant** dashboard in the sidebar (see [Dashboard](#dashboard)).
 
-> Status: version 1.5.2. Please keep an eye on the logbook during the first weeks.
+> Status: version 1.6.0. Please keep an eye on the logbook during the first weeks.
 
 ## How it works
 
@@ -125,6 +125,17 @@ name: Living area               # optional
 ```
 
 The humidity comes from the humidity sensor of the area (attribute `current_humidity` of the thermostat); without a humidity sensor it is left out. After an update clear the browser cache or reload the app if needed.
+
+### Thermostat compact
+
+The thermostat without the dial, half as high (6 × 2 by default): the name on top, the current temperature and the humidity large, the target and the state small. The bar on the left is orange while heating, grey otherwise. A tap opens the thermostat to change it; nothing is changed on the dashboard itself. When adding a card it is called **AI Heating Assistant thermostat compact**.
+
+```yaml
+type: custom:ai-heating-thermostat-compact-card
+entity: climate.living_area
+show_humidity: true   # default: true
+name: Living area     # optional
+```
 
 ### Room climate tile
 
