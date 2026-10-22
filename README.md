@@ -8,7 +8,7 @@ Die Integration ersetzt typischerweise: Thermostat-Helfer (Generic Thermostat), 
 
 Übersicht, Lernwerte und alle Einstellungen stehen im Dashboard **AI Heating Assistant** in der Seitenleiste (siehe [Dashboard](#dashboard)).
 
-> Status: Version 1.5.2. Bitte die ersten Wochen das Logbuch im Blick behalten.
+> Status: Version 1.6.0. Bitte die ersten Wochen das Logbuch im Blick behalten.
 
 ## Funktionsweise
 
@@ -125,6 +125,17 @@ name: Wohnbereich               # optional
 ```
 
 Die Luftfeuchte kommt vom Feuchtesensor des Bereichs (Attribut `current_humidity` des Thermostats); ohne Feuchtesensor bleibt sie weg. Nach einem Update ggf. den Browser-Cache leeren bzw. die App neu laden.
+
+### Thermostat kompakt
+
+Das Thermostat ohne Bogen, halb so hoch (Standard 6 × 2): oben der Name, groß die Ist-Temperatur und die Luftfeuchte, klein der Sollwert und der Status. Die Leiste links ist orange, solange geheizt wird, sonst grau. Ein Tipp öffnet das Thermostat zum Einstellen; auf dem Dashboard selbst wird nichts verstellt. Beim Hinzufügen einer Karte heißt sie **AI Heating Assistant Thermostat kompakt**.
+
+```yaml
+type: custom:ai-heating-thermostat-compact-card
+entity: climate.wohnbereich
+show_humidity: true   # Standard: true
+name: Wohnbereich     # optional
+```
 
 ### Raumklima-Kachel
 
