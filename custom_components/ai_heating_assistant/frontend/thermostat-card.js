@@ -159,14 +159,15 @@ class AiHeatingThermostatCard extends HTMLElement {
         .fixed .title { font-size: 1.25em; }
         .fixed .more { top: 0; }
         svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-        .grab { stroke: transparent; stroke-width: 56; fill: none; pointer-events: stroke; touch-action: none; cursor: pointer; }
+        .knob { fill: transparent; touch-action: none; cursor: grab; }
+        .dragging .knob { cursor: grabbing; }
         .track { stroke: var(--primary-text-color); stroke-opacity: 0.1; stroke-width: 24; fill: none; stroke-linecap: round; pointer-events: none; }
         .value { stroke: var(--color); stroke-opacity: 0.5; stroke-width: 24; fill: none; stroke-linecap: round; pointer-events: none; transition: stroke-opacity 0.3s; }
         .heating .value { stroke-opacity: 1; }
         .current { fill: var(--primary-text-color); fill-opacity: 0.5; pointer-events: none; }
-        .handle { fill: #fff; stroke: var(--color); stroke-width: 4; outline: none; cursor: pointer; touch-action: none; }
+        .handle { fill: #fff; stroke: var(--color); stroke-width: 4; outline: none; pointer-events: none; }
         .handle:focus-visible { stroke-width: 7; }
-        .off .handle, .off .value, .unavailable .handle, .unavailable .value { display: none; }
+        .off .handle, .off .knob, .off .value, .unavailable .handle, .unavailable .knob, .unavailable .value { display: none; }
         .info { position: absolute; inset: 18% 16%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; pointer-events: none; color: var(--primary-text-color); }
         .action { font-size: clamp(12px, 5.5cqw, 18px); font-weight: 500; line-height: 1.3; color: var(--primary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .big { display: flex; align-items: flex-start; justify-content: center; line-height: 1; margin: 2cqw 0; font-weight: 400; }
@@ -190,8 +191,8 @@ class AiHeatingThermostatCard extends HTMLElement {
               <path class="track" d="${arc(START, START + SWEEP)}"></path>
               <path class="value"></path>
               <circle class="current" r="4"></circle>
-              <path class="grab" d="${arc(START, START + SWEEP)}"></path>
               <circle class="handle" r="11" tabindex="0" role="slider"></circle>
+              <circle class="knob" r="40"></circle>
             </svg>
             <div class="info">
               <div class="action"></div>
@@ -209,6 +210,7 @@ class AiHeatingThermostatCard extends HTMLElement {
       value: root.querySelector(".value"),
       current: root.querySelector(".current"),
       handle: root.querySelector(".handle"),
+      knob: root.querySelector(".knob"),
       action: root.querySelector(".action"),
       big: root.querySelector(".big"),
       secondary: root.querySelector(".secondary"),
@@ -220,12 +222,15 @@ class AiHeatingThermostatCard extends HTMLElement {
         )
       )
     );
-    for (const el of [root.querySelector(".grab"), this._el.handle]) {
-      el.addEventListener("pointerdown", (ev) => this._dragStart(ev));
-    }
+    // Only the point itself is dragged: a touch elsewhere on the ring scrolls the page.
+    // touchstart is cancelled as well, some web views ignore touch-action in SVG.
+    this._el.knob.addEventListener("pointerdown", (ev) => this._dragStart(ev));
+    this._el.knob.addEventListener("touchstart", (ev) => this._editable() && ev.preventDefault(), {
+      passive: false,
+    });
     this._el.svg.addEventListener("pointermove", (ev) => this._dragMove(ev));
     this._el.svg.addEventListener("pointerup", (ev) => this._dragEnd(ev));
-    this._el.svg.addEventListener("pointercancel", (ev) => this._dragEnd(ev));
+    this._el.svg.addEventListener("pointercancel", (ev) => this._dragEnd(ev, true));
     this._el.handle.addEventListener("keydown", (ev) => this._key(ev));
     this._built = true;
     this._observe();
@@ -292,7 +297,7 @@ class AiHeatingThermostatCard extends HTMLElement {
     const unavailable = st.state === "unavailable" || st.state === "unknown";
     const off = st.state === "off";
     const heating = st.attributes.hvac_action === "heating";
-    el.card.className = [this._fixed && "fixed", unavailable && "unavailable", off && "off", heating && "heating"].filter(Boolean).join(" ");
+    el.card.className = [this._fixed && "fixed", this._dragging && "dragging", unavailable && "unavailable", off && "off", heating && "heating"].filter(Boolean).join(" ");
     el.card.style.setProperty(
       "--color",
       off || unavailable
@@ -309,12 +314,15 @@ class AiHeatingThermostatCard extends HTMLElement {
       const deg = START + tf * SWEEP;
       el.value.setAttribute("d", tf > 0.002 ? arc(START, deg) : "");
       const [x, y] = point(deg);
-      el.handle.setAttribute("cx", x.toFixed(2));
-      el.handle.setAttribute("cy", y.toFixed(2));
-      el.handle.style.display = "";
+      for (const c of [el.handle, el.knob]) {
+        c.setAttribute("cx", x.toFixed(2));
+        c.setAttribute("cy", y.toFixed(2));
+        c.style.display = "";
+      }
     } else {
       el.value.setAttribute("d", "");
       el.handle.style.display = "none";
+      el.knob.style.display = "none";
     }
     if (cf != null && !unavailable) {
       const [x, y] = point(START + cf * SWEEP);
@@ -400,18 +408,24 @@ class AiHeatingThermostatCard extends HTMLElement {
     this._dragging = true;
     this._el.svg.setPointerCapture?.(ev.pointerId);
     this._el.handle.focus({ preventScroll: true });
-    this._preview(this._valueAt(ev));
+    this._render();
   }
 
   _dragMove(ev) {
     if (this._dragging) this._preview(this._valueAt(ev));
   }
 
-  _dragEnd(ev) {
+  // A cancelled gesture (e.g. the page scrolls after all) changes nothing.
+  _dragEnd(ev, cancelled = false) {
     if (!this._dragging) return;
     this._dragging = false;
     this._el.svg.releasePointerCapture?.(ev.pointerId);
-    this._send(0);
+    if (cancelled) {
+      this._pending = null;
+      this._render();
+    } else {
+      this._send(0);
+    }
   }
 
   _key(ev) {
