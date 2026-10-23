@@ -17,6 +17,8 @@ The profile learns from the measured values
   of the temperature difference (thermal draft) and with the opening area of the open
   windows. ``k / sqrt(dT) / opening`` is learned, so the minutes needed to reach a
   target humidity follow for any weather and any window (see ``logic.windows``).
+  Cross ventilation (an own window open together with windows in other rooms, see
+  ``logic.draft``) exchanges the air much faster; its rate is learned on its own.
 
 The local recommendation uses the humidity an airing is expected to reach; the AI
 gets the whole profile to choose thresholds that fit the room.
@@ -136,6 +138,7 @@ class HumidityProfile:
     rebound: Ewma = field(default_factory=lambda: _ewma(None, 0.2, EFFECT_ALPHA))
     drop_rate: Ewma = field(default_factory=lambda: _ewma(None, 0.0, EFFECT_ALPHA))
     rate: Ewma = field(default_factory=lambda: _ewma(None, RATE_START, EFFECT_ALPHA))
+    rate_cross: Ewma = field(default_factory=lambda: _ewma(None, RATE_START, EFFECT_ALPHA))
     last_closed: float | None = None  # end of the last airing
     events: list[dict[str, Any]] = field(default_factory=list)
     day: DayStats = field(default_factory=DayStats)
@@ -158,12 +161,14 @@ class HumidityProfile:
         delta_t: float | None = None,
         suggested: int | None = None,
         opening: float = 1.0,
+        cross: bool = False,
     ) -> None:
         """One measurement (every minute). ``date`` is the local date, ``season`` one
         of ``SEASONS``, ``ah_ref`` the absolute humidity of the reference air,
         ``delta_t`` the room minus the reference temperature and ``suggested`` the
-        airing time recommended when a window opens and ``opening`` the relative
-        opening area of the windows open now."""
+        airing time recommended when a window opens, ``opening`` the relative
+        opening area of the windows open now and ``cross`` whether windows in other
+        rooms are open as well (cross ventilation)."""
         if date != self.day.date:
             self._close_day()
             self.day = DayStats(date=date, season=season)
@@ -186,12 +191,15 @@ class HumidityProfile:
                     "dt": delta_t,
                     "suggested": suggested,
                     "opening": opening,
+                    "cross": cross,
                 }
             else:
                 self.airing["min_ah"] = min(self.airing["min_ah"], ah)
                 self.airing["min_rh"] = min(self.airing["min_rh"], rh)
                 # another window opened during the airing: the larger area counts
                 self.airing["opening"] = max(_num(self.airing.get("opening")) or 1.0, opening)
+                # cross ventilation for a part of the airing: its rate is the one learned
+                self.airing["cross"] = bool(self.airing.get("cross")) or cross
             return
         if self.airing is not None:
             self._close_airing(ts)
@@ -235,6 +243,9 @@ class HumidityProfile:
             event["suggested_min"] = airing["suggested"]
         opening_area = max(0.1, _num(airing.get("opening")) or 1.0)
         event["opening"] = round(opening_area, 1)
+        cross = bool(airing.get("cross"))
+        if cross:
+            event["cross"] = True
         self.last_closed = ts
         ah_ref = airing["ah_ref"]
         if ah_ref is not None and airing["ah"] - ah_ref >= MIN_GAP:
@@ -245,7 +256,7 @@ class HumidityProfile:
             if drop > 0 and remaining >= MIN_REMAINING and delta_t is not None:
                 k = -math.log(remaining / (airing["ah"] - ah_ref)) / (seconds / 60)
                 normalized = k / math.sqrt(max(1.0, abs(delta_t))) / opening_area
-                _learn(self.rate, clamp(normalized, *RATE_BOUNDS))
+                _learn(self.rate_cross if cross else self.rate, clamp(normalized, *RATE_BOUNDS))
             event["share"] = round(clamp(drop / (airing["ah"] - ah_ref), 0.0, 1.0), 2)
         self.events = [*self.events, event][-EVENT_COUNT:]
         self.pending = {"closed": ts, "drop": drop, "min_ah": airing["min_ah"]}
@@ -292,12 +303,15 @@ class HumidityProfile:
         delta_t: float | None,
         target_rh: float,
         opening: float = 1.0,
+        cross: bool = False,
     ) -> float | None:
         """Minutes of airing the room needs to reach ``target_rh`` through windows of
         the relative opening area ``opening`` with the learned exchange rate, or None
         while the rate is not known. A target the reference air cannot reach is aimed
-        at 90 % of the way."""
-        if self.rate.count < MIN_AIRINGS or None in (temp, rh, ah_ref, delta_t):
+        at 90 % of the way. With ``cross`` (cross ventilation) the rate learned for it,
+        until it is known the normal one (a longer, safe time)."""
+        rate = self.rate_cross if cross and self.rate_cross.count >= MIN_AIRINGS else self.rate
+        if rate.count < MIN_AIRINGS or None in (temp, rh, ah_ref, delta_t):
             return None
         assert temp is not None and rh is not None and ah_ref is not None
         assert delta_t is not None
@@ -307,7 +321,7 @@ class HumidityProfile:
             return None
         target = absolute_humidity(temp, target_rh) - ah_ref
         remaining = clamp(target / gap, 0.1, 1.0)
-        k = self.rate.value * math.sqrt(max(1.0, abs(delta_t))) * max(0.1, opening)
+        k = rate.value * math.sqrt(max(1.0, abs(delta_t))) * max(0.1, opening)
         return -math.log(remaining) / k
 
     def summary(
@@ -330,6 +344,7 @@ class HumidityProfile:
                 "rebound": round(self.rebound.value, 2),
                 "drop_per_min": round(self.drop_rate.value, 3),
                 "rate_per_sqrt_k_opening": round(self.rate.value, 4) if self.rate.count else None,
+                "rate_cross": round(self.rate_cross.value, 4) if self.rate_cross.count else None,
             }
             if self.known_effect
             else None,
@@ -349,6 +364,7 @@ class HumidityProfile:
             "rebound": self.rebound.as_dict(),
             "drop_rate": self.drop_rate.as_dict(),
             "rate": self.rate.as_dict(),
+            "rate_cross": self.rate_cross.as_dict(),
             "last_closed": self.last_closed,
             "events": self.events,
             "day": self.day.as_dict(),
@@ -381,6 +397,7 @@ class HumidityProfile:
         profile.rebound = _ewma(data.get("rebound"), 0.2, EFFECT_ALPHA)
         profile.drop_rate = _ewma(data.get("drop_rate"), 0.0, EFFECT_ALPHA)
         profile.rate = _ewma(data.get("rate"), RATE_START, EFFECT_ALPHA)
+        profile.rate_cross = _ewma(data.get("rate_cross"), RATE_START, EFFECT_ALPHA)
         profile.last_closed = _num(data.get("last_closed"))
         events = data.get("events")
         if isinstance(events, list):

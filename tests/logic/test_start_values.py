@@ -101,3 +101,13 @@ def test_ventilation_start_values() -> None:
     # changed configuration replaces it
     applied = apply_vent_start_values({**configured, "rh_threshold": 65.0}, record, settings)
     assert applied == [("rh_threshold", 66.0, 65.0)] and settings.rh_threshold == 65.0
+
+
+def test_changed_recovery_starts_its_model_again() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    for _ in range(5):
+        learner.recovery_model.update(1.0, 0.2, 40.0)
+    learner.recovery = Ewma(2400.0, count=5)
+    configured = {**CFG, "recovery": 3600.0}
+    assert apply_start_values(configured, CFG, learner, _params()) == [("recovery", 2400.0, 3600.0)]
+    assert learner.recovery_model.count == 0

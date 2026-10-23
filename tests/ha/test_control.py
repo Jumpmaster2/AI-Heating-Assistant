@@ -383,6 +383,9 @@ async def test_services_export_import_reset(
     assert "Living room" in exported["areas"]
     data = exported["areas"]["Living room"]
     data["learned"]["dead_time_min"] = 75
+    assert data["learned"]["recovery_base_min"] == 30.0
+    data["learned"]["recovery_per_k_min"] = 12.5
+    data["counts"]["recovery_model"] = 6
     data["params"]["hysteresis_on"] = 5.0  # clamped to the limit
     result = await hass.services.async_call(
         DOMAIN, "import_parameters", {"data": exported}, blocking=True, return_response=True
@@ -391,6 +394,8 @@ async def test_services_export_import_reset(
     coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
     area = next(iter(coordinator.areas.values()))
     assert area.learner.dead_time.value == 75 * 60
+    assert area.learner.recovery_model.per_k == 12.5
+    assert area.learner.recovery_model.count == 6
     assert area.params.hysteresis_on == 0.6
 
     await hass.services.async_call(
@@ -402,6 +407,22 @@ async def test_services_export_import_reset(
     area = next(iter(coordinator.areas.values()))
     assert area.learner.dead_time.value == 30 * 60
     assert area.params.hysteresis_on == 0.2
+
+
+async def test_recovery_set_by_hand_starts_its_model_again(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    await _setup(hass, make_entry())
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    area = next(iter(coordinator.areas.values()))
+    for _ in range(5):
+        area.learner.recovery_model.update(1.0, 0.2, 40.0)
+    coordinator.set_learned(area.area_id, {"dead_time": 40})
+    assert area.learner.recovery_model.count == 5  # another value: the model stays
+    coordinator.set_learned(area.area_id, {"recovery_time": 45})
+    assert area.learner.recovery.value == 45 * 60
+    assert area.learner.recovery_model.count == 0
 
 
 async def test_diagnostics_redacts_key(
@@ -1254,6 +1275,55 @@ async def test_draft_combinations_from_other_rooms_pause_heating(
     hass.states.async_set(KIDS, "off")
     await _advance(hass, freezer, 1)
     assert hass.states.get("sensor.living_room_status").state == "recovery"
+
+
+async def test_cross_airing_and_recovery_reach_the_ai(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(IN_SEASON)
+    for window in (KIDS, BATH, BED):
+        hass.states.async_set(window, "off")
+    nightly = (
+        {"heating_day": True, "confidence": 90, "reason": "Cold.", "critical_area": ""},
+        USAGE,
+    )
+    check = ({"adjustments": [], "summary": "", "confidence": 60}, USAGE)
+    with patch(STRUCTURED, side_effect=[nightly, check]) as mock:
+        await _setup(
+            hass,
+            make_entry(api_key="test-key", areas=[{**AREA_DATA, "draft_group_1": [KIDS]}]),
+        )
+        await _advance(hass, freezer, 11)
+        # own window and the kids' room together: cross ventilation
+        hass.states.async_set("binary_sensor.living_room_window", "on")
+        hass.states.async_set(KIDS, "on")
+        await _advance(hass, freezer, 1)
+        hass.states.async_set("sensor.living_room_temperature", "18.0")
+        await _advance(hass, freezer, 9)
+        hass.states.async_set("binary_sensor.living_room_window", "off")
+        hass.states.async_set(KIDS, "off")
+        await _advance(hass, freezer, 5)
+        assert hass.states.get("sensor.living_room_status").state == "recovery"
+        hass.states.async_set("sensor.living_room_temperature", "19.0")
+        await _advance(hass, freezer, 1)
+        assert hass.states.get("sensor.living_room_status").state != "recovery"
+
+        coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+        area = next(iter(coordinator.areas.values()))
+        assert area.learner.recovery.count == 1
+        assert area.learner.recovery_model.count == 1
+        await coordinator.async_run_ai_check("manual")
+        await hass.async_block_till_done(wait_background_tasks=True)
+        payload = json.loads(mock.call_args.args[1])["areas"][0]
+    stats = payload["stats"]
+    assert stats["airings"] == 1
+    assert stats["cross_min"] == pytest.approx(10, abs=1)
+    assert stats["rec_min"] >= 5 and stats["rec_cold_min"] >= 5
+    airing = payload["airings"][0]
+    assert airing["kind"] == "cross" and airing["result"] == "recovered"
+    assert airing["t_before"] == 19.0 and airing["drop_k"] == 1.0
+    assert airing["out"] == 5.0 and "at" in airing and "ts" not in airing
+    assert payload["learned"]["recovery_model"] is None  # one airing is not enough
 
 
 async def test_draft_of_version_1_1_0_still_works(

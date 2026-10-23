@@ -178,3 +178,36 @@ def test_exchange_rate_is_kept_per_opening_area() -> None:
     door = profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0, 2.5)
     window = profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0, 1.0)
     assert window == pytest.approx(door * 2.5, rel=0.01)
+
+
+def _cross_airing(profile: HumidityProfile, ts: float, k: float, cross: bool) -> float:
+    ah0 = absolute_humidity(21.0, 65.0)
+    for i in range(11):
+        ah = REF_AH + (ah0 - REF_AH) * math.exp(-k * i)
+        rh = 100.0 * ah / absolute_humidity(21.0, 100.0)
+        profile.add_sample(
+            ts + i * 60, "d", "heating", False, 21.0, rh, REF_AH, True, 16.0, cross=cross
+        )
+    profile.add_sample(ts + 660, "d", "heating", False, 21.0, 50.0, REF_AH, False)
+    return ts + 4000
+
+
+def test_cross_ventilation_has_its_own_rate() -> None:
+    profile = HumidityProfile()
+    ts = 0.0
+    for _ in range(2):
+        ts = _cross_airing(profile, ts, 0.1, cross=False)
+    normal = profile.rate.value
+    # until two cross airings are known the normal rate is used (a longer, safe time)
+    plain = profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0)
+    assert profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0, cross=True) == plain
+    for _ in range(2):
+        ts = _cross_airing(profile, ts, 0.4, cross=True)
+    assert profile.rate.value == normal  # cross airings do not distort the normal rate
+    assert profile.rate_cross.value == pytest.approx(4 * normal, rel=0.02)
+    assert profile.events[-1]["cross"] is True
+    across = profile.airing_minutes(21.0, 65.0, REF_AH, 16.0, 55.0, cross=True)
+    assert across == pytest.approx(plain / 4, rel=0.02)
+    assert profile.summary("heating", 21.0, 65.0, REF_AH)["airing"]["rate_cross"] is not None
+    restored = HumidityProfile.from_dict(profile.as_dict())
+    assert restored.rate_cross.value == profile.rate_cross.value

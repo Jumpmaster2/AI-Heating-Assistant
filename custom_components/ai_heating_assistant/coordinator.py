@@ -166,10 +166,12 @@ from .logic.energy import HeatMeter, to_kwh
 from .logic.humidity_learning import HumidityProfile
 from .logic.learning import (
     DEAD_TIME_BOUNDS,
+    MIN_RECOVERY_EVENTS,
     P_START,
     RECOVERY_BOUNDS,
     AreaLearner,
     Ewma,
+    RecoveryModel,
     Sample,
 )
 from .logic.physics import absolute_humidity, clamp, in_season, parse_day_month
@@ -339,6 +341,11 @@ def _new_check_stats() -> dict[str, float]:
         "min_t": 99.0,
         "max_t": -99.0,
         "window_min": 0.0,
+        "draft_min": 0.0,
+        "cross_min": 0.0,
+        "airings": 0.0,
+        "rec_min": 0.0,
+        "rec_cold_min": 0.0,
         "over_kh": 0.0,
         "sun_over_kh": 0.0,
         "deg_h": 0.0,
@@ -1343,7 +1350,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             cool_rate_kph=model.cool_rate(diff, pv_plan, area.params.sun_factor),
             heat_rate_kph=model.heat_rate(diff, pv_now, area.params.sun_factor),
             dead_time_s=learner.dead_time.value,
-            recovery_s=learner.recovery.value,
+            # follows the airing running now once enough airings are known
+            recovery_s=learner.recovery_s(area.temp),
             overshoot_k=learner.expected_overshoot(run_hours),
             pv_plan_kw=round(pv_plan, 2),
         )
@@ -1461,6 +1469,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 self.pv_assumed,
                 area.airing or area.temp is None,
                 pv_unknown=self.pv_kw is None,
+                window_open=area.window_open,
+                opening=area.opening,
+                draft=area.draft,
             )
         )
         # The virtual room first: on the first tick of a day it starts at the real
@@ -1474,12 +1485,19 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         assert area.learner is not None
         for event in area.runtime.events:
             if event == "window_opened":
-                area.learner.on_window_opened()
+                # the controller has just set the temperature the room has to get back to
+                area.learner.on_window_opened(ts, area.runtime.temp_before_open)
+                area.check["airings"] = area.check.get("airings", 0.0) + 1
             elif event == "window_closed":
                 open_seconds = ts - open_since if open_since else 0.0
                 until = area.runtime.recovery_until
                 area.learner.on_window_closed(
-                    ts, temp_before, open_seconds, None if until is None else until - ts
+                    ts,
+                    temp_before,
+                    open_seconds,
+                    None if until is None else until - ts,
+                    temp=area.temp,
+                    expected_s=area.learned_values.recovery_s,
                 )
             elif event == "window_pause":
                 self._log("window_pause", area)
@@ -1532,6 +1550,14 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         if area.window_open:
             day.window_min += minutes
             check["window_min"] = check.get("window_min", 0.0) + minutes
+            if area.draft:
+                # draft through other rooms: alone, or across with an own window
+                key = "cross_min" if area.own_window_open else "draft_min"
+                check[key] = check.get(key, 0.0) + minutes
+        elif area.runtime.recovery_until is not None:
+            check["rec_min"] = check.get("rec_min", 0.0) + minutes
+            if area.hvac_on and area.temp < target - CHECK_COLD_MARGIN:
+                check["rec_cold_min"] = check.get("rec_cold_min", 0.0) + minutes
         if area.switch_on:
             day.relay_min += minutes
             check["on_min"] = check.get("on_min", 0.0) + minutes
@@ -1612,6 +1638,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         )
         profile = area.humidity_profile
         previous = area.ventilation
+        # an own window together with windows in other rooms: cross ventilation
+        cross = area.own_window_open and area.draft
         delta_t = area.temp - ref_temp if area.temp is not None and ref_temp is not None else None
         if area.has_humidity and minutes > 0:  # extra ticks on state changes count once
             profile.add_sample(
@@ -1626,6 +1654,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 delta_t=delta_t,
                 suggested=previous.airing_minutes if previous else None,
                 opening=area.opening or 1.0,
+                cross=cross,
             )
         # The airing time is meant for the windows open now, otherwise for the largest
         # window of the room (short, intense airing).
@@ -1658,6 +1687,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     delta_t,
                     vp.rh_threshold - vp.airing_target_below,
                     opening,
+                    cross,
                 ),
                 opening=opening,
                 minutes_since_airing=(ts - profile.last_closed) / 60
@@ -1675,6 +1705,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             area.own_window_open,
             heating_active and area.has_circuit,
             vp.mould_rh,
+            cross,
         )
 
     @property
@@ -2247,6 +2278,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                         "overshoot_per_h": r(area.learner.overshoot_rate.value, 3),
                         "dead_time_min": r(area.learner.dead_time.value / 60, 0),
                         "recovery_min": r(area.learner.recovery.value / 60, 0),
+                        "recovery_model": _recovery_model_payload(area.learner),
                         "confidence": area.learner.confidence(),
                     },
                     "params": values,
@@ -2269,7 +2301,13 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                         "min_t": r(check.get("min_t") if check.get("min_t", 99) < 99 else None),
                         "max_t": r(check.get("max_t") if check.get("max_t", -99) > -99 else None),
                         "window_min": r(check.get("window_min"), 0),
+                        "draft_min": r(check.get("draft_min"), 0),
+                        "cross_min": r(check.get("cross_min"), 0),
+                        "airings": int(check.get("airings", 0)),
+                        "rec_min": r(check.get("rec_min"), 0),
+                        "rec_cold_min": r(check.get("rec_cold_min"), 0),
                     },
+                    "airings": _airings_payload(area.learner),
                 }
             )
         limits = self.limits
@@ -2355,7 +2393,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
         heat: dict[str, Any] | None,
     ) -> None:
         """Keep the key figures of this check and its changes for the next checks."""
-        keys = ("cold_min", "over_kh", "sun_over_kh", "on_per_kh", "cycles")
+        keys = ("cold_min", "over_kh", "sun_over_kh", "on_per_kh", "cycles", "rec_cold_min")
         entry: dict[str, Any] = {
             "t": dt_util.now().strftime("%m-%d %H:%M"),
             "areas": {a["id"]: {k: a["stats"].get(k) for k in keys} for a in areas_payload},
@@ -2431,6 +2469,8 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
             "ref_ah": r(ref_ah),
             "state": vent.state if vent else None,
             "window_open": area.own_window_open,
+            **({"draft": True} if area.draft else {}),
+            "draft_groups": len(draft_groups(area.cfg, own_windows(area.cfg))),
             "windows": {
                 size: len(area.cfg.get(key) or ())
                 for key, size in WINDOW_FIELDS.items()
@@ -2563,6 +2603,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     "overshoot_per_h": round(lr.overshoot_rate.value, 4),
                     "dead_time_min": round(lr.dead_time.value / 60, 1),
                     "recovery_min": round(lr.recovery.value / 60, 1),
+                    "recovery_base_min": round(lr.recovery_model.base, 2),
+                    "recovery_per_k_min": round(lr.recovery_model.per_k, 2),
+                    "recovery_per_kh_min": round(lr.recovery_model.per_kh, 2),
                 }
                 entry["counts"] = {
                     "model_heat": lr.model.n_heat,
@@ -2571,6 +2614,7 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                     "overshoot_per_h": lr.overshoot_rate.count,
                     "dead_time": lr.dead_time.count,
                     "recovery": lr.recovery.count,
+                    "recovery_model": lr.recovery_model.count,
                 }
             areas[area.name] = entry
         return {
@@ -2692,6 +2736,9 @@ class HeatingCoordinator(DataUpdateCoordinator[int]):
                 ewma.value = new * 60
                 # a value set by hand counts as an observation, like an imported one
                 ewma.count = max(1, ewma.count)
+                if name == "recovery":
+                    # the dependence on the airing is learned again around the new value
+                    area.learner.recovery_model = RecoveryModel()
             else:
                 setattr(area.params, name, new)
             _, unit = _START_UNITS[name]
@@ -2738,6 +2785,33 @@ def _valid_import(data: Any) -> bool:
     )
 
 
+def _recovery_model_payload(learner: AreaLearner) -> dict[str, Any] | None:
+    """The learned dependence of the recovery on the airing, once it is used."""
+    model = learner.recovery_model
+    if model.count < MIN_RECOVERY_EVENTS:
+        return None
+    return {
+        "base_min": r(model.base, 1),
+        "per_k_min": r(model.per_k, 1),
+        "per_kh_min": r(model.per_kh, 1),
+        "airings": model.count,
+    }
+
+
+def _airings_payload(learner: AreaLearner) -> list[dict[str, Any]]:
+    """The last airings with their recovery, local time instead of the timestamp."""
+    result = []
+    for airing in learner.airings:
+        event = {k: v for k, v in airing.items() if k != "ts" and v is not None}
+        if isinstance(ts := airing.get("ts"), int | float):
+            event = {
+                "at": dt_util.as_local(dt_util.utc_from_timestamp(ts)).strftime("%m-%d %H:%M"),
+                **event,
+            }
+        result.append(event)
+    return result
+
+
 def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[str, Any]) -> None:
     def num(key: str) -> float | None:
         value = learned.get(key)
@@ -2766,6 +2840,14 @@ def _import_learned(learner: AreaLearner, learned: dict[str, Any], counts: dict[
             # An imported value is a deliberate one: it counts as an observation, so a
             # later start value only replaces it when the configuration changes.
             ewma.count = max(1, int(counts.get(count_key, 0) or 0))
+    keys = ("recovery_base_min", "recovery_per_k_min", "recovery_per_kh_min")
+    theta = [num(key) for key in keys]
+    if all(v is not None for v in theta):
+        learner.recovery_model = RecoveryModel.from_dict(
+            {"theta": theta, "count": counts.get("recovery_model", 0)}
+        )
+    elif num("recovery_min") is not None:
+        learner.recovery_model = RecoveryModel()  # export of an older version
 
 
 @callback
