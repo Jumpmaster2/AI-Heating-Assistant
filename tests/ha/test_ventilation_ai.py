@@ -163,3 +163,27 @@ async def test_window_sizes_and_suggested_window(
     assert area.suggested_window is None  # already airing
     payload = coordinator._vent_area_payload(area)
     assert payload["windows"] == {"small": 1, "door": 1}
+
+
+async def test_cross_ventilation_is_counted_and_shown(
+    hass: HomeAssistant, base_states, freezer: FrozenDateTimeFactory
+) -> None:
+    freezer.move_to(SUMMER)
+    kids = "binary_sensor.kids_room_window"
+    hass.states.async_set(kids, "off")
+    window = "binary_sensor.storage_window"
+    hass.states.async_set(window, "off")
+    storage = {**VENT_ONLY_DATA, "window_sensors": [window], "draft_group_1": [kids]}
+    await _setup(hass, make_entry(api_key="test-key", areas=[AREA_DATA, storage]))
+    coordinator = hass.config_entries.async_entries(DOMAIN)[0].runtime_data
+    area = next(a for a in coordinator.areas.values() if a.prompt_id == "a2")
+    hass.states.async_set(window, "on")
+    await _advance(hass, freezer, 3)
+    assert area.vent_check.get("cross_min", 0.0) == 0.0  # own window alone
+    hass.states.async_set(kids, "on")
+    await _advance(hass, freezer, 3)
+    assert area.vent_check["cross_min"] == pytest.approx(3, abs=1)
+    assert area.humidity_profile.airing["cross"] is True
+    payload = coordinator._vent_area_payload(area)
+    assert payload["draft"] is True and payload["draft_groups"] == 1
+    assert payload["stats"]["cross_min"] == pytest.approx(3, abs=1)

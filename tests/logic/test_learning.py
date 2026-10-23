@@ -3,7 +3,14 @@
 import random
 
 import pytest
-from logic.learning import AreaLearner, Ewma, Sample, ThermalModel
+from logic.learning import (
+    MIN_RECOVERY_EVENTS,
+    AreaLearner,
+    Ewma,
+    RecoveryModel,
+    Sample,
+    ThermalModel,
+)
 
 
 def test_ewma_start_value_counts_once() -> None:
@@ -297,3 +304,148 @@ def test_overshoot_tracker_timeout_is_no_sample() -> None:
     # the room keeps warming for hours (sun): never a heating peak
     _feed(learner, 0, 4 * 60 + 2, lambda m: 20.0 + m * 0.006, valve=False)
     assert learner.overshoot.count == 0 and learner.track_off is None
+
+
+def test_recovery_model_learns_drop_and_cold() -> None:
+    rng = random.Random(3)
+    model = RecoveryModel()
+    for _ in range(200):
+        drop = rng.uniform(0.2, 2.5)
+        cold = rng.uniform(0.0, 1.0)
+        model.update(drop, cold, 10.0 + 15.0 * drop + 40.0 * cold + rng.gauss(0, 1.0))
+    assert model.base == pytest.approx(10.0, abs=2.0)
+    assert model.per_k == pytest.approx(15.0, abs=2.0)
+    assert model.per_kh == pytest.approx(40.0, abs=4.0)
+    copy = RecoveryModel.from_dict(model.as_dict())
+    assert copy.theta == model.theta and copy.count == 200
+
+
+def test_recovery_model_never_shortens_with_a_deeper_airing() -> None:
+    model = RecoveryModel()
+    for _ in range(20):
+        model.update(2.0, 0.5, 5.0)
+        model.update(0.2, 0.0, 60.0)
+    assert model.per_k >= 0.0 and model.per_kh >= 0.0
+    assert model.predict(3.0, 1.0) >= model.predict(0.0, 0.0)
+
+
+def _airing(
+    learner: AreaLearner,
+    start: float,
+    minutes: int,
+    drop_per_min: float,
+    *,
+    opening: float = 1.0,
+    draft: bool = False,
+    outdoor: float = 0.0,
+) -> float:
+    """Open at ``start`` from 21 °C and let the room fall; returns the closing time."""
+    learner.on_window_opened(start, 21.0)
+    for m in range(minutes):
+        temp = round(21.0 - drop_per_min * m, 2)
+        learner.add_sample(
+            Sample(
+                start + m * 60,
+                temp,
+                False,
+                outdoor,
+                0.0,
+                True,
+                window_open=True,
+                opening=opening,
+                draft=draft,
+            )
+        )
+    return start + minutes * 60
+
+
+def _recover(learner: AreaLearner, start: float, temp: float, minutes: int) -> None:
+    """Let the room climb back from ``temp`` to 21 °C within ``minutes``."""
+    for m in range(minutes + 2):
+        value = min(21.0, temp + (21.0 - temp) * m / minutes)
+        learner.add_sample(Sample(start + m * 60, round(value, 2), False, 0.0, 0.0, True))
+
+
+def test_airing_is_followed_and_logged_for_the_ai() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    closed = _airing(learner, 0, 11, 0.1, opening=1.6, draft=True, outdoor=-2.0)
+    assert learner.track_airing is not None
+    # 10 min open, falling 0.1 K per minute: about 0.08 K h below the start
+    assert learner.track_airing["cold"] == pytest.approx(sum(0.1 * m for m in range(11)) / 60)
+    learner.on_window_closed(closed, 21.0, 600, wait_s=2400, temp=20.0, expected_s=1800)
+    assert learner.track_airing is None
+    _recover(learner, closed, 20.0, 40)
+    assert learner.recovery.count == 1
+    assert learner.recovery_model.count == 1
+    event = learner.airings[-1]
+    assert event["kind"] == "cross" and event["cross_min"] == 10
+    assert event["opening"] == 1.6 and event["out"] == -2.0
+    assert event["drop_k"] == 1.0 and event["result"] == "recovered"
+    assert event["back_min"] == 36 and event["expected_min"] == 30 and event["wait_min"] == 40
+
+
+def test_airing_kinds() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    closed = _airing(learner, 0, 6, 0.1, opening=0.0, draft=True)
+    learner.on_window_closed(closed, 21.0, 300, temp=20.5)
+    _recover(learner, closed, 20.5, 10)
+    closed = _airing(learner, 10_000, 6, 0.1, opening=0.5)
+    learner.on_window_closed(closed, 21.0, 300, temp=20.5)
+    _recover(learner, closed, 20.5, 10)
+    assert [a["kind"] for a in learner.airings] == ["draft", "own"]
+
+
+def test_recovery_follows_the_airing_once_known() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    start = 0.0
+    # deep airings take long, shallow ones are quick: 30 min per K drop
+    for i in range(MIN_RECOVERY_EVENTS + 4):
+        drop = 0.5 if i % 2 else 1.5
+        closed = _airing(learner, start, 6, drop / 5)
+        learner.on_window_closed(closed, 21.0, 300, wait_s=7200, temp=21.0 - drop)
+        _recover(learner, closed, 21.0 - drop, round(30 * drop))
+        start = closed + 20_000
+    assert learner.recovery_model.count == MIN_RECOVERY_EVENTS + 4
+    mean = learner.recovery.value
+    learner.on_window_opened(start, 21.0)
+    learner.add_sample(Sample(start, 20.0, False, 0.0, 0.0, True, window_open=True, opening=1))
+    deep = learner.recovery_s(19.5)
+    shallow = learner.recovery_s(20.8)
+    assert shallow < mean < deep
+    assert deep <= mean * 3.0
+    # without a running airing the mean is used
+    learner.on_window_closed(start + 60, 21.0, 60)
+    assert learner.recovery_s(19.5) == mean
+
+
+def test_reopened_while_recovering_is_one_airing() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    closed = _airing(learner, 0, 6, 0.1)
+    learner.on_window_closed(closed, 21.0, 300, wait_s=1800, temp=20.5)
+    learner.add_sample(Sample(closed + 60, 20.6, False, 0.0, 0.0, True))
+    _airing(learner, closed + 120, 6, 0.1)  # opened again from the same reference
+    assert learner.track_airing is not None
+    assert learner.track_airing["start"] == 0  # the first opening
+    assert learner.track_airing["own_s"] == pytest.approx(600)
+
+
+def test_recovery_censored_teaches_the_model() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    closed = _airing(learner, 0, 6, 0.1)
+    learner.on_window_closed(closed, 21.0, 300, wait_s=1800, temp=20.5, expected_s=1800)
+    _feed(learner, closed, 31, lambda m: 20.5 if m < 10 else 20.6, valve=False, excluded=True)
+    _feed(learner, closed + 31 * 60, 1, lambda m: 20.6, valve=True)
+    assert learner.recovery_model.count == 1
+    assert learner.airings[-1]["result"] == "heated"
+
+
+def test_learner_roundtrip_keeps_airings_and_model() -> None:
+    learner = AreaLearner.create(1800, 1800)
+    closed = _airing(learner, 0, 6, 0.1)
+    learner.on_window_closed(closed, 21.0, 300, temp=20.5)
+    _recover(learner, closed, 20.5, 15)
+    _airing(learner, 50_000, 3, 0.1)
+    copy = AreaLearner.from_dict(learner.as_dict(), 1800, 1800)
+    assert copy.airings == learner.airings
+    assert copy.recovery_model.theta == learner.recovery_model.theta
+    assert copy.track_airing == learner.track_airing

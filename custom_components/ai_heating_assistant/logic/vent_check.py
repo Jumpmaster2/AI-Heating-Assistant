@@ -17,6 +17,7 @@ def new_vent_stats() -> dict[str, float]:
         "rec_min": 0.0,
         "window_min": 0.0,
         "window_rec_min": 0.0,
+        "cross_min": 0.0,
         "useless_min": 0.0,
         "heat_window_min": 0.0,
         "blocked_min": 0.0,
@@ -35,8 +36,10 @@ def count_vent(
     window_open: bool,
     heating: bool,
     mould_rh: float = MOULD_RH,
+    cross: bool = False,
 ) -> None:
-    """Add one tick of ``minutes`` to the statistics of an area."""
+    """Add one tick of ``minutes`` to the statistics of an area. ``cross``: an own
+    window is open together with windows in other rooms (cross ventilation)."""
     if minutes <= 0 or humidity is None or result is None:
         return
     if result.state == VentilationState.UNKNOWN:
@@ -58,6 +61,8 @@ def count_vent(
         add("window_min")
         if result.state in RECOMMENDED_STATES:
             add("window_rec_min")
+        if cross:
+            add("cross_min")
         if result.state == VentilationState.CLOSE_WINDOW:
             add("useless_min")
         if heating:
@@ -84,6 +89,7 @@ def stats_payload(stats: dict[str, float]) -> dict[str, Any]:
             "rec_min",
             "window_min",
             "window_rec_min",
+            "cross_min",
             "useless_min",
             "heat_window_min",
             "blocked_min",

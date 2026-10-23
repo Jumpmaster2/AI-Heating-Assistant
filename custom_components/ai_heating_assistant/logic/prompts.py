@@ -101,7 +101,11 @@ PROMPTS: dict[str, PromptSpec] = {
                 "- hysteresis_on, and switches off when temperature + expected overshoot * "
                 "overshoot_factor reaches target + hysteresis_off. Heating pauses after a window "
                 "(or a draft through windows open in other rooms) was open window_delay_min and "
-                "waits the learned recovery time + recovery_bias_min after closing.",
+                "waits the learned recovery time + recovery_bias_min after closing; the wait "
+                "ends early once the room is back at its temperature before airing. Once "
+                "learned.recovery_model is present, the recovery time follows the airing: "
+                "base_min + per_k_min * drop_k + per_kh_min * cold_kh, within 0.25 to 3 times "
+                "recovery_min.",
             ),
             PromptBlock(
                 "stats",
@@ -110,11 +114,31 @@ PROMPTS: dict[str, PromptSpec] = {
                 "0.2 K above target within 4 h after heating (wasted heat), sun_over_kh = part "
                 "of over_kh with notable sun, on_per_kh = heating minutes per Kelvin hour of "
                 "heating demand (target minus outdoor; lower is more efficient), cycles = "
-                "switch-ons, on_min = minutes heating, avg_run_min = average run. heat (if a "
+                "switch-ons, on_min = minutes heating, avg_run_min = average run. window_min = "
+                "minutes a window or a draft was open, draft_min = of that only through windows "
+                "in other rooms, cross_min = an own window together with windows in other rooms "
+                "(cross ventilation), airings = number of openings, rec_min = minutes waiting "
+                "for the recovery after closing, rec_cold_min = of that below target - 0.3 K "
+                "(cold_min leaves airing and recovery out). heat (if a "
                 "heat meter exists) is the measured heat of all circuits between two meter "
                 "readings since the last check: kwh, hours and kwh_per_kh = kWh per Kelvin hour "
                 "of demand, the best efficiency measure; the meter reports seldom and coarsely, "
                 "so trust it over longer spans and the history more than one check.",
+            ),
+            PromptBlock(
+                "airing",
+                "airings lists the last airings of an area, oldest first: at = local time of "
+                "closing, open_min, kind (own = own window, cross = own window with windows in "
+                "other rooms, draft = only windows in other rooms), opening = largest own "
+                "opening area (medium window 1), out = mean outdoor temperature, t_before = "
+                "room temperature before opening, drop_k = fall at closing, low_k = deepest "
+                "fall including the recovery, cold_kh = Kelvin hours below t_before while "
+                "open, expected_min = recovery the controller expected, wait_min = its wait "
+                "including recovery_bias_min, result (recovered = back within 0.1 K after "
+                "back_min; heated = heating came on before; not_back = not back within 4 h; "
+                "no_drop = the sensor barely saw the airing) and after_min = minutes from "
+                "closing to the result. The controller learns the recovery from these itself; "
+                "recovery_bias_min only corrects what stays systematically wrong.",
             ),
             PromptBlock(
                 "comfort",
@@ -126,7 +150,11 @@ PROMPTS: dict[str, PromptSpec] = {
                 "Levers: over_kh high without sun: raise overshoot_factor or lower "
                 "hysteresis_off; sun_over_kh high: raise sun_factor; cold_min > 0: raise "
                 "lead_factor or lower hysteresis_on; very short avg_run_min with many cycles and "
-                "cold_min 0: raise hysteresis_on a little.",
+                "cold_min 0: raise hysteresis_on a little. rec_cold_min high, airings not_back "
+                "or still cold when heating came on late: lower recovery_bias_min; airings "
+                "heated right after wait_min and over_kh after them: raise recovery_bias_min; "
+                "heating paused for short openings that barely cool (drop_k near 0): raise "
+                "window_delay_min; long airings that cool a lot before the pause: lower it.",
             ),
             PromptBlock(
                 "history",
@@ -181,7 +209,10 @@ PROMPTS: dict[str, PromptSpec] = {
                 "windows closed; airing.share = part of the difference to the reference air "
                 "an airing removes, rebound = part of that coming back within 30 minutes, "
                 "rate_per_sqrt_k = learned air exchange per minute and square root of the "
-                "temperature difference; "
+                "temperature difference, rate_cross = the same for cross ventilation (an own "
+                "window with windows in other rooms, cross = true in last_airings); draft = "
+                "windows in other rooms open now, draft_groups = configured combinations of "
+                "them; "
                 "windows = number of own windows per size; the exchange rate is per opening "
                 "area (small 0.5, medium 1, large 1.6, door 2.5 relative to a medium window); "
                 "last_airings = recent airings (min = actual minutes, opening = area open, "
@@ -203,7 +234,8 @@ PROMPTS: dict[str, PromptSpec] = {
                 "stats are since the last check: minutes observed, humid_min = minutes with "
                 "high humidity, mould_min = minutes at 70 % or more, rh_mean and rh_max, "
                 "rec_min = minutes airing was recommended, window_min = minutes an own window "
-                "was open, window_rec_min = of that while recommended, useless_min = minutes "
+                "was open, window_rec_min = of that while recommended, cross_min = of that "
+                "with windows in other rooms open as well, useless_min = minutes "
                 "the window was open although airing brought nothing, heat_window_min = "
                 "minutes open while the area was heated, blocked_min = minutes a blocking "
                 "entity held back the recommendation, energy_hold_min = minutes drying would help "

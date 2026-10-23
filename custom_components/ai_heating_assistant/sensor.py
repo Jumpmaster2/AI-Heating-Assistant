@@ -109,6 +109,11 @@ AREA_SENSORS: tuple[AreaSensorDescription, ...] = (
         attrs_fn=lambda a: {
             "events": a.learner.recovery.count,
             "bias_min": a.params.recovery_bias_min,
+            # how the recovery depends on the airing (used once a few airings are known)
+            "model_events": a.learner.recovery_model.count,
+            "model_base_min": round(a.learner.recovery_model.base, 1),
+            "model_per_k_min": round(a.learner.recovery_model.per_k, 1),
+            "model_per_kh_min": round(a.learner.recovery_model.per_kh, 1),
         },
     ),
     AreaSensorDescription(

@@ -12,7 +12,7 @@ import math
 from typing import Any
 
 from .controller import ControlParams
-from .learning import DEAD_TIME_BOUNDS, RECOVERY_BOUNDS, AreaLearner, Ewma
+from .learning import DEAD_TIME_BOUNDS, RECOVERY_BOUNDS, AreaLearner, Ewma, RecoveryModel
 from .physics import clamp
 
 # Attribute names of AreaLearner (seconds) and ControlParams (minutes, K).
@@ -69,6 +69,9 @@ def apply_start_values(
             if _same(ewma.value, value):
                 continue  # already in effect: keep the samples, nothing to log
             setattr(learner, name, Ewma(value))
+            if name == "recovery":
+                # learning starts again: so does its dependence on the airing
+                learner.recovery_model = RecoveryModel()
             applied.append((name, ewma.value, value))
         else:
             current = float(getattr(params, name))
